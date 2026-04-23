@@ -1,0 +1,164 @@
+package com.regionalai.floatingball.server.modules.user.service;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.util.PasswordUtils;
+import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
+import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
+import com.regionalai.floatingball.server.modules.role.entity.AiRole;
+import com.regionalai.floatingball.server.modules.role.mapper.AiRoleMapper;
+import com.regionalai.floatingball.server.modules.user.dto.AdminUserSaveRequest;
+import com.regionalai.floatingball.server.modules.user.dto.AdminUserView;
+import com.regionalai.floatingball.server.modules.user.entity.AiUser;
+import com.regionalai.floatingball.server.modules.user.entity.AiUserRole;
+import com.regionalai.floatingball.server.modules.user.mapper.AiUserMapper;
+import com.regionalai.floatingball.server.modules.user.mapper.AiUserRoleMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Arrays;
+import java.util.Collections;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class UserServiceTest {
+
+    @Mock
+    private AiUserMapper aiUserMapper;
+
+    @Mock
+    private AiUserRoleMapper aiUserRoleMapper;
+
+    @Mock
+    private AiRoleMapper aiRoleMapper;
+
+    @Mock
+    private AiOrgMapper aiOrgMapper;
+
+    private UserService userService;
+
+    @BeforeEach
+    void setUp() {
+        userService = new UserService(aiUserMapper, aiUserRoleMapper, aiRoleMapper, aiOrgMapper);
+    }
+
+    @Test
+    void saveShouldHashPasswordAndInsertRoleMappings() {
+        AiOrg org = new AiOrg();
+        org.setIdOrg("ORG001");
+        org.setFgActive("1");
+
+        AiRole role = new AiRole();
+        role.setIdRole("ROLE001");
+        role.setNaRole("系统管理员");
+        role.setSdStatus("1");
+        role.setFgActive("1");
+
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiUserMapper.selectOne(any())).thenReturn(null);
+        when(aiRoleMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(role));
+        doAnswer(invocation -> {
+            AiUser user = invocation.getArgument(0);
+            user.setIdUser("USER001");
+            return 1;
+        }).when(aiUserMapper).insert(any(AiUser.class));
+        when(aiUserMapper.selectById("USER001")).thenAnswer(invocation -> {
+            AiUser user = new AiUser();
+            user.setIdUser("USER001");
+            user.setCdUser("zhangsan");
+            user.setNaUser("张三");
+            user.setIdOrg("ORG001");
+            user.setSdStatus("1");
+            user.setPasswordHash(PasswordUtils.sha256("123456"));
+            user.setFgActive("1");
+            return user;
+        });
+
+        AdminUserSaveRequest request = new AdminUserSaveRequest();
+        request.setCdUser("zhangsan");
+        request.setNaUser("张三");
+        request.setPassword("123456");
+        request.setIdOrg("ORG001");
+        request.setRoleIds(Collections.singletonList("ROLE001"));
+        request.setSdStatus("1");
+
+        AdminUserView result = userService.save(request);
+
+        ArgumentCaptor<AiUser> userCaptor = ArgumentCaptor.forClass(AiUser.class);
+        verify(aiUserMapper).insert(userCaptor.capture());
+        assertEquals(PasswordUtils.sha256("123456"), userCaptor.getValue().getPasswordHash());
+        assertEquals("USER001", result.getIdUser());
+
+        ArgumentCaptor<AiUserRole> mappingCaptor = ArgumentCaptor.forClass(AiUserRole.class);
+        verify(aiUserRoleMapper).insert(mappingCaptor.capture());
+        assertEquals("USER001", mappingCaptor.getValue().getIdUser());
+        assertEquals("ROLE001", mappingCaptor.getValue().getIdRole());
+    }
+
+    @Test
+    void saveShouldRejectMissingRoles() {
+        AdminUserSaveRequest request = new AdminUserSaveRequest();
+        request.setCdUser("zhangsan");
+        request.setNaUser("张三");
+        request.setPassword("123456");
+        request.setIdOrg("ORG001");
+        request.setRoleIds(Collections.<String>emptyList());
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> userService.save(request));
+
+        assertEquals("至少选择一个角色", ex.getMessage());
+        verify(aiUserMapper, never()).insert(any(AiUser.class));
+    }
+
+    @Test
+    void listShouldReturnRoleNamesAndOrgName() {
+        AiUser user = new AiUser();
+        user.setIdUser("USER001");
+        user.setCdUser("zhangsan");
+        user.setNaUser("张三");
+        user.setIdOrg("ORG001");
+        user.setSdStatus("1");
+        user.setFgActive("1");
+
+        Page<AiUser> mapperPage = new Page<AiUser>(1, 10, 1);
+        mapperPage.setRecords(Collections.singletonList(user));
+
+        AiUserRole userRole = new AiUserRole();
+        userRole.setIdUser("USER001");
+        userRole.setIdRole("ROLE001");
+        userRole.setFgActive("1");
+
+        AiRole role = new AiRole();
+        role.setIdRole("ROLE001");
+        role.setNaRole("系统管理员");
+        role.setSdStatus("1");
+        role.setFgActive("1");
+
+        AiOrg org = new AiOrg();
+        org.setIdOrg("ORG001");
+        org.setNaOrg("默认机构");
+
+        when(aiUserMapper.selectPage(any(Page.class), any())).thenReturn(mapperPage);
+        when(aiOrgMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(org));
+        when(aiUserRoleMapper.selectList(any())).thenReturn(Collections.singletonList(userRole));
+        when(aiRoleMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(role));
+
+        PageResponse<AdminUserView> response = userService.list(1, 10, "张三", "1", "ORG001", null);
+
+        assertEquals(1L, response.getTotal());
+        assertEquals("默认机构", response.getRecords().get(0).getNaOrg());
+        assertEquals(Arrays.asList("系统管理员"), response.getRecords().get(0).getRoleNames());
+    }
+}

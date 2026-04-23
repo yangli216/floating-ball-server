@@ -1,0 +1,137 @@
+package com.regionalai.floatingball.server.modules.org.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
+import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Collections;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class OrgServiceTest {
+
+    @Mock
+    private AiOrgMapper aiOrgMapper;
+
+    private OrgService orgService;
+
+    @BeforeEach
+    void setUp() {
+        orgService = new OrgService(aiOrgMapper);
+    }
+
+    @Test
+    void listShouldReturnPagedRecordsAndApplyKeywordFilter() {
+        AiOrg record = buildOrg("ORG001", "ORG-CODE", "人民医院");
+        Page<AiOrg> mapperResult = new Page<>(2, 5, 1);
+        mapperResult.setRecords(Collections.singletonList(record));
+
+        when(aiOrgMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mapperResult);
+
+        PageResponse<AiOrg> response = orgService.list(2, 5, "人民");
+
+        assertEquals(2L, response.getCurrent());
+        assertEquals(5L, response.getSize());
+        assertEquals(1L, response.getTotal());
+        assertEquals(Collections.singletonList(record), response.getRecords());
+
+        ArgumentCaptor<Page<AiOrg>> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<LambdaQueryWrapper<AiOrg>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(aiOrgMapper).selectPage(pageCaptor.capture(), wrapperCaptor.capture());
+        assertEquals(2L, pageCaptor.getValue().getCurrent());
+        assertEquals(5L, pageCaptor.getValue().getSize());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        long likeCount = sqlSegment.split("LIKE", -1).length - 1;
+        assertTrue(sqlSegment.contains("LIKE"));
+        assertEquals(2L, likeCount);
+    }
+
+    @Test
+    void saveShouldRejectBlankOrgName() {
+        AiOrg org = new AiOrg();
+        org.setNaOrg(" ");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> orgService.save(org));
+
+        assertEquals("机构名称不能为空", ex.getMessage());
+        verify(aiOrgMapper, never()).insert(any(AiOrg.class));
+    }
+
+    @Test
+    void saveShouldPopulateDefaultFlagsWhenMissing() {
+        AiOrg org = new AiOrg();
+        org.setNaOrg("区域总院");
+
+        AiOrg saved = orgService.save(org);
+
+        assertSame(org, saved);
+        assertEquals("1", org.getFgActive());
+        assertEquals("1", org.getSdStatus());
+        verify(aiOrgMapper).insert(org);
+    }
+
+    @Test
+    void updateShouldSetIdAndReturnSelectedOrg() {
+        AiOrg request = new AiOrg();
+        request.setNaOrg("更新后机构");
+
+        AiOrg persisted = buildOrg("ORG001", "ORG-CODE", "更新后机构");
+        when(aiOrgMapper.selectById("ORG001")).thenReturn(persisted);
+
+        AiOrg result = orgService.update("ORG001", request);
+
+        assertEquals("ORG001", request.getIdOrg());
+        assertSame(persisted, result);
+        verify(aiOrgMapper).updateById(request);
+        verify(aiOrgMapper).selectById("ORG001");
+    }
+
+    @Test
+    void invalidateShouldThrowWhenOrgDoesNotExist() {
+        when(aiOrgMapper.selectById("ORG404")).thenReturn(null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> orgService.invalidate("ORG404"));
+
+        assertEquals("机构不存在", ex.getMessage());
+        verify(aiOrgMapper, never()).updateById(any(AiOrg.class));
+    }
+
+    @Test
+    void invalidateShouldMarkOrgInactive() {
+        AiOrg org = buildOrg("ORG001", "ORG-CODE", "区域总院");
+        org.setFgActive("1");
+        when(aiOrgMapper.selectById("ORG001")).thenReturn(org);
+
+        orgService.invalidate("ORG001");
+
+        assertEquals("0", org.getFgActive());
+        verify(aiOrgMapper).updateById(org);
+    }
+
+    private AiOrg buildOrg(String idOrg, String cdOrg, String naOrg) {
+        AiOrg org = new AiOrg();
+        org.setIdOrg(idOrg);
+        org.setCdOrg(cdOrg);
+        org.setNaOrg(naOrg);
+        org.setFgActive("1");
+        org.setSdStatus("1");
+        return org;
+    }
+}

@@ -1,0 +1,72 @@
+package com.regionalai.floatingball.server.security;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.api.ApiResponse;
+import com.regionalai.floatingball.server.common.util.RequestIdUtils;
+import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
+import com.regionalai.floatingball.server.modules.auth.service.AdminTokenService;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@Component
+public class AdminAuthFilter extends OncePerRequestFilter {
+
+    private final AdminTokenService adminTokenService;
+    private final ObjectMapper objectMapper;
+
+    public AdminAuthFilter(AdminTokenService adminTokenService, ObjectMapper objectMapper) {
+        this.adminTokenService = adminTokenService;
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return !uri.startsWith("/admin/api/")
+            || "/admin/api/auth/login".equals(uri)
+            || "OPTIONS".equalsIgnoreCase(request.getMethod());
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            writeUnauthorized(response, request, "缺少管理员令牌");
+            return;
+        }
+
+        String token = authHeader.substring("Bearer ".length()).trim();
+        AdminCurrentUser user = adminTokenService.parse(token);
+        if (user == null) {
+            writeUnauthorized(response, request, "管理员令牌无效或已过期");
+            return;
+        }
+
+        try {
+            AdminContextHolder.set(user);
+            filterChain.doFilter(request, response);
+        } finally {
+            AdminContextHolder.clear();
+        }
+    }
+
+    private void writeUnauthorized(HttpServletResponse response,
+                                   HttpServletRequest request,
+                                   String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(objectMapper.writeValueAsString(
+            ApiResponse.error("AUTH-401", message, RequestIdUtils.resolve(request))
+        ));
+    }
+}

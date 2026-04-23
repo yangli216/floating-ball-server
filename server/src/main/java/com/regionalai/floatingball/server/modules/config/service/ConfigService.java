@@ -1,0 +1,306 @@
+package com.regionalai.floatingball.server.modules.config.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.util.AesUtils;
+import com.regionalai.floatingball.server.common.util.MaskingUtils;
+import com.regionalai.floatingball.server.modules.config.dto.AiConfigSaveRequest;
+import com.regionalai.floatingball.server.modules.config.dto.AiConfigView;
+import com.regionalai.floatingball.server.modules.config.dto.BootstrapVO;
+import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
+import com.regionalai.floatingball.server.modules.config.entity.AiConfig;
+import com.regionalai.floatingball.server.modules.config.mapper.AiConfigMapper;
+import com.regionalai.floatingball.server.modules.datapackage.service.DataPackageService;
+import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
+import com.regionalai.floatingball.server.modules.prompt.service.PromptService;
+import com.regionalai.floatingball.server.modules.symptom.service.SymptomTemplateService;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class ConfigService {
+
+    private final AiConfigMapper aiConfigMapper;
+    private final AesUtils aesUtils;
+    private final ObjectMapper objectMapper;
+    private final PromptService promptService;
+    private final DataPackageService dataPackageService;
+    private final SymptomTemplateService symptomTemplateService;
+
+    public ConfigService(AiConfigMapper aiConfigMapper,
+                         AesUtils aesUtils,
+                         ObjectMapper objectMapper,
+                         PromptService promptService,
+                         DataPackageService dataPackageService,
+                         SymptomTemplateService symptomTemplateService) {
+        this.aiConfigMapper = aiConfigMapper;
+        this.aesUtils = aesUtils;
+        this.objectMapper = objectMapper;
+        this.promptService = promptService;
+        this.dataPackageService = dataPackageService;
+        this.symptomTemplateService = symptomTemplateService;
+    }
+
+    public BootstrapVO buildBootstrap(AiDevice device) {
+        ResolvedAiConfig resolved = resolveByDevice(device);
+        BootstrapVO vo = new BootstrapVO();
+
+        BootstrapVO.LlmConfig llm = new BootstrapVO.LlmConfig();
+        llm.setBaseUrl(resolved.getBaseUrl());
+        llm.setModel(resolved.getModel());
+        llm.setAudioBaseUrl(resolved.getAudioBaseUrl());
+        llm.setAudioModel(resolved.getAudioModel());
+        vo.setLlm(llm);
+
+        BootstrapVO.SpeechConfig speech = new BootstrapVO.SpeechConfig();
+        speech.setProvider(resolved.getSpeechProvider());
+        speech.setModel(resolved.getSpeechModel());
+        vo.setSpeech(speech);
+
+        BootstrapVO.KnowledgeBaseConfig knowledgeBase = new BootstrapVO.KnowledgeBaseConfig();
+        knowledgeBase.setEnabled(Boolean.TRUE.equals(resolved.getKnowledgeBaseEnabled()));
+        knowledgeBase.setBaseUrl(resolved.getKnowledgeBaseBaseUrl());
+        vo.setKnowledgeBase(knowledgeBase);
+
+        BootstrapVO.PmphaiConfig pmphai = new BootstrapVO.PmphaiConfig();
+        pmphai.setEnabled(Boolean.TRUE.equals(resolved.getPmphaiEnabled()));
+        vo.setPmphai(pmphai);
+
+        BootstrapVO.ReviewerConfig reviewer = new BootstrapVO.ReviewerConfig();
+        reviewer.setEnabled(Boolean.TRUE.equals(resolved.getReviewerEnabled()));
+        reviewer.setModel(resolved.getReviewerModel());
+        vo.setReviewer(reviewer);
+
+        vo.setFeatures(resolved.getFeatures() == null ? Collections.<String, Boolean>emptyMap() : resolved.getFeatures());
+        vo.setPromptVersion(promptService.latestVisibleVersion(device.getIdOrg(), device.getIdRegion()));
+        vo.setTemplateVersion(symptomTemplateService.latestVisibleVersion(device.getIdOrg(), device.getIdRegion()));
+        vo.setDataPackageVersion(dataPackageService.latestVisibleVersion("mapping", device.getIdOrg(), device.getIdRegion()));
+        return vo;
+    }
+
+    public ResolvedAiConfig resolveByDevice(AiDevice device) {
+        AiConfig config = resolveVisibleConfig(device.getIdOrg(), device.getIdRegion());
+        if (config == null) {
+            throw new BusinessException("未找到有效 AI 配置");
+        }
+        return toResolved(config);
+    }
+
+    public PageResponse<AiConfigView> list(long current, long size, String keyword) {
+        Page<AiConfig> page = new Page<AiConfig>(current, size);
+        LambdaQueryWrapper<AiConfig> wrapper = new LambdaQueryWrapper<AiConfig>()
+            .eq(AiConfig::getFgActive, "1")
+            .orderByDesc(AiConfig::getUpdateTime);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(q -> q.like(AiConfig::getNaConfig, keyword).or().like(AiConfig::getCdConfig, keyword));
+        }
+        Page<AiConfig> result = aiConfigMapper.selectPage(page, wrapper);
+        List<AiConfigView> views = result.getRecords().stream().map(this::toView).collect(Collectors.toList());
+        return new PageResponse<AiConfigView>(result.getCurrent(), result.getSize(), result.getTotal(), views);
+    }
+
+    public AiConfigView save(AiConfigSaveRequest request) {
+        validateSaveRequest(request);
+        AiConfig config = new AiConfig();
+        mergeSaveRequest(config, request, null);
+        config.setFgActive("1");
+        if (!StringUtils.hasText(config.getSdStatus())) {
+            config.setSdStatus("1");
+        }
+        aiConfigMapper.insert(config);
+        return toView(config);
+    }
+
+    public AiConfigView update(String idConfig, AiConfigSaveRequest request) {
+        AiConfig existing = aiConfigMapper.selectById(idConfig);
+        if (existing == null) {
+            throw new BusinessException("配置不存在");
+        }
+        validateSaveRequest(request);
+        mergeSaveRequest(existing, request, existing);
+        aiConfigMapper.updateById(existing);
+        return toView(existing);
+    }
+
+    public void invalidate(String idConfig) {
+        AiConfig config = aiConfigMapper.selectById(idConfig);
+        if (config == null) {
+            throw new BusinessException("配置不存在");
+        }
+        config.setFgActive("0");
+        aiConfigMapper.updateById(config);
+    }
+
+    private void mergeSaveRequest(AiConfig target, AiConfigSaveRequest request, AiConfig existing) {
+        target.setCdConfig(request.getCdConfig());
+        target.setNaConfig(request.getNaConfig());
+        target.setProvider(request.getProvider());
+        target.setApiBaseUrl(request.getApiBaseUrl());
+        target.setModelName(request.getModelName());
+        target.setAudioBaseUrl(request.getAudioBaseUrl());
+        target.setAudioModel(request.getAudioModel());
+        target.setSpeechProvider(request.getSpeechProvider());
+        target.setSpeechModel(request.getSpeechModel());
+        target.setKnowledgeBaseEnabled(Boolean.TRUE.equals(request.getKnowledgeBaseEnabled()) ? "1" : "0");
+        target.setKnowledgeBaseBaseUrl(request.getKnowledgeBaseBaseUrl());
+        target.setPmphaiEnabled(Boolean.TRUE.equals(request.getPmphaiEnabled()) ? "1" : "0");
+        target.setPmphaiBaseUrl(request.getPmphaiBaseUrl());
+        target.setReviewerEnabled(Boolean.TRUE.equals(request.getReviewerEnabled()) ? "1" : "0");
+        target.setReviewerBaseUrl(request.getReviewerBaseUrl());
+        target.setReviewerModel(request.getReviewerModel());
+        target.setFeaturesJson(request.getFeaturesJson());
+        target.setIdOrg(request.getIdOrg());
+        target.setIdRegion(request.getIdRegion());
+        target.setSdStatus(request.getSdStatus());
+        if (StringUtils.hasText(request.getApiKey())) {
+            target.setApiKeyEncrypted(aesUtils.encrypt(request.getApiKey()));
+        } else if (existing != null) {
+            target.setApiKeyEncrypted(existing.getApiKeyEncrypted());
+        }
+        if (StringUtils.hasText(request.getReviewerApiKey())) {
+            target.setReviewerApiKeyEncrypted(aesUtils.encrypt(request.getReviewerApiKey()));
+        } else if (existing != null) {
+            target.setReviewerApiKeyEncrypted(existing.getReviewerApiKeyEncrypted());
+        }
+        if (StringUtils.hasText(request.getPmphaiAppKey())) {
+            target.setPmphaiAppKeyEncrypted(aesUtils.encrypt(request.getPmphaiAppKey()));
+        } else if (existing != null) {
+            target.setPmphaiAppKeyEncrypted(existing.getPmphaiAppKeyEncrypted());
+        }
+        if (StringUtils.hasText(request.getPmphaiAppSecret())) {
+            target.setPmphaiAppSecretEncrypted(aesUtils.encrypt(request.getPmphaiAppSecret()));
+        } else if (existing != null) {
+            target.setPmphaiAppSecretEncrypted(existing.getPmphaiAppSecretEncrypted());
+        }
+    }
+
+    private void validateSaveRequest(AiConfigSaveRequest request) {
+        if (request == null) {
+            throw new BusinessException("请求体不能为空");
+        }
+        if (!StringUtils.hasText(request.getNaConfig())) {
+            throw new BusinessException("配置名称不能为空");
+        }
+        if (!StringUtils.hasText(request.getApiBaseUrl())) {
+            throw new BusinessException("AI 服务地址不能为空");
+        }
+        if (!StringUtils.hasText(request.getModelName())) {
+            throw new BusinessException("模型名称不能为空");
+        }
+        if (StringUtils.hasText(request.getFeaturesJson())) {
+            try {
+                objectMapper.readValue(request.getFeaturesJson(), new TypeReference<Map<String, Boolean>>() {});
+            } catch (IOException ex) {
+                throw new BusinessException("featuresJson 必须是合法 JSON");
+            }
+        }
+    }
+
+    private AiConfig resolveVisibleConfig(String orgId, String regionId) {
+        List<AiConfig> configs = aiConfigMapper.selectList(new LambdaQueryWrapper<AiConfig>()
+            .eq(AiConfig::getFgActive, "1")
+            .eq(AiConfig::getSdStatus, "1")
+            .and(q -> q.eq(StringUtils.hasText(orgId), AiConfig::getIdOrg, orgId)
+                .or()
+                .eq(StringUtils.hasText(regionId), AiConfig::getIdRegion, regionId)
+                .or()
+                .isNull(AiConfig::getIdOrg).isNull(AiConfig::getIdRegion))
+            .orderByDesc(AiConfig::getUpdateTime));
+        if (configs.isEmpty()) {
+            return null;
+        }
+        configs.sort((left, right) -> Integer.compare(score(right, orgId, regionId), score(left, orgId, regionId)));
+        return configs.get(0);
+    }
+
+    private int score(AiConfig config, String orgId, String regionId) {
+        if (StringUtils.hasText(orgId) && orgId.equals(config.getIdOrg())) {
+            return 3;
+        }
+        if (StringUtils.hasText(regionId) && regionId.equals(config.getIdRegion())) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private ResolvedAiConfig toResolved(AiConfig config) {
+        ResolvedAiConfig resolved = new ResolvedAiConfig();
+        resolved.setBaseUrl(trimRightSlash(config.getApiBaseUrl()));
+        resolved.setApiKey(aesUtils.decrypt(config.getApiKeyEncrypted()));
+        resolved.setModel(config.getModelName());
+        resolved.setAudioBaseUrl(StringUtils.hasText(config.getAudioBaseUrl()) ? trimRightSlash(config.getAudioBaseUrl()) : trimRightSlash(config.getApiBaseUrl()));
+        resolved.setAudioModel(config.getAudioModel());
+        resolved.setSpeechProvider(config.getSpeechProvider());
+        resolved.setSpeechModel(config.getSpeechModel());
+        resolved.setKnowledgeBaseEnabled("1".equals(config.getKnowledgeBaseEnabled()));
+        resolved.setKnowledgeBaseBaseUrl(config.getKnowledgeBaseBaseUrl());
+        resolved.setPmphaiEnabled("1".equals(config.getPmphaiEnabled()));
+        resolved.setPmphaiBaseUrl(StringUtils.hasText(config.getPmphaiBaseUrl()) ? trimRightSlash(config.getPmphaiBaseUrl()) : null);
+        resolved.setPmphaiAppKey(aesUtils.decrypt(config.getPmphaiAppKeyEncrypted()));
+        resolved.setPmphaiAppSecret(aesUtils.decrypt(config.getPmphaiAppSecretEncrypted()));
+        resolved.setReviewerEnabled("1".equals(config.getReviewerEnabled()));
+        resolved.setReviewerBaseUrl(StringUtils.hasText(config.getReviewerBaseUrl()) ? trimRightSlash(config.getReviewerBaseUrl()) : null);
+        resolved.setReviewerApiKey(aesUtils.decrypt(config.getReviewerApiKeyEncrypted()));
+        resolved.setReviewerModel(config.getReviewerModel());
+        resolved.setFeatures(parseFeatures(config.getFeaturesJson()));
+        return resolved;
+    }
+
+    private Map<String, Boolean> parseFeatures(String featuresJson) {
+        if (!StringUtils.hasText(featuresJson)) {
+            return Collections.emptyMap();
+        }
+        try {
+            return objectMapper.readValue(featuresJson, new TypeReference<Map<String, Boolean>>() {});
+        } catch (IOException ex) {
+            throw new BusinessException("features_json 解析失败");
+        }
+    }
+
+    private AiConfigView toView(AiConfig config) {
+        AiConfigView view = new AiConfigView();
+        view.setIdConfig(config.getIdConfig());
+        view.setCdConfig(config.getCdConfig());
+        view.setNaConfig(config.getNaConfig());
+        view.setProvider(config.getProvider());
+        view.setApiBaseUrl(config.getApiBaseUrl());
+        view.setApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getApiKeyEncrypted())));
+        view.setModelName(config.getModelName());
+        view.setAudioBaseUrl(config.getAudioBaseUrl());
+        view.setAudioModel(config.getAudioModel());
+        view.setSpeechProvider(config.getSpeechProvider());
+        view.setSpeechModel(config.getSpeechModel());
+        view.setKnowledgeBaseEnabled(config.getKnowledgeBaseEnabled());
+        view.setKnowledgeBaseBaseUrl(config.getKnowledgeBaseBaseUrl());
+        view.setPmphaiEnabled(config.getPmphaiEnabled());
+        view.setPmphaiBaseUrl(config.getPmphaiBaseUrl());
+        view.setPmphaiAppKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getPmphaiAppKeyEncrypted())));
+        view.setPmphaiAppSecretMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getPmphaiAppSecretEncrypted())));
+        view.setReviewerEnabled(config.getReviewerEnabled());
+        view.setReviewerBaseUrl(config.getReviewerBaseUrl());
+        view.setReviewerApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getReviewerApiKeyEncrypted())));
+        view.setReviewerModel(config.getReviewerModel());
+        view.setFeaturesJson(config.getFeaturesJson());
+        view.setIdOrg(config.getIdOrg());
+        view.setIdRegion(config.getIdRegion());
+        view.setSdStatus(config.getSdStatus());
+        return view;
+    }
+
+    private String trimRightSlash(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        return value.replaceAll("/+$", "");
+    }
+}

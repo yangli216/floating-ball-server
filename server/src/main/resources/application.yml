@@ -1,0 +1,48 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: floating-ball-server
+  datasource:
+    driver-class-name: oracle.jdbc.OracleDriver
+    url: ${FB_DB_URL:}
+    username: ${FB_DB_USERNAME:}
+    password: ${FB_DB_PASSWORD:}
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    jdbc-type-for-null: 'NULL'
+  global-config:
+    db-config:
+      logic-delete-field: fgActive
+      logic-delete-value: 0
+      logic-not-delete-value: 1
+
+floating-ball:
+  aes-key: ${FB_AES_KEY:}
+  admin:
+    bootstrap-reset:
+      enabled: ${FB_ADMIN_BOOTSTRAP_RESET_ENABLED:false}
+      username: ${FB_ADMIN_BOOTSTRAP_RESET_USERNAME:admin}
+      password: ${FB_ADMIN_BOOTSTRAP_RESET_PASSWORD:}
+  audit:
+    speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:${java.io.tmpdir}/floating-ball-server/speech-audit}
+  cors:
+    allowed-origins:
+      - ${FB_ADMIN_ORIGIN_LOCALHOST:http://localhost:5174}
+      - ${FB_ADMIN_ORIGIN_LOOPBACK:http://127.0.0.1:5174}
+      - ${FB_ADMIN_PREVIEW_ORIGIN_LOCALHOST:http://localhost:4173}
+      - ${FB_ADMIN_PREVIEW_ORIGIN_LOOPBACK:http://127.0.0.1:4173}
+  ai:
+    connect-timeout-ms: ${FB_AI_CONNECT_TIMEOUT_MS:30000}
+    read-timeout-ms: ${FB_AI_READ_TIMEOUT_MS:120000}
+    proxy:
+      enabled: ${FB_AI_PROXY_ENABLED:false}
+      host: ${FB_AI_PROXY_HOST:}
+      port: ${FB_AI_PROXY_PORT:7890}
+      username: ${FB_AI_PROXY_USERNAME:}
+      password: ${FB_AI_PROXY_PASSWORD:}

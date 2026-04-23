@@ -1,0 +1,500 @@
+-- Oracle business schema initialization script.
+-- Run this file after bootstrap.sql.
+-- Before execution, switch to the target schema/user and make sure
+-- the default tablespace has been prepared by DBA or execution context.
+--
+-- This file only contains object DDL and seed data.
+-- It does not declare TABLESPACE clauses explicitly.
+-- Connect with the same schema as FB_DB_USERNAME before running this file.
+-- Current application default schema is RBMH_AI.
+-- This file intentionally keeps only plain Oracle DDL/DML so it can run in
+-- SQL Developer, Navicat, DBeaver and other generic SQL clients.
+--
+-- Writing convention:
+-- 1. CREATE TABLE
+-- 2. COMMENT ON TABLE / COMMENT ON COLUMN
+-- 3. CREATE INDEX
+-- 4. Seed data at the end
+
+CREATE TABLE c_ai_region (
+    id_region            VARCHAR2(32) PRIMARY KEY,
+    cd_region            VARCHAR2(64),
+    na_region            VARCHAR2(128) NOT NULL,
+    id_parent            VARCHAR2(32),
+    sd_region_type       VARCHAR2(32),
+    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
+    sort_order           NUMBER(10) DEFAULT 0,
+    des_region           VARCHAR2(500),
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_region IS '区域表';
+COMMENT ON COLUMN c_ai_region.id_region IS '区域主键ID';
+COMMENT ON COLUMN c_ai_region.cd_region IS '区域编码';
+COMMENT ON COLUMN c_ai_region.na_region IS '区域名称';
+COMMENT ON COLUMN c_ai_region.id_parent IS '上级区域ID';
+COMMENT ON COLUMN c_ai_region.sd_region_type IS '区域类型';
+COMMENT ON COLUMN c_ai_region.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_region.sort_order IS '排序号';
+COMMENT ON COLUMN c_ai_region.des_region IS '区域说明';
+COMMENT ON COLUMN c_ai_region.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_region.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_region.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_region_active ON c_ai_region (fg_active, sd_status);
+
+
+CREATE TABLE c_ai_org (
+    id_org               VARCHAR2(32) PRIMARY KEY,
+    cd_org               VARCHAR2(64),
+    na_org               VARCHAR2(128) NOT NULL,
+    id_parent            VARCHAR2(32),
+    id_region            VARCHAR2(32),
+    sd_org_type          VARCHAR2(32),
+    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
+    sort_order           NUMBER(10) DEFAULT 0,
+    des_org              VARCHAR2(500),
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_org IS '机构表';
+COMMENT ON COLUMN c_ai_org.id_org IS '机构主键ID';
+COMMENT ON COLUMN c_ai_org.cd_org IS '机构编码';
+COMMENT ON COLUMN c_ai_org.na_org IS '机构名称';
+COMMENT ON COLUMN c_ai_org.id_parent IS '上级机构ID';
+COMMENT ON COLUMN c_ai_org.id_region IS '所属区域ID';
+COMMENT ON COLUMN c_ai_org.sd_org_type IS '机构类型';
+COMMENT ON COLUMN c_ai_org.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_org.sort_order IS '排序号';
+COMMENT ON COLUMN c_ai_org.des_org IS '机构说明';
+COMMENT ON COLUMN c_ai_org.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_org.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_org.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_org_active ON c_ai_org (fg_active, sd_status);
+CREATE INDEX idx_c_ai_org_code ON c_ai_org (cd_org, fg_active);
+
+
+CREATE TABLE c_ai_device (
+    id_device            VARCHAR2(32) PRIMARY KEY,
+    cd_device            VARCHAR2(128) NOT NULL,
+    na_device            VARCHAR2(128),
+    id_org               VARCHAR2(32) NOT NULL,
+    id_region            VARCHAR2(32),
+    id_bind_user         VARCHAR2(32),
+    device_token         VARCHAR2(64) NOT NULL,
+    sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
+    dt_last_heartbeat    TIMESTAMP,
+    dt_registered        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    client_version       VARCHAR2(64),
+    os_info              VARCHAR2(500),
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_device IS '设备表';
+COMMENT ON COLUMN c_ai_device.id_device IS '设备主键ID';
+COMMENT ON COLUMN c_ai_device.cd_device IS '设备编码';
+COMMENT ON COLUMN c_ai_device.na_device IS '设备名称';
+COMMENT ON COLUMN c_ai_device.id_org IS '所属机构ID';
+COMMENT ON COLUMN c_ai_device.id_region IS '所属区域ID';
+COMMENT ON COLUMN c_ai_device.id_bind_user IS '绑定用户ID';
+COMMENT ON COLUMN c_ai_device.device_token IS '设备令牌';
+COMMENT ON COLUMN c_ai_device.sd_status IS '设备状态';
+COMMENT ON COLUMN c_ai_device.dt_last_heartbeat IS '最后心跳时间';
+COMMENT ON COLUMN c_ai_device.dt_registered IS '注册时间';
+COMMENT ON COLUMN c_ai_device.client_version IS '客户端版本';
+COMMENT ON COLUMN c_ai_device.os_info IS '操作系统信息';
+COMMENT ON COLUMN c_ai_device.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_device.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_device.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_device_org ON c_ai_device (id_org, fg_active);
+CREATE INDEX idx_c_ai_device_token ON c_ai_device (device_token, fg_active);
+
+
+CREATE TABLE c_ai_config (
+    id_config                VARCHAR2(32) PRIMARY KEY,
+    cd_config                VARCHAR2(64),
+    na_config                VARCHAR2(128) NOT NULL,
+    provider                 VARCHAR2(32),
+    api_base_url             VARCHAR2(500),
+    api_key_encrypted        VARCHAR2(1000),
+    model_name               VARCHAR2(128),
+    audio_base_url           VARCHAR2(500),
+    audio_model              VARCHAR2(128),
+    speech_provider          VARCHAR2(64),
+    speech_model             VARCHAR2(128),
+    knowledge_base_enabled   CHAR(1) DEFAULT '0' NOT NULL,
+    knowledge_base_base_url  VARCHAR2(500),
+    pmphai_enabled           CHAR(1) DEFAULT '0' NOT NULL,
+    pmphai_base_url          VARCHAR2(500),
+    pmphai_app_key_encrypted VARCHAR2(1000),
+    pmphai_app_secret_encrypted VARCHAR2(1000),
+    reviewer_enabled         CHAR(1) DEFAULT '0' NOT NULL,
+    reviewer_base_url        VARCHAR2(500),
+    reviewer_api_key_encrypted VARCHAR2(1000),
+    reviewer_model           VARCHAR2(128),
+    features_json            CLOB,
+    id_org                   VARCHAR2(32),
+    id_region                VARCHAR2(32),
+    sd_status                VARCHAR2(2) DEFAULT '1' NOT NULL,
+    fg_active                CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_config IS 'AI配置表';
+COMMENT ON COLUMN c_ai_config.id_config IS '配置主键ID';
+COMMENT ON COLUMN c_ai_config.cd_config IS '配置编码';
+COMMENT ON COLUMN c_ai_config.na_config IS '配置名称';
+COMMENT ON COLUMN c_ai_config.provider IS '服务提供商';
+COMMENT ON COLUMN c_ai_config.api_base_url IS '模型接口基础地址';
+COMMENT ON COLUMN c_ai_config.api_key_encrypted IS '加密后的接口密钥';
+COMMENT ON COLUMN c_ai_config.model_name IS '模型名称';
+COMMENT ON COLUMN c_ai_config.audio_base_url IS '语音接口基础地址';
+COMMENT ON COLUMN c_ai_config.audio_model IS '语音模型名称';
+COMMENT ON COLUMN c_ai_config.speech_provider IS '语音服务提供商';
+COMMENT ON COLUMN c_ai_config.speech_model IS '语音服务模型';
+COMMENT ON COLUMN c_ai_config.knowledge_base_enabled IS '知识库开关';
+COMMENT ON COLUMN c_ai_config.knowledge_base_base_url IS '知识库服务地址';
+COMMENT ON COLUMN c_ai_config.pmphai_enabled IS '人卫知识库开关';
+COMMENT ON COLUMN c_ai_config.pmphai_base_url IS '人卫知识库服务地址';
+COMMENT ON COLUMN c_ai_config.pmphai_app_key_encrypted IS '加密后的人卫知识库App Key';
+COMMENT ON COLUMN c_ai_config.pmphai_app_secret_encrypted IS '加密后的人卫知识库App Secret';
+COMMENT ON COLUMN c_ai_config.reviewer_enabled IS '审查模型开关';
+COMMENT ON COLUMN c_ai_config.reviewer_base_url IS '审查模型服务地址';
+COMMENT ON COLUMN c_ai_config.reviewer_api_key_encrypted IS '加密后的审查模型密钥';
+COMMENT ON COLUMN c_ai_config.reviewer_model IS '审查模型名称';
+COMMENT ON COLUMN c_ai_config.features_json IS '功能开关配置JSON';
+COMMENT ON COLUMN c_ai_config.id_org IS '机构级配置范围ID';
+COMMENT ON COLUMN c_ai_config.id_region IS '区域级配置范围ID';
+COMMENT ON COLUMN c_ai_config.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_config.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_config.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_config.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_config_scope ON c_ai_config (id_org, id_region, fg_active, sd_status);
+
+
+CREATE TABLE c_ai_prompt (
+    id_prompt            VARCHAR2(32) PRIMARY KEY,
+    cd_prompt            VARCHAR2(128) NOT NULL,
+    na_prompt            VARCHAR2(128) NOT NULL,
+    sys_prompt           CLOB,
+    user_template        CLOB,
+    version_num          VARCHAR2(64),
+    sd_prompt_type       VARCHAR2(64),
+    sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
+    id_org               VARCHAR2(32),
+    id_region            VARCHAR2(32),
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_prompt IS 'Prompt模板表';
+COMMENT ON COLUMN c_ai_prompt.id_prompt IS 'Prompt主键ID';
+COMMENT ON COLUMN c_ai_prompt.cd_prompt IS 'Prompt编码';
+COMMENT ON COLUMN c_ai_prompt.na_prompt IS 'Prompt名称';
+COMMENT ON COLUMN c_ai_prompt.sys_prompt IS '系统提示词';
+COMMENT ON COLUMN c_ai_prompt.user_template IS '用户提示词模板';
+COMMENT ON COLUMN c_ai_prompt.version_num IS '版本号';
+COMMENT ON COLUMN c_ai_prompt.sd_prompt_type IS 'Prompt类型';
+COMMENT ON COLUMN c_ai_prompt.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_prompt.id_org IS '机构级作用范围ID';
+COMMENT ON COLUMN c_ai_prompt.id_region IS '区域级作用范围ID';
+COMMENT ON COLUMN c_ai_prompt.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_prompt.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_prompt.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_prompt_scope ON c_ai_prompt (cd_prompt, id_org, id_region, fg_active, sd_status);
+
+
+CREATE TABLE c_ai_data_package (
+    id_package           VARCHAR2(32) PRIMARY KEY,
+    cd_package           VARCHAR2(128),
+    na_package           VARCHAR2(128) NOT NULL,
+    sd_package_type      VARCHAR2(32) NOT NULL,
+    version_num          VARCHAR2(64),
+    content_json         CLOB,
+    sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
+    id_org               VARCHAR2(32),
+    id_region            VARCHAR2(32),
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_data_package IS '数据包表';
+COMMENT ON COLUMN c_ai_data_package.id_package IS '数据包主键ID';
+COMMENT ON COLUMN c_ai_data_package.cd_package IS '数据包编码';
+COMMENT ON COLUMN c_ai_data_package.na_package IS '数据包名称';
+COMMENT ON COLUMN c_ai_data_package.sd_package_type IS '数据包类型';
+COMMENT ON COLUMN c_ai_data_package.version_num IS '版本号';
+COMMENT ON COLUMN c_ai_data_package.content_json IS '数据包内容JSON';
+COMMENT ON COLUMN c_ai_data_package.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_data_package.id_org IS '机构级作用范围ID';
+COMMENT ON COLUMN c_ai_data_package.id_region IS '区域级作用范围ID';
+COMMENT ON COLUMN c_ai_data_package.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_data_package.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_data_package.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_package_scope ON c_ai_data_package (sd_package_type, id_org, id_region, fg_active, sd_status);
+
+
+CREATE TABLE c_ai_symptom_template (
+    id_template              VARCHAR2(32) PRIMARY KEY,
+    cd_symptom               VARCHAR2(128) NOT NULL,
+    na_symptom               VARCHAR2(200) NOT NULL,
+    sd_medical_mode          VARCHAR2(16) NOT NULL,
+    des_symptom              VARCHAR2(1000),
+    fg_common                CHAR(1) DEFAULT '0' NOT NULL,
+    sort_order               NUMBER(10) DEFAULT 0,
+    system_category_json     CLOB,
+    system_category_tokens   VARCHAR2(1000),
+    body_parts_json          CLOB,
+    body_parts_tokens        VARCHAR2(1000),
+    custom_script            CLOB,
+    applicable_population_json CLOB,
+    config_json              CLOB,
+    tcm_metadata_json        CLOB,
+    id_org                   VARCHAR2(32),
+    id_region                VARCHAR2(32),
+    sd_status                VARCHAR2(2) DEFAULT '1' NOT NULL,
+    fg_active                CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_symptom_template IS '症状模板表';
+COMMENT ON COLUMN c_ai_symptom_template.id_template IS '症状模板主键ID';
+COMMENT ON COLUMN c_ai_symptom_template.cd_symptom IS '症状Key/编码';
+COMMENT ON COLUMN c_ai_symptom_template.na_symptom IS '症状名称';
+COMMENT ON COLUMN c_ai_symptom_template.sd_medical_mode IS '医学模式（western/tcm）';
+COMMENT ON COLUMN c_ai_symptom_template.des_symptom IS '症状描述';
+COMMENT ON COLUMN c_ai_symptom_template.fg_common IS '是否常用症状';
+COMMENT ON COLUMN c_ai_symptom_template.sort_order IS '排序号';
+COMMENT ON COLUMN c_ai_symptom_template.system_category_json IS '系统分类JSON数组';
+COMMENT ON COLUMN c_ai_symptom_template.system_category_tokens IS '系统分类检索token';
+COMMENT ON COLUMN c_ai_symptom_template.body_parts_json IS '部位JSON数组';
+COMMENT ON COLUMN c_ai_symptom_template.body_parts_tokens IS '部位检索token';
+COMMENT ON COLUMN c_ai_symptom_template.custom_script IS '自定义脚本';
+COMMENT ON COLUMN c_ai_symptom_template.applicable_population_json IS '适用人群JSON';
+COMMENT ON COLUMN c_ai_symptom_template.config_json IS '问诊配置JSON';
+COMMENT ON COLUMN c_ai_symptom_template.tcm_metadata_json IS '中医扩展元数据JSON';
+COMMENT ON COLUMN c_ai_symptom_template.id_org IS '机构级作用范围ID';
+COMMENT ON COLUMN c_ai_symptom_template.id_region IS '区域级作用范围ID';
+COMMENT ON COLUMN c_ai_symptom_template.sd_status IS '状态（1启用 0停用）';
+COMMENT ON COLUMN c_ai_symptom_template.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_symptom_template.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_symptom_template.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_symptom_scope ON c_ai_symptom_template (sd_medical_mode, id_org, id_region, fg_active, sd_status);
+CREATE INDEX idx_c_ai_symptom_code ON c_ai_symptom_template (cd_symptom, sd_medical_mode, id_org, id_region, fg_active);
+CREATE INDEX idx_c_ai_symptom_sort ON c_ai_symptom_template (sd_medical_mode, sort_order, fg_active);
+
+
+CREATE TABLE c_ai_op_log (
+    id_log               VARCHAR2(32) PRIMARY KEY,
+    id_device            VARCHAR2(32),
+    id_org               VARCHAR2(32),
+    sd_log_type          VARCHAR2(64),
+    na_module            VARCHAR2(128),
+    des_op               VARCHAR2(500),
+    payload_json         CLOB,
+    audio_file_path      VARCHAR2(1000),
+    op_result            VARCHAR2(8),
+    operation_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_op_log IS '操作日志表';
+COMMENT ON COLUMN c_ai_op_log.id_log IS '日志主键ID';
+COMMENT ON COLUMN c_ai_op_log.id_device IS '设备ID';
+COMMENT ON COLUMN c_ai_op_log.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_op_log.sd_log_type IS '日志类型';
+COMMENT ON COLUMN c_ai_op_log.na_module IS '业务模块名称';
+COMMENT ON COLUMN c_ai_op_log.des_op IS '操作描述';
+COMMENT ON COLUMN c_ai_op_log.payload_json IS '日志负载JSON';
+COMMENT ON COLUMN c_ai_op_log.audio_file_path IS '语音代理录音文件路径';
+COMMENT ON COLUMN c_ai_op_log.op_result IS '操作结果';
+COMMENT ON COLUMN c_ai_op_log.operation_time IS '操作时间';
+COMMENT ON COLUMN c_ai_op_log.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_op_log.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_op_log.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_log_time ON c_ai_op_log (operation_time, fg_active);
+
+
+CREATE TABLE c_ai_feedback (
+    id_feedback           VARCHAR2(32) PRIMARY KEY,
+    id_device             VARCHAR2(32),
+    id_org                VARCHAR2(32),
+    session_id            VARCHAR2(64),
+    trace_id              VARCHAR2(64),
+    source_module         VARCHAR2(128),
+    score                 NUMBER(2) NOT NULL,
+    comment_text          VARCHAR2(2000) NOT NULL,
+    screenshot_file_name  VARCHAR2(255),
+    screenshot_mime_type  VARCHAR2(128),
+    screenshot_data_url   CLOB,
+    chain_context_json    CLOB,
+    feedback_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fg_active             CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_feedback IS '用户反馈表';
+COMMENT ON COLUMN c_ai_feedback.id_feedback IS '反馈主键ID';
+COMMENT ON COLUMN c_ai_feedback.id_device IS '设备ID';
+COMMENT ON COLUMN c_ai_feedback.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_feedback.session_id IS '会话ID';
+COMMENT ON COLUMN c_ai_feedback.trace_id IS '关联的 AI 调用 traceId';
+COMMENT ON COLUMN c_ai_feedback.source_module IS '反馈来源模块';
+COMMENT ON COLUMN c_ai_feedback.score IS '反馈评分';
+COMMENT ON COLUMN c_ai_feedback.comment_text IS '反馈说明';
+COMMENT ON COLUMN c_ai_feedback.screenshot_file_name IS '截图文件名';
+COMMENT ON COLUMN c_ai_feedback.screenshot_mime_type IS '截图 MIME 类型';
+COMMENT ON COLUMN c_ai_feedback.screenshot_data_url IS '截图 Data URL';
+COMMENT ON COLUMN c_ai_feedback.chain_context_json IS '前端上传的链路上下文快照';
+COMMENT ON COLUMN c_ai_feedback.feedback_time IS '反馈时间';
+COMMENT ON COLUMN c_ai_feedback.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_feedback.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_feedback.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_feedback_time ON c_ai_feedback (feedback_time, fg_active);
+CREATE INDEX idx_c_ai_feedback_trace ON c_ai_feedback (trace_id, fg_active);
+CREATE INDEX idx_c_ai_feedback_device ON c_ai_feedback (id_device, fg_active);
+
+
+CREATE TABLE c_ai_user (
+    id_user              VARCHAR2(32) PRIMARY KEY,
+    cd_user              VARCHAR2(64) NOT NULL,
+    na_user              VARCHAR2(128) NOT NULL,
+    password_hash        VARCHAR2(128) NOT NULL,
+    id_org               VARCHAR2(32),
+    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_user IS '用户表';
+COMMENT ON COLUMN c_ai_user.id_user IS '用户主键ID';
+COMMENT ON COLUMN c_ai_user.cd_user IS '用户账号';
+COMMENT ON COLUMN c_ai_user.na_user IS '用户姓名';
+COMMENT ON COLUMN c_ai_user.password_hash IS '密码摘要';
+COMMENT ON COLUMN c_ai_user.id_org IS '所属机构ID';
+COMMENT ON COLUMN c_ai_user.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_user.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_user.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_user.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_user_code ON c_ai_user (cd_user, fg_active);
+CREATE INDEX idx_c_ai_user_org ON c_ai_user (id_org, fg_active);
+
+
+CREATE TABLE c_ai_role (
+    id_role              VARCHAR2(32) PRIMARY KEY,
+    cd_role              VARCHAR2(64) NOT NULL,
+    na_role              VARCHAR2(128) NOT NULL,
+    des_role             VARCHAR2(500),
+    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_role IS '角色表';
+COMMENT ON COLUMN c_ai_role.id_role IS '角色主键ID';
+COMMENT ON COLUMN c_ai_role.cd_role IS '角色编码';
+COMMENT ON COLUMN c_ai_role.na_role IS '角色名称';
+COMMENT ON COLUMN c_ai_role.des_role IS '角色说明';
+COMMENT ON COLUMN c_ai_role.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_role.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_role.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_role.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_role_code ON c_ai_role (cd_role, fg_active);
+
+
+CREATE TABLE c_ai_user_role (
+    id_user_role         VARCHAR2(32) PRIMARY KEY,
+    id_user              VARCHAR2(32) NOT NULL,
+    id_role              VARCHAR2(32) NOT NULL,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_user_role IS '用户角色关联表';
+COMMENT ON COLUMN c_ai_user_role.id_user_role IS '关联主键ID';
+COMMENT ON COLUMN c_ai_user_role.id_user IS '用户ID';
+COMMENT ON COLUMN c_ai_user_role.id_role IS '角色ID';
+COMMENT ON COLUMN c_ai_user_role.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_user_role.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_user_role.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_user_role_user ON c_ai_user_role (id_user, fg_active);
+CREATE INDEX idx_c_ai_user_role_role ON c_ai_user_role (id_role, fg_active);
+
+
+INSERT INTO c_ai_region (id_region, cd_region, na_region, sd_region_type, sd_status, fg_active)
+VALUES ('REGION001', 'REG001', '默认区域', 'district', '1', '1');
+
+INSERT INTO c_ai_org (id_org, cd_org, na_org, id_region, sd_org_type, sd_status, fg_active)
+VALUES ('ORG001', 'ORG001', '默认机构', 'REGION001', 'community', '1', '1');
+
+INSERT INTO c_ai_config (
+    id_config,
+    cd_config,
+    na_config,
+    provider,
+    api_base_url,
+    model_name,
+    audio_model,
+    knowledge_base_enabled,
+    pmphai_enabled,
+    reviewer_enabled,
+    reviewer_model,
+    features_json,
+    id_org,
+    sd_status,
+    fg_active
+) VALUES (
+    'CFG001',
+    'DEFAULT',
+    '默认AI配置',
+    'openai-compatible',
+    'http://127.0.0.1:65535/v1',
+    'gpt-4o-mini',
+    'whisper-1',
+    '0',
+    '0',
+    '0',
+    'gpt-4o-mini',
+    '{"regionalMode":true,"aiProxyEnabled":true,"auditEnabled":true}',
+    'ORG001',
+    '1',
+    '1'
+);
+
+INSERT INTO c_ai_role (id_role, cd_role, na_role, des_role, sd_status, fg_active)
+VALUES ('ROLE001', 'SYSTEM_ADMIN', '系统管理员', '拥有全部后台权限', '1', '1');
+
+INSERT INTO c_ai_user (id_user, cd_user, na_user, password_hash, id_org, sd_status, fg_active)
+VALUES ('USER001', 'admin', '系统管理员', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'ORG001', '1', '1');
+
+INSERT INTO c_ai_user_role (id_user_role, id_user, id_role, fg_active)
+VALUES ('USERROLE001', 'USER001', 'ROLE001', '1');
+
+COMMIT;

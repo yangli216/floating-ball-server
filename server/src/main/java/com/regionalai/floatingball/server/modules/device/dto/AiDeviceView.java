@@ -1,0 +1,23 @@
+package com.regionalai.floatingball.server.modules.device.dto;
+
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+public class AiDeviceView {
+
+    private String idDevice;
+    private String cdDevice;
+    private String naDevice;
+    private String idOrg;
+    private String naOrg;
+    private String idRegion;
+    private String naRegion;
+    private String deviceTokenMasked;
+    private String sdStatus;
+    private String clientVersion;
+    private String osInfo;
+    private LocalDateTime dtLastHeartbeat;
+    private LocalDateTime dtRegistered;
+}
