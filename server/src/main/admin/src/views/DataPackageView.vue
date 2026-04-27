@@ -1,6 +1,6 @@
 <template>
-  <div class="page-card">
-    <div class="page-toolbar data-package-toolbar">
+  <div>
+    <div class="filter-bar data-package-toolbar">
       <div class="page-toolbar__filters data-package-filters">
         <el-input
           v-model="filters.keyword"
@@ -41,15 +41,16 @@
       <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增数据包</el-button>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
-      <el-table-column prop="cdPackage" label="数据包编码" min-width="160" />
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
+      <el-table-column label="数据包编码" min-width="160"><template slot-scope="{ row }"><code class="code-tag">{{ row.cdPackage || '--' }}</code></template></el-table-column>
       <el-table-column prop="naPackage" label="数据包名称" min-width="160" />
       <el-table-column label="类型" width="110">
         <template slot-scope="{ row }">
           {{ typeLabel(row.sdPackageType) }}
         </template>
       </el-table-column>
-      <el-table-column prop="versionNum" label="版本号" width="120" />
+      <el-table-column label="版本号" width="120"><template slot-scope="{ row }"><code class="code-tag">{{ row.versionNum || '--' }}</code></template></el-table-column>
       <el-table-column label="作用域" min-width="140">
         <template slot-scope="{ row }">
           {{ resolveScope(row) }}
@@ -57,7 +58,7 @@
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="statusMeta(row.sdStatus).type">{{ statusMeta(row.sdStatus).label }}</el-tag>
+          <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
         </template>
       </el-table-column>
       <el-table-column label="内容预览" min-width="260">
@@ -73,10 +74,10 @@
       <el-table-column label="操作" width="240" fixed="right">
         <template slot-scope="{ row }">
           <div class="table-actions">
-            <el-button size="mini" type="text" @click="openEdit(row)">编辑</el-button>
-            <el-button size="mini" type="text" :disabled="row.sdStatus === '1'" @click="publishRecord(row)">发布</el-button>
-            <el-button size="mini" type="text" :disabled="row.sdStatus === '2'" @click="archiveRecord(row)">归档</el-button>
-            <el-button size="mini" type="text" @click="removeRecord(row)">删除</el-button>
+            <a class="table-action" @click="openEdit(row)">编辑</a>
+            <a class="table-action" :class="{ 'is-disabled': row.sdStatus === '1' }" @click="row.sdStatus !== '1' && publishRecord(row)">发布</a>
+            <a class="table-action" :class="{ 'is-disabled': row.sdStatus === '2' }" @click="row.sdStatus !== '2' && archiveRecord(row)">归档</a>
+            <a class="table-action table-action--danger" @click="removeRecord(row)">删除</a>
           </div>
         </template>
       </el-table-column>
@@ -92,9 +93,10 @@
         @current-change="loadData"
       />
     </div>
+    </div>
 
-    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="920px" @closed="resetForm">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
+    <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="920px" @closed="resetForm">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
           <el-form-item label="数据包编码">
             <el-input v-model.trim="form.cdPackage" maxlength="128" />
@@ -111,11 +113,7 @@
             <el-input v-model.trim="form.versionNum" maxlength="64" />
           </el-form-item>
           <el-form-item label="状态" prop="sdStatus">
-            <el-radio-group v-model="form.sdStatus">
-              <el-radio-button label="0">草稿</el-radio-button>
-              <el-radio-button label="1">已发布</el-radio-button>
-              <el-radio-button label="2">已归档</el-radio-button>
-            </el-radio-group>
+            <div class="segmented"><button type="button" :class="{ active: form.sdStatus === '0' }" @click="form.sdStatus = '0'">草稿</button><button type="button" :class="{ active: form.sdStatus === '1' }" @click="form.sdStatus = '1'">已发布</button><button type="button" :class="{ active: form.sdStatus === '2' }" @click="form.sdStatus = '2'">已归档</button></div>
           </el-form-item>
           <el-form-item label="所属区域">
             <el-select
@@ -139,25 +137,23 @@
               <el-option v-for="item in formOrgOptions" :key="item.idOrg" :label="item.naOrg" :value="item.idOrg" />
             </el-select>
           </el-form-item>
-          <el-form-item label="内容 JSON" prop="contentJson" class="form-span-2">
+          <el-form-item label="内容配置" prop="contentJson" class="form-span-2">
             <div v-if="form.sdPackageType === 'template'" class="content-actions">
               <el-button
                 size="mini"
                 :loading="loadingBuiltinTemplate"
                 @click="loadBuiltinTemplate"
               >
-                载入内置症状模板
+                载入内置模板
               </el-button>
-              <span class="muted-text">使用 floating-ball-server 内置的症状模板基线填充当前 JSON。</span>
-            </div>
+                          </div>
             <el-input
               v-model="form.contentJson"
               type="textarea"
               :rows="12"
               :placeholder="contentJsonPlaceholder"
             />
-            <div class="muted-text content-hint">{{ contentHint }}</div>
-          </el-form-item>
+                      </el-form-item>
         </div>
       </el-form>
       <span slot="footer">
@@ -247,7 +243,7 @@ export default {
         naPackage: [{ required: true, message: '请输入数据包名称', trigger: 'blur' }],
         sdPackageType: [{ required: true, message: '请选择数据包类型', trigger: 'change' }],
         versionNum: [{ required: true, message: '请输入版本号', trigger: 'blur' }],
-        contentJson: [{ required: true, message: '请输入内容 JSON', trigger: 'blur' }]
+        contentJson: [{ required: true, message: '请输入内容配置', trigger: 'blur' }]
       }
     }
   },
@@ -271,10 +267,7 @@ export default {
       return defaultContentJson(this.form.sdPackageType)
     },
     contentHint() {
-      if (this.form.sdPackageType === 'mapping') {
-        return 'mapping 包请填写 CSV 原文字符串，例如 diagnoses / medicines / items 等字段。'
-      }
-      return 'template 包请保持 western、tcm 为数组结构。'
+      return ''
     }
   },
   async mounted() {
@@ -401,33 +394,33 @@ export default {
       try {
         const parsed = JSON.parse(this.form.contentJson)
         if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-          throw new Error('内容 JSON 必须是对象结构')
+          throw new Error('内容配置必须是对象结构')
         }
         if (this.form.sdPackageType === 'template') {
           if (parsed.western === undefined && parsed.tcm === undefined) {
-            throw new Error('template 包至少需要包含 western 或 tcm 字段')
+            throw new Error('内容至少需要包含西医或中医模板')
           }
           if (parsed.western !== undefined && parsed.western !== null && !Array.isArray(parsed.western)) {
-            throw new Error('template 包的 western 字段必须是数组')
+            throw new Error('西医模板必须是数组')
           }
           if (parsed.tcm !== undefined && parsed.tcm !== null && !Array.isArray(parsed.tcm)) {
-            throw new Error('template 包的 tcm 字段必须是数组')
+            throw new Error('中医模板必须是数组')
           }
           return true
         }
         const hasMappingField = mappingContentKeys.some(key => parsed[key] !== undefined && parsed[key] !== null && parsed[key] !== '')
         if (!hasMappingField) {
-          throw new Error('mapping 包至少需要填写一个 CSV 字段')
+          throw new Error('映射数据至少需要填写一个字段')
         }
         const invalidKey = mappingContentKeys.find(key => {
           return parsed[key] !== undefined && parsed[key] !== null && typeof parsed[key] !== 'string'
         })
         if (invalidKey) {
-          throw new Error(`mapping 包的 ${invalidKey} 字段必须是字符串`)
+          throw new Error(`${invalidKey} 字段必须是字符串`)
         }
         return true
       } catch (error) {
-        this.$message.error(error.message || '内容 JSON 校验失败')
+        this.$message.error(error.message || '内容配置校验失败')
         return false
       }
     },
@@ -448,9 +441,9 @@ export default {
         if (!this.form.naPackage) {
           this.form.naPackage = '内置症状模板包'
         }
-        this.$message.success('已载入内置症状模板')
+        this.$message.success('已载入内置模板')
       } catch (error) {
-        this.$message.error(error.message || '载入内置症状模板失败')
+        this.$message.error(error.message || '载入内置模板失败')
       } finally {
         this.loadingBuiltinTemplate = false
       }

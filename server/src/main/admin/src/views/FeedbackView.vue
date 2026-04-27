@@ -1,11 +1,11 @@
 <template>
-  <div class="page-card">
-    <div class="page-toolbar">
+  <div>
+    <div class="filter-bar">
       <div class="page-toolbar__filters">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索反馈说明、traceId、sessionId、设备或机构"
+          placeholder="搜索反馈说明、追踪标识、会话标识、设备或机构"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
@@ -47,7 +47,8 @@
       </div>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
       <el-table-column label="评分" width="90">
         <template slot-scope="{ row }">
           <el-tag size="mini" :type="scoreTagType(row.score)">
@@ -65,7 +66,7 @@
           {{ moduleLabel(row.sourceModule) }}
         </template>
       </el-table-column>
-      <el-table-column label="traceId" min-width="180" show-overflow-tooltip>
+      <el-table-column label="追踪标识" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
           {{ displayText(row.traceId) }}
         </template>
@@ -84,7 +85,7 @@
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
         <template slot-scope="{ row }">
-          <el-button type="text" size="mini" @click="openDetail(row)">查看详情</el-button>
+          <a class="table-action" @click="openDetail(row)">查看详情</a>
         </template>
       </el-table-column>
     </el-table>
@@ -99,8 +100,9 @@
         @current-change="loadData"
       />
     </div>
+    </div>
 
-    <el-dialog title="反馈详情" :visible.sync="detailDialogVisible" width="1000px">
+    <el-dialog v-if="detailDialogVisible" title="反馈详情" :visible.sync="detailDialogVisible" width="1000px">
       <div v-if="detailData" class="detail-layout">
         <div class="detail-column">
           <div class="detail-section">
@@ -115,11 +117,11 @@
                 <div class="detail-card__value">{{ moduleLabel(detailData.feedback.sourceModule) }}</div>
               </div>
               <div class="detail-card">
-                <div class="detail-card__label">traceId</div>
+                <div class="detail-card__label">追踪标识</div>
                 <div class="detail-card__value">{{ displayText(detailData.feedback.traceId) }}</div>
               </div>
               <div class="detail-card">
-                <div class="detail-card__label">会话 ID</div>
+                <div class="detail-card__label">会话标识</div>
                 <div class="detail-card__value">{{ displayText(detailData.feedback.sessionId) }}</div>
               </div>
             </div>
@@ -133,7 +135,7 @@
 
           <div class="detail-section">
             <div class="section-title">链路上下文快照</div>
-            <pre class="payload-block">{{ formatPayload(detailData.feedback.chainContext) }}</pre>
+            <pre class="code-block">{{ formatRawData(detailData.feedback.chainContext) }}</pre>
           </div>
         </div>
 
@@ -148,7 +150,7 @@
                   <span :class="['timeline-result', item.result]">{{ normalizeResult(item.result) }}</span>
                 </div>
                 <div class="timeline-item__title">{{ timelineTitle(item) }}</div>
-                <pre class="payload-block small">{{ formatPayload(item.payload) }}</pre>
+                <pre class="code-block small">{{ formatRawData(item.payload) }}</pre>
               </div>
             </div>
             <div v-else class="empty-state">暂无可关联的调用链路记录</div>
@@ -322,7 +324,7 @@ export default {
       }
       return 'danger'
     },
-    formatPayload(value) {
+    formatRawData(value) {
       if (!value) {
         return '无数据'
       }
@@ -379,7 +381,7 @@ export default {
         parts.push(payloadTitle)
       }
       if (traceId !== '--') {
-        parts.push(`traceId: ${traceId}`)
+        parts.push(`追踪标识: ${traceId}`)
       }
 
       return parts.length ? parts.join(' / ') : '--'
@@ -420,7 +422,7 @@ export default {
 
 .section-title {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   color: #303133;
   margin-bottom: 12px;
 }
@@ -505,7 +507,7 @@ export default {
   color: #f56c6c;
 }
 
-.payload-block {
+.code-block {
   margin: 0;
   padding: 12px;
   border-radius: 10px;
@@ -517,7 +519,7 @@ export default {
   word-break: break-all;
 }
 
-.payload-block.small {
+.code-block.small {
   max-height: 220px;
   overflow: auto;
 }

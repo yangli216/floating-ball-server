@@ -5,3 +5,5 @@ target/
 server/src/main/admin/node_modules/
 server/src/main/admin/dist/
 server/src/main/resources/static/admin/
+
+.DS_STORE

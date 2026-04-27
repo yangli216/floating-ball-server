@@ -1,23 +1,24 @@
 <template>
-  <div class="page-card">
-    <div class="page-toolbar">
+  <div>
+    <div class="filter-bar">
       <div class="page-toolbar__filters">
         <el-input
           v-model="keyword"
           clearable
-          placeholder="输入场景编码或 Prompt 名称"
+          placeholder="输入场景编码或 提示词名称"
           class="search-input"
           @keyup.enter.native="loadData"
         />
         <el-button type="primary" icon="el-icon-search" @click="loadData">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
-      <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增 Prompt</el-button>
+      <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增提示词</el-button>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
       <el-table-column prop="cdPrompt" label="场景编码" min-width="160" />
-      <el-table-column prop="naPrompt" label="Prompt 名称" min-width="160" />
+      <el-table-column prop="naPrompt" label="提示词名称" min-width="160" />
       <el-table-column prop="versionNum" label="版本号" width="130" />
       <el-table-column prop="sdPromptType" label="类型" width="130" />
       <el-table-column label="作用域" min-width="140">
@@ -27,10 +28,10 @@
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="statusMeta(row.sdStatus).type">{{ statusMeta(row.sdStatus).label }}</el-tag>
+          <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="系统 Prompt" min-width="220">
+      <el-table-column label="系统提示词" min-width="220">
         <template slot-scope="{ row }">
           {{ truncate(row.sysPrompt) }}
         </template>
@@ -43,10 +44,10 @@
       <el-table-column label="操作" width="240" fixed="right">
         <template slot-scope="{ row }">
           <div class="table-actions">
-            <el-button size="mini" type="text" @click="openEdit(row)">编辑</el-button>
-            <el-button size="mini" type="text" :disabled="row.sdStatus === '1'" @click="publishRecord(row)">发布</el-button>
-            <el-button size="mini" type="text" :disabled="row.sdStatus === '2'" @click="archiveRecord(row)">归档</el-button>
-            <el-button size="mini" type="text" @click="removeRecord(row)">删除</el-button>
+            <a class="table-action" @click="openEdit(row)">编辑</a>
+            <a class="table-action" :class="{ 'is-disabled': row.sdStatus === '1' }" @click="row.sdStatus !== '1' && publishRecord(row)">发布</a>
+            <a class="table-action" :class="{ 'is-disabled': row.sdStatus === '2' }" @click="row.sdStatus !== '2' && archiveRecord(row)">归档</a>
+            <a class="table-action table-action--danger" @click="removeRecord(row)">删除</a>
           </div>
         </template>
       </el-table-column>
@@ -62,28 +63,25 @@
         @current-change="loadData"
       />
     </div>
+    </div>
 
-    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="920px" @closed="resetForm">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
+    <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="920px" @closed="resetForm">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
           <el-form-item label="场景编码" prop="cdPrompt">
             <el-input v-model.trim="form.cdPrompt" maxlength="128" />
           </el-form-item>
-          <el-form-item label="Prompt 名称" prop="naPrompt">
+          <el-form-item label="提示词名称" prop="naPrompt">
             <el-input v-model.trim="form.naPrompt" maxlength="128" />
           </el-form-item>
           <el-form-item label="版本号" prop="versionNum">
             <el-input v-model.trim="form.versionNum" maxlength="64" />
           </el-form-item>
-          <el-form-item label="Prompt 类型">
+          <el-form-item label="提示词类型">
             <el-input v-model.trim="form.sdPromptType" maxlength="64" />
           </el-form-item>
           <el-form-item label="状态" prop="sdStatus">
-            <el-radio-group v-model="form.sdStatus">
-              <el-radio-button label="0">草稿</el-radio-button>
-              <el-radio-button label="1">已发布</el-radio-button>
-              <el-radio-button label="2">已归档</el-radio-button>
-            </el-radio-group>
+            <div class="segmented"><button type="button" :class="{ active: form.sdStatus === '0' }" @click="form.sdStatus = '0'">草稿</button><button type="button" :class="{ active: form.sdStatus === '1' }" @click="form.sdStatus = '1'">已发布</button><button type="button" :class="{ active: form.sdStatus === '2' }" @click="form.sdStatus = '2'">已归档</button></div>
           </el-form-item>
           <el-form-item label="所属区域">
             <el-select v-model="form.idRegion" clearable filterable placeholder="全局">
@@ -95,7 +93,7 @@
               <el-option v-for="item in orgOptions" :key="item.idOrg" :label="item.naOrg" :value="item.idOrg" />
             </el-select>
           </el-form-item>
-          <el-form-item label="系统 Prompt" prop="sysPrompt" class="form-span-2">
+          <el-form-item label="系统提示词" prop="sysPrompt" class="form-span-2">
             <el-input v-model="form.sysPrompt" type="textarea" :rows="6" />
           </el-form-item>
           <el-form-item label="用户模板" class="form-span-2">
@@ -156,14 +154,14 @@ export default {
       form: createDefaultForm(),
       rules: {
         cdPrompt: [{ required: true, message: '请输入场景编码', trigger: 'blur' }],
-        naPrompt: [{ required: true, message: '请输入 Prompt 名称', trigger: 'blur' }],
+        naPrompt: [{ required: true, message: '请输入 提示词名称', trigger: 'blur' }],
         versionNum: [{ required: true, message: '请输入版本号', trigger: 'blur' }]
       }
     }
   },
   computed: {
     dialogTitle() {
-      return this.dialogMode === 'create' ? '新增 Prompt' : '编辑 Prompt'
+      return this.dialogMode === 'create' ? '新增提示词' : '编辑 Prompt'
     }
   },
   async mounted() {
@@ -174,6 +172,13 @@ export default {
     truncate,
     statusMeta(value) {
       return findStatusMeta(promptStatusOptions, value)
+    },
+    statusPillClass(value) {
+      const type = this.statusMeta(value).type
+      if (type === 'success') return 'status-pill--success'
+      if (type === 'warning') return 'status-pill--warning'
+      if (type === 'danger') return 'status-pill--danger'
+      return 'status-pill--muted'
     },
     resolveScope(row) {
       return resolveScopeLabel(row, this.orgMap, this.regionMap)
@@ -275,7 +280,7 @@ export default {
       })
     },
     publishRecord(row) {
-      this.$confirm(`确认发布 Prompt「${row.naPrompt}」吗？`, '提示', {
+      this.$confirm(`确认发布 提示词「${row.naPrompt}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {
@@ -288,7 +293,7 @@ export default {
       }).catch(() => {})
     },
     archiveRecord(row) {
-      this.$confirm(`确认归档 Prompt「${row.naPrompt}」吗？`, '提示', {
+      this.$confirm(`确认归档 提示词「${row.naPrompt}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {
@@ -301,7 +306,7 @@ export default {
       }).catch(() => {})
     },
     removeRecord(row) {
-      this.$confirm(`确认删除 Prompt「${row.naPrompt}」吗？`, '提示', {
+      this.$confirm(`确认删除 提示词「${row.naPrompt}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {

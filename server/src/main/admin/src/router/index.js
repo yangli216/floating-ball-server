@@ -15,6 +15,7 @@ const ConfigView = () => import('../views/ConfigView.vue')
 const PromptView = () => import('../views/PromptView.vue')
 const SymptomTemplateView = () => import('../views/SymptomTemplateView.vue')
 const DataPackageView = () => import('../views/DataPackageView.vue')
+const ReleaseView = () => import('../views/ReleaseView.vue')
 const LogView = () => import('../views/LogView.vue')
 const FeedbackView = () => import('../views/FeedbackView.vue')
 
@@ -33,10 +34,11 @@ const router = new Router({
     { path: '/regions', component: RegionView, meta: { title: '区域管理' } },
     { path: '/orgs', component: OrgView, meta: { title: '机构管理' } },
     { path: '/devices', component: DeviceView, meta: { title: '设备管理' } },
-    { path: '/configs', component: ConfigView, meta: { title: 'AI 配置' } },
-    { path: '/prompts', component: PromptView, meta: { title: 'Prompt 管理' } },
+    { path: '/configs', component: ConfigView, meta: { title: '模型配置' } },
+    { path: '/prompts', component: PromptView, meta: { title: '提示词管理' } },
     { path: '/symptom-templates', component: SymptomTemplateView, meta: { title: '症状模板' } },
     { path: '/data-packages', component: DataPackageView, meta: { title: '数据包管理' } },
+    { path: '/releases', component: ReleaseView, meta: { title: '版本发布' } },
     { path: '/logs', component: LogView, meta: { title: '操作日志' } },
     { path: '/feedbacks', component: FeedbackView, meta: { title: '反馈管理' } },
     { path: '*', redirect: '/overview' }

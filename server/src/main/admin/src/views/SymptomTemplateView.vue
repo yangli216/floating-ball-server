@@ -9,7 +9,7 @@
           <el-input
             v-model.trim="filters.keyword"
             clearable
-            placeholder="输入症状名称或 Key"
+            placeholder="输入症状名称或标识"
             class="search-input"
             @keyup.enter.native="loadData"
           />
@@ -43,9 +43,9 @@
           <el-button @click="resetFilters">重置</el-button>
         </div>
         <div class="symptom-toolbar__actions">
-          <el-button :loading="importingJson" @click="triggerJsonImport">导入 JSON 文件</el-button>
+          <el-button :loading="importingJson" @click="triggerJsonImport">导入配置文件</el-button>
           <el-button :loading="importing" @click="importBuiltin">导入内置模板</el-button>
-          <el-button @click="exportCurrent">导出 JSON</el-button>
+          <el-button @click="exportCurrent">导出配置</el-button>
           <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增症状</el-button>
         </div>
       </div>
@@ -91,7 +91,7 @@
           <div class="editor-header">
             <div>
               <div class="section-title">{{ editingRecord.id ? '编辑症状模板' : '新增症状模板' }}</div>
-              <div class="muted-text">保存后将直接参与后台模板合并，客户端下次同步时生效。</div>
+              
             </div>
             <div class="editor-actions">
               <el-button @click="resetCurrent">重置</el-button>
@@ -109,7 +109,7 @@
                   <el-input v-model.trim="editingRecord.name" maxlength="200" />
                 </div>
                 <div class="form-item">
-                  <label>Key</label>
+                  <label>标识</label>
                   <el-input v-model.trim="editingRecord.key" maxlength="128" />
                 </div>
                 <div class="form-item">
@@ -124,10 +124,7 @@
                 </div>
                 <div class="form-item">
                   <label>状态</label>
-                  <el-radio-group v-model="editingRecord.sdStatus">
-                    <el-radio-button label="1">启用</el-radio-button>
-                    <el-radio-button label="0">停用</el-radio-button>
-                  </el-radio-group>
+                  <div class="segmented"><button type="button" :class="{ active: editingRecord.sdStatus === '1' }" @click="editingRecord.sdStatus = '1'">启用</button><button type="button" :class="{ active: editingRecord.sdStatus === '0' }" @click="editingRecord.sdStatus = '0'">停用</button></div>
                 </div>
                 <div class="form-item">
                   <label class="row-label">
@@ -203,7 +200,7 @@
                   <el-button size="mini" @click="addSection">新增分组</el-button>
                 </div>
               </div>
-              <div class="muted-text section-desc">保留 desktop disease editor 的“分组 + 字段”结构，客户端会直接消费这里生成的 JSON。</div>
+              <div class="muted-text section-desc">保留 desktop disease editor 的“分组 + 字段”结构，客户端会直接消费这里生成的配置。</div>
 
               <div v-for="(section, sectionIndex) in editingRecord.config.sections" :key="section.id || sectionIndex" class="section-card">
                 <div class="section-card__header">
@@ -219,7 +216,7 @@
                     <el-input v-model.trim="section.title" maxlength="128" />
                   </div>
                   <div class="form-item">
-                    <label>分组 ID</label>
+                    <label>分组标识</label>
                     <el-input v-model.trim="section.id" maxlength="128" />
                   </div>
                   <div class="form-item full">
@@ -241,11 +238,11 @@
                       <el-input v-model.trim="field.label" maxlength="128" />
                     </div>
                     <div class="form-item">
-                      <label>字段 Key</label>
+                      <label>字段标识</label>
                       <el-input v-model.trim="field.key" maxlength="128" />
                     </div>
                     <div class="form-item">
-                      <label>Storage Key</label>
+                      <label>存储标识</label>
                       <el-input v-model.trim="field.storageKey" maxlength="128" />
                     </div>
                     <div class="form-item">
@@ -408,16 +405,16 @@
             </section>
 
             <section class="editor-section" v-if="editingRecord.medicalMode === 'tcm'">
-              <div class="section-title">TCM 扩展元数据</div>
+              <div class="section-title">中医扩展元数据</div>
               <div class="muted-text section-desc">保留 `tcmMetadata` 原始结构，便于维护辨证分类、脏腑经络与可能证型。</div>
-              <el-input v-model="tcmMetadataText" type="textarea" :rows="12" placeholder="请输入合法 JSON，对应 tcmMetadata" />
+              <el-input v-model="tcmMetadataText" type="textarea" :rows="12" placeholder="请输入合法配置，对应 tcmMetadata" />
             </section>
           </div>
         </div>
 
         <div v-else class="empty-editor">
           <div class="section-title">请选择或新建一个症状模板</div>
-          <div class="muted-text">左侧选择记录后即可在这里编辑，保存后客户端会从后台表读取。</div>
+          
         </div>
       </div>
     </div>
@@ -959,7 +956,7 @@ export default {
         return false
       }
       if (!this.editingRecord.key) {
-        this.$message.error('症状 Key 不能为空')
+        this.$message.error('症状标识不能为空')
         return false
       }
       if (!this.editingRecord.config || !Array.isArray(this.editingRecord.config.sections) || !this.editingRecord.config.sections.length) {
@@ -977,7 +974,7 @@ export default {
         }
         for (const field of section.fields) {
           if (!field.label || !field.storageKey || !field.type) {
-            this.$message.error('字段标签、storageKey、type 不能为空')
+            this.$message.error('字段标签、存储标识、类型不能为空')
             return false
           }
         }
@@ -986,7 +983,7 @@ export default {
         try {
           JSON.parse(this.tcmMetadataText)
         } catch (error) {
-          this.$message.error('TCM 扩展元数据不是合法 JSON')
+          this.$message.error('中医扩展元数据格式不正确')
           return false
         }
       }
@@ -1051,7 +1048,7 @@ export default {
       }).catch(() => {})
     },
     async importBuiltin() {
-      this.$confirm(`确认将${this.medicalModeLabel(this.filters.medicalMode)}内置模板导入当前作用域吗？同 Key 的现有记录会被覆盖更新。`, '提示', {
+      this.$confirm(`确认将${this.medicalModeLabel(this.filters.medicalMode)}内置模板导入当前作用域吗？同标识的现有记录会被覆盖更新。`, '提示', {
         type: 'warning'
       }).then(async () => {
         this.importing = true
@@ -1097,10 +1094,10 @@ export default {
         try {
           JSON.parse(contentJson)
         } catch (error) {
-          this.$message.error('模板文件不是合法 JSON')
+          this.$message.error('模板文件格式不正确')
           return
         }
-        this.$confirm(`确认将文件「${file.name}」按${this.medicalModeLabel(this.filters.medicalMode)}导入当前作用域吗？同 Key 的现有记录会被覆盖更新。`, '提示', {
+        this.$confirm(`确认将文件「${file.name}」按${this.medicalModeLabel(this.filters.medicalMode)}导入当前作用域吗？同标识的现有记录会被覆盖更新。`, '提示', {
           type: 'warning'
         }).then(async () => {
           this.importingJson = true
@@ -1211,19 +1208,18 @@ export default {
   padding: 12px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: border-color 0.18s ease, transform 0.18s ease;
 }
 
 .symptom-item:hover,
 .symptom-item.is-active {
   border-color: #3770ab;
-  box-shadow: 0 10px 22px rgba(55, 112, 171, 0.12);
   transform: translateY(-1px);
 }
 
 .symptom-item__title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: #16324f;
 }
 
@@ -1299,7 +1295,7 @@ export default {
 
 .section-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 500;
   color: #16324f;
 }
 
@@ -1345,7 +1341,7 @@ export default {
 
 .form-item label {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: #4f6278;
 }
 
@@ -1430,7 +1426,7 @@ export default {
 .section-card__title,
 .field-card__title {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 500;
   color: #20466d;
 }
 

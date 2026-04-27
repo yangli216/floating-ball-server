@@ -1,33 +1,76 @@
 <template>
   <div class="app-root">
     <router-view v-if="isLoginPage" />
-    <el-container v-else class="app-shell">
-      <el-aside width="220px" class="sidebar">
-        <div class="brand">floating-ball-server</div>
-        <el-menu :default-active="$route.path" router class="menu">
-          <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
-            {{ item.label }}
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
-      <el-container>
-        <el-header class="header">
-          <div class="title">{{ $route.meta.title || '管理端' }}</div>
-          <div class="header-actions">
-            <div class="user-panel">
-              <div class="user-panel__name">{{ currentUserName }}</div>
-              <div class="user-panel__meta">{{ currentUserRoles }}</div>
-            </div>
-            <el-button type="text" class="password-button" @click="openPasswordDialog">修改密码</el-button>
-            <el-button type="text" class="logout-button" @click="handleLogout">退出登录</el-button>
+    <div v-else class="admin-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand__mark">医</span>
+          <span class="brand__text">区域智能后台</span>
+        </div>
+        <nav class="sidebar-nav">
+          <router-link
+            v-for="item in menuItems"
+            :key="item.path"
+            :to="item.path"
+            class="sidebar-link"
+            active-class="is-active"
+          >
+            <span class="sidebar-link__icon">{{ item.icon }}</span>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="navbar">
+          <div class="navbar-left">
+            <button type="button" class="hamburger" aria-label="菜单">☰</button>
+            <span class="navbar-title">{{ $route.meta.title || '管理端' }}</span>
           </div>
-        </el-header>
-        <el-main class="main">
+          <div class="navbar-right">
+            <button type="button" class="navbar-icon" aria-label="全屏">⛶</button>
+            <button type="button" class="navbar-icon" aria-label="语言">文</button>
+            <div class="user-menu">
+              <button type="button" class="user-menu__trigger">
+                <span class="user-menu__avatar">{{ currentUserInitial }}</span>
+                <span class="user-menu__chevron">▾</span>
+              </button>
+              <div class="user-menu__panel">
+                <div class="user-menu__name">{{ currentUserName }}</div>
+                <button type="button" @click="openPasswordDialog">修改密码</button>
+                <button type="button" @click="handleLogout">退出登录</button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div class="tags-view">
+          <router-link
+            v-for="tag in visitedTags"
+            :key="tag.path"
+            :to="tag.path"
+            class="tag-link"
+            active-class="is-active"
+          >
+            <span class="tag-link__dot"></span>
+            <span>{{ tag.title }}</span>
+            <button
+              v-if="tag.path !== '/overview'"
+              type="button"
+              class="tag-link__close"
+              @click.prevent.stop="closeTag(tag.path)"
+            >×</button>
+          </router-link>
+        </div>
+
+        <main class="content-main">
           <router-view />
-        </el-main>
-      </el-container>
-    </el-container>
+        </main>
+      </section>
+    </div>
+
     <el-dialog
+      v-if="passwordDialogVisible"
       title="修改密码"
       :visible.sync="passwordDialogVisible"
       width="420px"
@@ -73,7 +116,7 @@
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button @click="passwordDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="passwordSubmitting" @click="submitPasswordForm">保存新密码</el-button>
+        <el-button type="primary" :loading="passwordSubmitting" @click="submitPasswordForm">保存</el-button>
       </span>
     </el-dialog>
   </div>
@@ -90,18 +133,19 @@ import {
 } from './utils/auth'
 
 const menuItems = [
-  { path: '/overview', label: '概览' },
-  { path: '/users', label: '用户' },
-  { path: '/roles', label: '角色' },
-  { path: '/regions', label: '区域' },
-  { path: '/orgs', label: '机构' },
-  { path: '/devices', label: '设备' },
-  { path: '/configs', label: '配置' },
-  { path: '/prompts', label: 'Prompt' },
-  { path: '/symptom-templates', label: '症状模板' },
-  { path: '/data-packages', label: '数据包' },
-  { path: '/logs', label: '日志' },
-  { path: '/feedbacks', label: '反馈' }
+  { path: '/overview', label: '概览', icon: '●' },
+  { path: '/users', label: '用户', icon: '用' },
+  { path: '/roles', label: '角色', icon: '角' },
+  { path: '/regions', label: '区域', icon: '区' },
+  { path: '/orgs', label: '机构', icon: '机' },
+  { path: '/devices', label: '设备', icon: '设' },
+  { path: '/configs', label: '配置', icon: '配' },
+  { path: '/prompts', label: '提示词', icon: '提' },
+  { path: '/symptom-templates', label: '症状模板', icon: '症' },
+  { path: '/data-packages', label: '数据包', icon: '数' },
+  { path: '/releases', label: '版本发布', icon: '版' },
+  { path: '/logs', label: '日志', icon: '日' },
+  { path: '/feedbacks', label: '反馈', icon: '反' }
 ]
 
 export default {
@@ -111,6 +155,7 @@ export default {
       hasToken: false,
       currentUser: null,
       syncingCurrentUser: false,
+      visitedTags: [],
       passwordDialogVisible: false,
       passwordSubmitting: false,
       passwordForm: {
@@ -135,11 +180,8 @@ export default {
       }
       return this.currentUser.naUser || this.currentUser.cdUser || '管理员'
     },
-    currentUserRoles() {
-      if (!this.currentUser || !Array.isArray(this.currentUser.roles) || !this.currentUser.roles.length) {
-        return '管理后台'
-      }
-      return this.currentUser.roles.join(' / ')
+    currentUserInitial() {
+      return this.currentUserName.slice(0, 1)
     }
   },
   created() {
@@ -159,6 +201,7 @@ export default {
       handler() {
         this.syncAuthState()
         this.ensureCurrentUser()
+        this.addVisitedTag()
       }
     }
   },
@@ -166,6 +209,30 @@ export default {
     syncAuthState() {
       this.hasToken = Boolean(getAdminToken())
       this.currentUser = getAdminUser()
+    },
+    addVisitedTag() {
+      if (this.isLoginPage) {
+        return
+      }
+      const path = this.$route.path === '/' ? '/overview' : (this.$route.path || '/overview')
+      const title = this.$route.meta && this.$route.meta.title ? this.$route.meta.title : (path === '/overview' ? '首页概览' : '当前页面')
+      if (!this.visitedTags.some(tag => tag.path === '/overview')) {
+        this.visitedTags.push({ path: '/overview', title: '首页概览' })
+      }
+      if (!this.visitedTags.some(tag => tag.path === path)) {
+        this.visitedTags.push({ path, title })
+      }
+    },
+    closeTag(path) {
+      const index = this.visitedTags.findIndex(tag => tag.path === path)
+      if (index === -1 || path === '/overview') {
+        return
+      }
+      this.visitedTags.splice(index, 1)
+      if (this.$route.path === path) {
+        const fallback = this.visitedTags[index - 1] || this.visitedTags[index] || this.visitedTags[0]
+        this.$router.push(fallback ? fallback.path : '/overview')
+      }
     },
     async ensureCurrentUser() {
       if (this.isLoginPage || !this.hasToken || this.currentUser || this.syncingCurrentUser) {
@@ -245,6 +312,7 @@ export default {
         // 无状态退出时允许忽略接口失败。
       }
       clearAdminAuth()
+      this.visitedTags = []
       this.$router.replace('/login')
     }
   }
@@ -256,101 +324,300 @@ export default {
   min-height: 100vh;
 }
 
-.app-shell {
+.admin-layout {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  background: #eef1f5;
 }
 
 .sidebar {
-  background: linear-gradient(180deg, #113f67 0%, #0e2f4d 100%);
-  color: #fff;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: #304156;
+  color: #bfcbd9;
 }
 
 .brand {
-  padding: 20px 16px;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
 }
 
-.menu {
-  border-right: none;
-  background: transparent;
+.brand__mark {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #1D9E75;
+  font-size: 13px;
 }
 
-.menu ::v-deep .el-menu-item {
-  color: rgba(255, 255, 255, 0.88);
+.brand__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.menu ::v-deep .el-menu-item.is-active {
-  background: rgba(255, 255, 255, 0.12);
+.sidebar-nav {
+  padding: 8px 0;
+}
+
+.sidebar-link {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  color: #bfcbd9;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.sidebar-link:hover {
+  background: #263445;
   color: #fff;
 }
 
-.header {
+.sidebar-link.is-active {
+  background: #263445;
+  color: #1D9E75;
+}
+
+.sidebar-link__icon {
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+  color: currentColor;
+  font-size: 12px;
+}
+
+.workspace {
+  min-width: 0;
+}
+
+.navbar {
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 20px;
   background: #fff;
-  border-bottom: 1px solid #e8eef5;
+  border-bottom: 1px solid #d8dce5;
 }
 
-.title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #16324f;
-}
-
-.header-actions {
+.navbar-left,
+.navbar-right {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.user-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+.hamburger,
+.navbar-icon {
+  border: none;
+  background: transparent;
+  color: #303133;
+  cursor: pointer;
+}
+
+.hamburger {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.navbar-title {
+  color: #97a8be;
+  font-size: 14px;
+}
+
+.navbar-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.navbar-icon:hover {
+  background: #f5f7fa;
+}
+
+.user-menu {
+  position: relative;
+}
+
+.user-menu__trigger {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #303133;
+  cursor: pointer;
+}
+
+.user-menu__avatar {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #1D9E75;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.user-menu__chevron {
+  color: #606266;
+  font-size: 12px;
+}
+
+.user-menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: none;
+  min-width: 140px;
+  padding: 6px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.user-menu:hover .user-menu__panel,
+.user-menu:focus-within .user-menu__panel {
+  display: grid;
   gap: 2px;
 }
 
-.user-panel__name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #16324f;
-}
-
-.user-panel__meta {
+.user-menu__name {
+  padding: 8px 10px;
+  color: #909399;
   font-size: 12px;
-  color: #7f8fa4;
+  border-bottom: 1px solid #ebeef5;
 }
 
-.logout-button {
+.user-menu__panel button {
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #606266;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.user-menu__panel button:hover {
+  background: #f5f7fa;
+  color: #1D9E75;
+}
+
+.tags-view {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px;
+  overflow-x: auto;
+  background: #fff;
+  border-bottom: 1px solid #d8dce5;
+  box-shadow: 0 1px 3px rgba(0, 21, 41, 0.08);
+}
+
+.tag-link {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  border: 1px solid #d8dce5;
+  background: #fff;
+  color: #495060;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.tag-link__dot {
+  width: 6px;
+  height: 6px;
+  display: none;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.tag-link__close {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
 }
 
-.password-button {
-  padding: 0;
+.tag-link__close:hover {
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.main {
-  background: #f5f8fb;
+.tag-link.is-active {
+  border-color: #1D9E75;
+  background: #1D9E75;
+  color: #fff;
+}
+
+.tag-link.is-active .tag-link__dot {
+  display: inline-block;
+}
+
+.content-main {
+  min-width: 0;
+  padding: 24px;
 }
 
 @media (max-width: 960px) {
-  .app-shell {
-    flex-direction: column;
+  .admin-layout {
+    grid-template-columns: 1fr;
   }
 
   .sidebar {
-    width: auto !important;
+    position: static;
+    height: auto;
   }
 
-  .header {
-    padding: 0 16px;
+  .sidebar-nav {
+    display: flex;
+    flex-wrap: wrap;
   }
 
-  .header-actions {
-    gap: 12px;
+  .sidebar-link {
+    width: auto;
+  }
+
+  .content-main {
+    padding: 16px;
   }
 }
 </style>

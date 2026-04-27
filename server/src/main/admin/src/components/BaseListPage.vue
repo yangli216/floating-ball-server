@@ -1,6 +1,6 @@
 <template>
-  <div class="page-card">
-    <div class="toolbar">
+  <div>
+    <div class="filter-bar">
       <el-input
         v-model="keyword"
         clearable
@@ -12,7 +12,8 @@
       <el-button @click="reset">重置</el-button>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
       <el-table-column
         v-for="column in columns"
         :key="column.prop"
@@ -31,6 +32,7 @@
         :total="total"
         @current-change="loadData"
       />
+    </div>
     </div>
   </div>
 </template>
@@ -100,7 +102,6 @@ export default {
   background: #fff;
   padding: 20px;
   border-radius: 12px;
-  box-shadow: 0 6px 24px rgba(17, 63, 103, 0.06);
 }
 
 .toolbar {

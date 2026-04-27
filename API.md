@@ -1,6 +1,6 @@
 # floating-ball-server API 说明
 
-> 更新日期：2026-04-23
+> 更新日期：2026-04-24
 > 范围：`floating-ball` 区域化模式下调用的远端 `/v1/*` 接口
 
 ## 1. 约束说明
@@ -32,7 +32,7 @@
 
 - 路径前缀：`/v1/*`
 - 认证方式：`Authorization: Bearer {deviceToken}`
-- 例外：`POST /v1/client/register` 无需认证
+- 例外：`POST /v1/client/register` 与 `/v1/client/releases/*` 无需认证
 
 ### 2.2 管理端接口
 
@@ -95,9 +95,87 @@
 - 仅在服务启动阶段执行，不提供公开匿名 HTTP 接口
 - 默认账号可填 `admin`，重置完成后应立即关闭该配置并重启服务
 
-## 3. 客户端接口
+## 3. 客户端版本发布与内网更新
 
-### 3.1 POST `/v1/client/register`
+### 3.1 管理端上传客户端版本
+
+`POST /admin/api/releases/upload`
+
+用途：管理员上传 Tauri updater 可识别的客户端安装包、签名和版本元数据，用于内网环境发布桌面端更新。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求类型：`multipart/form-data`
+
+字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| channel | string | 是 | 发布通道：`production` 正式内网，`testing` 测试内网 |
+| metadataFile | file | 是 | Tauri 发布产物中的 `latest.json`，服务端从中解析 `version`、`platforms.{target}.signature`、`notes`、`pub_date` |
+| version | string | 否 | 客户端版本号；默认从 `metadataFile.version` 读取，手工填写时覆盖文件值 |
+| target | string | 否 | Tauri updater target；默认按安装包文件名匹配 `metadataFile.platforms`，多平台无法匹配时需手工填写 |
+| signature | string | 否 | 对安装包生成的 Tauri/minisign 签名内容；默认从 `metadataFile.platforms.{target}.signature` 读取 |
+| notes | string | 否 | 更新说明；默认从 `metadataFile.notes` 读取，手工填写时覆盖文件值 |
+| pubDate | string | 否 | 发布时间，ISO-8601；默认从 `metadataFile.pub_date` 读取，均为空时由服务端生成 |
+| file | file | 是 | 安装包或更新包文件，通常为 Tauri bundle 产物 |
+
+说明：运维推荐只选择 `latest.json` 与对应安装包文件；`version`、`target`、`signature` 仅作为解析失败或多平台歧义时的兜底覆盖项。安装包文件名必须与 `latest.json.platforms.{target}.url` 中的文件名一致，例如签名对应 `MedHermes.app.tar.gz` 时不能上传 `MedHermes.dmg`，否则 Tauri updater 会签名校验失败。
+
+部署说明：生产/内网环境推荐设置 `FB_RELEASE_PUBLIC_BASE_URL=http://后端内网IP:8080`，确保管理端展示、复制的更新源以及 `latest.json` 内下载地址都不出现 `localhost`。
+
+响应 `data`：
+
+```json
+{
+  "channel": "production",
+  "version": "1.2.13",
+  "target": "darwin-aarch64",
+  "fileName": "MedHermes_1.2.13_aarch64.dmg",
+  "fileSize": 12345678,
+  "downloadUrl": "http://127.0.0.1:8080/v1/client/releases/production/files/darwin-aarch64/MedHermes_1.2.13_aarch64.dmg",
+  "latestJsonUrl": "http://127.0.0.1:8080/v1/client/releases/production/latest.json",
+  "pubDate": "2026-04-24T10:00:00Z"
+}
+```
+
+### 3.2 管理端查询发布状态
+
+`GET /admin/api/releases?channel=production`
+
+用途：返回指定通道当前可见版本；`channel` 为空时返回所有通道。
+
+### 3.3 客户端检查更新元数据
+
+`GET /v1/client/releases/{channel}/latest.json`
+
+用途：公开返回 Tauri updater 兼容的 `latest.json`。该接口不需要设备令牌，避免 updater 无法附带自定义鉴权头。
+
+示例：
+
+```json
+{
+  "version": "1.2.13",
+  "notes": "修复内网升级流程",
+  "pub_date": "2026-04-24T10:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "...",
+      "url": "http://127.0.0.1:8080/v1/client/releases/production/files/darwin-aarch64/MedHermes_1.2.13_aarch64.dmg"
+    }
+  }
+}
+```
+
+### 3.4 客户端下载安装包
+
+`GET /v1/client/releases/{channel}/files/{target}/{fileName}`
+
+用途：公开下载指定通道和平台的安装包文件，供 Tauri updater 下载。
+
+## 4. 客户端接口
+
+### 4.1 POST `/v1/client/register`
 
 用途：客户端首次启动时注册设备。
 

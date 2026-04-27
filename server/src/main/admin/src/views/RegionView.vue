@@ -1,6 +1,6 @@
 <template>
-  <div class="page-card">
-    <div class="page-toolbar">
+  <div>
+    <div class="filter-bar">
       <div class="page-toolbar__filters">
         <el-input
           v-model="keyword"
@@ -15,8 +15,9 @@
       <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增区域</el-button>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
-      <el-table-column prop="cdRegion" label="区域编码" min-width="140" />
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
+      <el-table-column label="区域编码" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.cdRegion || '--' }}</code></template></el-table-column>
       <el-table-column prop="naRegion" label="区域名称" min-width="160" />
       <el-table-column label="上级区域" min-width="160">
         <template slot-scope="{ row }">
@@ -26,7 +27,7 @@
       <el-table-column prop="sdRegionType" label="区域类型" min-width="120" />
       <el-table-column label="状态" width="90">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="statusMeta(row.sdStatus).type">{{ statusMeta(row.sdStatus).label }}</el-tag>
+          <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
         </template>
       </el-table-column>
       <el-table-column prop="sortOrder" label="排序" width="90" />
@@ -43,8 +44,8 @@
       <el-table-column label="操作" width="180" fixed="right">
         <template slot-scope="{ row }">
           <div class="table-actions">
-            <el-button size="mini" type="text" @click="openEdit(row)">编辑</el-button>
-            <el-button size="mini" type="text" @click="removeRecord(row)">停用</el-button>
+            <a class="table-action" @click="openEdit(row)">编辑</a>
+            <a class="table-action table-action--danger" @click="removeRecord(row)">停用</a>
           </div>
         </template>
       </el-table-column>
@@ -60,9 +61,10 @@
         @current-change="loadData"
       />
     </div>
+    </div>
 
-    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="760px" @closed="resetForm">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+    <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="760px" @closed="resetForm">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
           <el-form-item label="区域编码">
             <el-input v-model.trim="form.cdRegion" maxlength="64" />
@@ -84,10 +86,7 @@
             <el-input v-model.trim="form.sdRegionType" maxlength="32" placeholder="如 district" />
           </el-form-item>
           <el-form-item label="状态" prop="sdStatus">
-            <el-radio-group v-model="form.sdStatus">
-              <el-radio-button label="1">启用</el-radio-button>
-              <el-radio-button label="0">停用</el-radio-button>
-            </el-radio-group>
+            <div class="segmented"><button type="button" :class="{ active: form.sdStatus === '1' }" @click="form.sdStatus = '1'">启用</button><button type="button" :class="{ active: form.sdStatus === '0' }" @click="form.sdStatus = '0'">停用</button></div>
           </el-form-item>
           <el-form-item label="排序">
             <el-input-number
@@ -99,7 +98,7 @@
             />
           </el-form-item>
           <el-form-item label="说明" class="form-span-2">
-            <el-input v-model.trim="form.desRegion" type="textarea" :rows="4" maxlength="500" show-word-limit />
+            <el-input v-model.trim="form.desRegion" type="textarea" :rows="4" maxlength="500" />
           </el-form-item>
         </div>
       </el-form>
@@ -165,6 +164,13 @@ export default {
     formatDateTime,
     statusMeta(value) {
       return findStatusMeta(configStatusOptions, value)
+    },
+    statusPillClass(value) {
+      const type = this.statusMeta(value).type
+      if (type === 'success') return 'status-pill--success'
+      if (type === 'warning') return 'status-pill--warning'
+      if (type === 'danger') return 'status-pill--danger'
+      return 'status-pill--muted'
     },
     resolveParentName(idParent) {
       return idParent ? this.regionMap[idParent] || idParent : '--'

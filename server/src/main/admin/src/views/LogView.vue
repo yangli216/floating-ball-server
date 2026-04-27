@@ -1,11 +1,11 @@
 <template>
-  <div class="page-card">
-    <div class="page-toolbar">
+  <div>
+    <div class="filter-bar">
       <div class="page-toolbar__filters">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索模块、类型、描述、Payload、设备或机构"
+          placeholder="搜索模块、类型、描述、原始数据、设备或机构"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
@@ -65,42 +65,45 @@
       </div>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
-      <el-table-column label="日志类型" width="120">
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
+      <el-table-column label="日志类型" width="112">
         <template slot-scope="{ row }">
           <el-tag size="mini" :type="logTypeMeta(row.sdLogType).type">
             {{ logTypeMeta(row.sdLogType).label }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="模块" min-width="140" show-overflow-tooltip>
+      <el-table-column label="模块" min-width="120" show-overflow-tooltip>
         <template slot-scope="{ row }">
           {{ moduleLabel(row.naModule) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作描述" min-width="220" show-overflow-tooltip>
+      <el-table-column label="操作描述" min-width="170" show-overflow-tooltip>
         <template slot-scope="{ row }">
           {{ displayText(row.desOp) }}
         </template>
       </el-table-column>
-      <el-table-column label="结果" width="100">
+      <el-table-column label="结果" width="88">
         <template slot-scope="{ row }">
           <el-tag size="mini" :type="resultMeta(row.opResult).type">
             {{ resultMeta(row.opResult).label }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Payload" min-width="280">
+      <el-table-column label="原始数据" min-width="220" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          <div class="payload-cell">
-            <span class="payload-summary text-ellipsis">{{ summarizePayload(row.payloadJson) }}</span>
-            <el-button size="mini" type="text" @click="openPayload(row)">查看详情</el-button>
-          </div>
+          <span class="code-tag log-summary">{{ summarizeRawData(row.payloadJson) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作时间" min-width="180">
+      <el-table-column label="操作时间" width="168">
         <template slot-scope="{ row }">
           {{ formatDateTime(row.operationTime) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="88" fixed="right">
+        <template slot-scope="{ row }">
+          <a class="table-action" @click="openRawData(row)">详情</a>
         </template>
       </el-table-column>
     </el-table>
@@ -115,8 +118,9 @@
         @current-change="loadData"
       />
     </div>
+    </div>
 
-    <el-dialog title="Payload 详情" :visible.sync="payloadDialogVisible" width="760px">
+    <el-dialog v-if="payloadDialogVisible" title="日志详情" :visible.sync="payloadDialogVisible" width="760px">
       <div v-if="payloadRecord" class="detail-grid">
         <div class="detail-card">
           <div class="detail-card__label">日志类型</div>
@@ -135,7 +139,7 @@
           <div class="detail-card__value">{{ formatDateTime(payloadRecord.operationTime) }}</div>
         </div>
       </div>
-      <pre class="payload-block">{{ payloadDetailText }}</pre>
+      <pre class="code-block">{{ payloadDetailText }}</pre>
       <span slot="footer">
         <el-button @click="payloadDialogVisible = false">关闭</el-button>
       </span>
@@ -223,7 +227,7 @@ export default {
       filters: createDefaultFilters(),
       payloadDialogVisible: false,
       payloadRecord: null,
-      payloadDetailText: '无 payload',
+      payloadDetailText: '无原始数据',
       moduleOptions: MODULE_OPTIONS,
       logTypeOptions: [
         { value: 'operation', label: '操作日志', type: 'info' },
@@ -276,9 +280,9 @@ export default {
       this.current = 1
       this.loadData()
     },
-    openPayload(row) {
+    openRawData(row) {
       this.payloadRecord = row
-      this.payloadDetailText = this.formatPayloadDetail(row.payloadJson)
+      this.payloadDetailText = this.formatRawDataDetail(row.payloadJson)
       this.payloadDialogVisible = true
     },
     normalizeText(value) {
@@ -333,10 +337,10 @@ export default {
       }
       return { label: text, type: 'info' }
     },
-    summarizePayload(value) {
+    summarizeRawData(value) {
       const text = this.normalizeText(value)
       if (!text) {
-        return '无 payload'
+        return '无原始数据'
       }
       try {
         const payload = JSON.parse(text)
@@ -367,10 +371,10 @@ export default {
         return this.truncate(text.replace(/\s+/g, ' '), 100)
       }
     },
-    formatPayloadDetail(value) {
+    formatRawDataDetail(value) {
       const text = this.normalizeText(value)
       if (!text) {
-        return '无 payload'
+        return '无原始数据'
       }
       try {
         return JSON.stringify(JSON.parse(text), null, 2)
@@ -389,57 +393,25 @@ export default {
 </script>
 
 <style scoped>
-.page-card {
-  background: #fff;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 6px 24px rgba(17, 63, 103, 0.06);
-}
-
-.page-toolbar {
-  margin-bottom: 16px;
-}
-
-.page-toolbar__filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-}
-
 .search-input {
   width: 300px;
 }
 
 .filter-select {
-  width: 160px;
+  width: 150px;
 }
 
 .filter-date {
-  width: 360px;
+  width: 340px;
 }
 
-.payload-cell {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.payload-summary {
-  flex: 1;
-  color: #52667a;
-}
-
-.text-ellipsis {
+.log-summary {
+  max-width: 100%;
+  display: inline-block;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
   white-space: nowrap;
-}
-
-.page-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
 }
 
 .detail-grid {
@@ -452,33 +424,33 @@ export default {
 .detail-card {
   padding: 12px;
   border-radius: 10px;
-  background: #f7fafc;
-  border: 1px solid #e4ecf2;
+  background: #F9FCFB;
+  border: 0.5px solid #E8EEEC;
 }
 
 .detail-card__label {
   margin-bottom: 6px;
   font-size: 12px;
-  color: #7a8ca0;
+  color: #888780;
 }
 
 .detail-card__value {
-  color: #1f2d3d;
-  font-weight: 600;
+  color: #2C2C2A;
+  font-weight: 500;
   word-break: break-all;
 }
 
-.payload-block {
+.code-block {
   margin: 0;
-  padding: 16px;
+  padding: 14px;
   max-height: 420px;
   overflow: auto;
-  border-radius: 12px;
-  background: #0f172a;
-  color: #e2e8f0;
+  border-radius: 10px;
+  background: #F1EFE8;
+  color: #444441;
   font-size: 12px;
   line-height: 1.6;
-  font-family: SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono, SFMono-Regular, Menlo, Consolas, monospace);
 }
 
 @media (max-width: 960px) {
@@ -486,11 +458,6 @@ export default {
   .filter-select,
   .filter-date {
     width: 100%;
-  }
-
-  .payload-cell {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>

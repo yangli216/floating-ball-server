@@ -1,13 +1,13 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-04-23
+> 更新日期：2026-04-24
 
 ## 1. 项目定位
 
 `floating-ball-server` 是 `floating-ball` 的配套后台，承担两类职责：
 
 1. 面向桌面端的远端客户端能力：设备注册、配置引导、数据包增量下发、AI 代理、审计上报
-2. 面向管理员的后台管理能力：区域、机构、设备、AI 配置、Prompt、数据包、日志
+2. 面向管理员的后台管理能力：区域、机构、设备、AI 配置、Prompt、数据包、客户端版本发布、日志
 3. 面向平台管理员的基础治理能力：管理员登录、用户、角色、概览统计
 
 本项目不承接 `floating-ball` 的本地 HIS 桥接，不替代 `floating-ball/api.md` 中的 `/api/consultation/*`。
@@ -31,6 +31,7 @@
 - Vue Router
 - npm
 - 与 Spring Boot 同仓构建、同进程发布
+- 视觉风格采用克制医疗青绿主题：主色 `#1D9E75`，浅色侧边栏，白色卡片承载筛选与内容
 
 ## 3. 目录规划
 
@@ -57,6 +58,7 @@ floating-ball-server/
         │   ├── modules/prompt/     # Prompt 发布与 delta
         │   ├── modules/symptom/    # 症状模板管理与客户端 delta
         │   ├── modules/datapackage/# 映射数据包与 legacy template 包兼容
+        │   ├── modules/release/    # 内网客户端版本发布与 Tauri latest.json
         │   ├── modules/audit/      # 审计事件与日志
         │   ├── modules/feedback/   # 用户反馈与调用链路聚合
         │   ├── modules/knowledge/  # PMPHAI/知识库代理
@@ -89,7 +91,7 @@ floating-ball-server/
 - `ClientController`：设备注册、心跳、bootstrap、delta、审计上报
 - `AiProxyController`：聊天代理、语音转写、实时语音
 - `PmphaiProxyController`：PMPHAI 搜索、详情、列表浏览、签名跳转
-- `Admin*Controller`：区域、机构、设备、配置、Prompt、症状模板、数据包、日志
+- `Admin*Controller`：区域、机构、设备、配置、Prompt、症状模板、数据包、客户端版本发布、日志
 
 ### 4.2 服务层
 
@@ -98,6 +100,17 @@ floating-ball-server/
 - `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管独立审查 AI 与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
 - `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并与客户端 `templates/delta` 聚合，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源
+- `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件与 `latest.json` 元数据，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新
+
+### 4.2.1 内网客户端版本发布
+
+- 存储根目录由 `FB_RELEASE_STORAGE_DIR` / `floating-ball.release.storage-dir` 配置，默认 `${java.io.tmpdir}/floating-ball-server/releases`
+- 对外更新源地址可通过 `FB_RELEASE_PUBLIC_BASE_URL` / `floating-ball.release.public-base-url` 固定指定；为空时若请求 Host 为 `localhost` / `127.0.0.1`，服务端会尽量自动替换为本机局域网 IPv4
+- 上传大小由 `FB_RELEASE_MAX_FILE_SIZE` / `FB_RELEASE_MAX_REQUEST_SIZE` 控制，默认 `2048MB`
+- 管理端通过 `/admin/api/releases` 查看当前发布，通过 `/admin/api/releases/upload` 上传 Tauri `latest.json` 与安装包；服务端自动解析版本号、平台 target、签名和更新说明，并重写为内网下载地址
+- 客户端更新检测不走设备鉴权，避免 Tauri updater 无法附带 `Authorization`；仅暴露静态安装包与 Tauri 兼容元数据，不暴露管理能力
+- 通道固定为 `production` / `testing`，分别对应桌面端设置页中的“正式内网”与“测试内网”更新源
+- 平台值需与 Tauri updater target 匹配，例如 `darwin-aarch64`、`darwin-x86_64`、`windows-x86_64`
 
 ### 4.3 数据访问层
 
@@ -110,6 +123,9 @@ floating-ball-server/
 - 管理端构建产物输出到 `server/src/main/resources/static/admin`
 - 管理端接口继续使用 `/admin/api/*`，但页面与接口默认同源，不再依赖独立部署
 - 如需单独前端调试，仍可在 `server/src/main/admin` 内运行 Vite dev server；此时后端 CORS 仅作为本地开发补充能力
+- 管理端 UI 采用 vue-admin 类后台骨架：深色固定侧栏、顶部导航栏、tags-view、浅灰内容区；仍避免页面副标题、说明型提示文案、列表页默认统计卡片或 Element UI 默认蓝色主题
+- 管理端表格统一使用弱分隔线、无竖线、无 `border/stripe` 网格样式；状态、编码、ID 使用 pill 或 code tag 表达
+- 管理端详情/编辑弹窗默认销毁隐藏 DOM，避免隐藏表单进入可访问树；表单采用 `label-position="top"` 与分组式结构
 - 远端 `/v1/*` 默认 CORS 需要兼容 `floating-ball` 的 Tauri dev / desktop WebView origin，且 `OPTIONS` 预检请求不能被设备鉴权拦截
 - `floating-ball.cors.allowed-origins` 的本地配置只能做增量补充，不能覆盖掉桌面端默认 origin（`tauri://localhost`、`asset://localhost`、`https://tauri.localhost`、`http://tauri.localhost`、本地 localhost/127.0.0.1`），否则桌面端会在浏览器 Fetch 层直接报 `Load failed`
 

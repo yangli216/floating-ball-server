@@ -6,11 +6,15 @@ spring:
     name: floating-ball-server
   datasource:
     driver-class-name: oracle.jdbc.OracleDriver
-    url: ${FB_DB_URL:}
-    username: ${FB_DB_USERNAME:}
-    password: ${FB_DB_PASSWORD:}
+    url: ${FB_DB_URL:jdbc:oracle:thin:@10.19.40.42:1521:phis}
+    username: ${FB_DB_USERNAME:RBMH_AI}
+    password: ${FB_DB_PASSWORD:RBMH_AI}
   jackson:
     default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: ${FB_RELEASE_MAX_FILE_SIZE:2048MB}
+      max-request-size: ${FB_RELEASE_MAX_REQUEST_SIZE:2048MB}
 
 mybatis-plus:
   configuration:
@@ -23,7 +27,7 @@ mybatis-plus:
       logic-not-delete-value: 1
 
 floating-ball:
-  aes-key: ${FB_AES_KEY:}
+  aes-key: ${FB_AES_KEY:FloatingBallKey!}
   admin:
     bootstrap-reset:
       enabled: ${FB_ADMIN_BOOTSTRAP_RESET_ENABLED:false}
@@ -31,6 +35,9 @@ floating-ball:
       password: ${FB_ADMIN_BOOTSTRAP_RESET_PASSWORD:}
   audit:
     speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:${java.io.tmpdir}/floating-ball-server/speech-audit}
+  release:
+    storage-dir: ${FB_RELEASE_STORAGE_DIR:${java.io.tmpdir}/floating-ball-server/releases}
+    public-base-url: ${FB_RELEASE_PUBLIC_BASE_URL:}
   cors:
     allowed-origins:
       - ${FB_ADMIN_ORIGIN_LOCALHOST:http://localhost:5174}

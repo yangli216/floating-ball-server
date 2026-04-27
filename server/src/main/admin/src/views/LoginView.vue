@@ -2,26 +2,15 @@
   <div class="login-page">
     <div class="login-panel">
       <div class="login-panel__side">
-        <div class="brand-tag">floating-ball-server</div>
-        <h1 class="login-title">管理员登录</h1>
-        <p class="login-subtitle">
-          进入区域化管理后台，统一处理概览、用户、角色与治理配置。
-        </p>
-        <div class="login-tips">
-          <div class="login-tip">
-            <div class="login-tip__label">登录后可访问</div>
-            <div class="login-tip__value">概览统计、用户管理、角色管理</div>
-          </div>
-          <div class="login-tip">
-            <div class="login-tip__label">当前认证方式</div>
-            <div class="login-tip__value">Bearer adminToken</div>
-          </div>
-        </div>
+        <div class="brand-mark">区域智能</div>
+        <h1 class="login-brand">floating-ball-server</h1>
+        <p class="login-welcome">欢迎回来</p>
       </div>
 
       <div class="login-panel__form">
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.native.prevent="submitForm">
-          <el-form-item label="管理员账号" prop="username">
+          <h2 class="form-title">登录</h2>
+          <el-form-item label="账号" prop="username">
             <el-input
               v-model.trim="form.username"
               autocomplete="username"
@@ -29,7 +18,7 @@
               @keyup.enter.native="submitForm"
             />
           </el-form-item>
-          <el-form-item label="登录密码" prop="password">
+          <el-form-item label="密码" prop="password">
             <el-input
               v-model="form.password"
               type="password"
@@ -40,17 +29,8 @@
             />
           </el-form-item>
           <el-button type="primary" class="submit-button" :loading="submitting" @click="submitForm">
-            登录管理端
+            登录
           </el-button>
-          <div class="reset-hint">
-            忘记密码时，可在服务启动前设置
-            <span class="reset-hint__code">FB_ADMIN_BOOTSTRAP_RESET_ENABLED=true</span>
-            和
-            <span class="reset-hint__code">FB_ADMIN_BOOTSTRAP_RESET_PASSWORD=新密码</span>
-            ，默认重置账号为
-            <span class="reset-hint__code">admin</span>
-            ，重启服务后生效。
-          </div>
         </el-form>
       </div>
     </div>
@@ -74,8 +54,8 @@ export default {
         password: ''
       },
       rules: {
-        username: [{ required: true, message: '请输入管理员账号', trigger: 'blur' }],
-        password: [{ required: true, message: '请输入登录密码', trigger: 'blur' }]
+        username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+        password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
       }
     }
   },
@@ -123,71 +103,53 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background:
-    radial-gradient(circle at top left, rgba(55, 112, 171, 0.28), transparent 38%),
-    radial-gradient(circle at bottom right, rgba(17, 63, 103, 0.18), transparent 32%),
-    linear-gradient(135deg, #eef5fb 0%, #f7fafc 48%, #edf3f8 100%);
+  background: linear-gradient(135deg, #E1F5EE 0%, #F4F7F6 54%, #FFFFFF 100%);
 }
 
 .login-panel {
-  width: min(980px, 100%);
+  width: min(920px, 100%);
+  min-height: 520px;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 420px);
+  grid-template-columns: 1fr 1fr;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 20px;
   background: #fff;
-  box-shadow: 0 20px 60px rgba(17, 63, 103, 0.14);
+  border: 0.5px solid #E8EEEC;
 }
 
 .login-panel__side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 48px;
-  background: linear-gradient(180deg, #113f67 0%, #0d2f4b 100%);
+  background: linear-gradient(160deg, #0F6E56 0%, #1D9E75 100%);
   color: #fff;
 }
 
-.brand-tag {
+.brand-mark {
+  width: 54px;
+  height: 54px;
   display: inline-flex;
-  padding: 6px 12px;
-  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.14);
-  font-size: 12px;
-  letter-spacing: 0.4px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.login-title {
-  margin: 20px 0 12px;
-  font-size: 34px;
-  line-height: 1.15;
+.login-brand {
+  margin: 20px 0 8px;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.3px;
 }
 
-.login-subtitle {
+.login-welcome {
   margin: 0;
-  max-width: 420px;
-  line-height: 1.75;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.login-tips {
-  margin-top: 32px;
-  display: grid;
-  gap: 16px;
-}
-
-.login-tip {
-  padding: 18px 20px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.login-tip__label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.login-tip__value {
-  margin-top: 8px;
-  font-size: 16px;
-  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
 }
 
 .login-panel__form {
@@ -200,33 +162,27 @@ export default {
   width: 100%;
 }
 
+.login-panel__form ::v-deep .el-input__inner {
+  height: 42px;
+  line-height: 42px;
+  padding: 0 14px;
+}
+
+.form-title {
+  margin: 0 0 28px;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  color: #2C2C2A;
+}
+
 .submit-button {
   width: 100%;
-  margin-top: 12px;
+  height: 42px;
+  margin-top: 8px;
 }
 
-.reset-hint {
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: #f5f8fb;
-  color: #516274;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.reset-hint__code {
-  display: inline-block;
-  margin: 0 4px;
-  padding: 2px 6px;
-  border-radius: 8px;
-  background: #e8eef5;
-  color: #16324f;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 12px;
-}
-
-@media (max-width: 960px) {
+@media (max-width: 820px) {
   .login-panel {
     grid-template-columns: 1fr;
   }

@@ -30,6 +30,7 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
         String uri = request.getRequestURI();
         return !uri.startsWith("/v1/")
             || "/v1/client/register".equals(uri)
+            || uri.startsWith("/v1/client/releases/")
             || uri.startsWith("/admin/")
             || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }

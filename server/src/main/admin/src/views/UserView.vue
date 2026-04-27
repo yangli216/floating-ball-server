@@ -1,6 +1,6 @@
 <template>
-  <div class="page-card">
-    <div class="page-toolbar">
+  <div>
+    <div class="filter-bar">
       <div class="page-toolbar__filters user-filters">
         <el-input
           v-model.trim="filters.keyword"
@@ -23,7 +23,7 @@
         <el-input
           v-model.trim="filters.idOrg"
           clearable
-          placeholder="机构 ID"
+          placeholder="机构标识"
           class="filter-select"
           @keyup.enter.native="search"
         />
@@ -33,7 +33,8 @@
       <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增用户</el-button>
     </div>
 
-    <el-table :data="records" border stripe v-loading="loading">
+    <div class="page-card">
+      <el-table :data="records" v-loading="loading">
       <el-table-column prop="cdUser" label="登录账号" min-width="140" />
       <el-table-column prop="naUser" label="用户姓名" min-width="140" />
       <el-table-column label="所属机构" min-width="160">
@@ -53,7 +54,7 @@
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="statusMeta(row.sdStatus).type">{{ statusMeta(row.sdStatus).label }}</el-tag>
+          <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
         </template>
       </el-table-column>
       <el-table-column label="更新时间" min-width="170">
@@ -64,8 +65,8 @@
       <el-table-column label="操作" width="180" fixed="right">
         <template slot-scope="{ row }">
           <div class="table-actions">
-            <el-button size="mini" type="text" @click="openEdit(row)">编辑</el-button>
-            <el-button size="mini" type="text" @click="removeRecord(row)">停用</el-button>
+            <a class="table-action" @click="openEdit(row)">编辑</a>
+            <a class="table-action table-action--danger" @click="removeRecord(row)">停用</a>
           </div>
         </template>
       </el-table-column>
@@ -81,9 +82,10 @@
         @current-change="loadData"
       />
     </div>
+    </div>
 
-    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="760px" @closed="resetForm">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
+    <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="760px" @closed="resetForm">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
           <el-form-item label="登录账号" prop="cdUser">
             <el-input v-model.trim="form.cdUser" maxlength="64" />
@@ -97,10 +99,10 @@
               type="password"
               show-password
               maxlength="128"
-              :placeholder="dialogMode === 'create' ? '请输入初始密码' : '留空表示保留原密码'"
+              placeholder="请输入密码"
             />
           </el-form-item>
-          <el-form-item label="所属机构 ID" prop="idOrg">
+          <el-form-item label="所属机构标识" prop="idOrg">
             <el-input v-model.trim="form.idOrg" maxlength="64" placeholder="例如 ORG001" />
           </el-form-item>
           <el-form-item label="角色" prop="roleIds" class="form-span-2">
@@ -114,10 +116,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="状态" prop="sdStatus">
-            <el-radio-group v-model="form.sdStatus">
-              <el-radio-button label="1">启用</el-radio-button>
-              <el-radio-button label="0">停用</el-radio-button>
-            </el-radio-group>
+            <div class="segmented"><button type="button" :class="{ active: form.sdStatus === '1' }" @click="form.sdStatus = '1'">启用</button><button type="button" :class="{ active: form.sdStatus === '0' }" @click="form.sdStatus = '0'">停用</button></div>
           </el-form-item>
         </div>
       </el-form>
@@ -210,7 +209,7 @@ export default {
       rules: {
         cdUser: [{ required: true, message: '请输入登录账号', trigger: 'blur' }],
         naUser: [{ required: true, message: '请输入用户姓名', trigger: 'blur' }],
-        idOrg: [{ required: true, message: '请输入所属机构 ID', trigger: 'blur' }],
+        idOrg: [{ required: true, message: '请输入所属机构标识', trigger: 'blur' }],
         roleIds: [{ type: 'array', required: true, message: '请选择至少一个角色', trigger: 'change' }]
       }
     }
@@ -228,6 +227,13 @@ export default {
     formatDateTime,
     statusMeta(value) {
       return findStatusMeta(configStatusOptions, value)
+    },
+    statusPillClass(value) {
+      const type = this.statusMeta(value).type
+      if (type === 'success') return 'status-pill--success'
+      if (type === 'warning') return 'status-pill--warning'
+      if (type === 'danger') return 'status-pill--danger'
+      return 'status-pill--muted'
     },
     resolveRoleLabel(role) {
       if (!role) {
