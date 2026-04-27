@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.exception.UpdateRequiredException;
 import com.regionalai.floatingball.server.common.util.MaskingUtils;
 import com.regionalai.floatingball.server.modules.device.dto.AiDeviceSaveRequest;
 import com.regionalai.floatingball.server.modules.device.dto.RegisterDeviceRequest;
@@ -15,6 +16,8 @@ import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
 import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
+import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -34,11 +37,16 @@ public class DeviceService {
     private final AiDeviceMapper aiDeviceMapper;
     private final AiOrgMapper aiOrgMapper;
     private final AiRegionMapper aiRegionMapper;
+    private final ReleaseService releaseService;
 
-    public DeviceService(AiDeviceMapper aiDeviceMapper, AiOrgMapper aiOrgMapper, AiRegionMapper aiRegionMapper) {
+    public DeviceService(AiDeviceMapper aiDeviceMapper,
+                         AiOrgMapper aiOrgMapper,
+                         AiRegionMapper aiRegionMapper,
+                         ReleaseService releaseService) {
         this.aiDeviceMapper = aiDeviceMapper;
         this.aiOrgMapper = aiOrgMapper;
         this.aiRegionMapper = aiRegionMapper;
+        this.releaseService = releaseService;
     }
 
     public RegisterDeviceResponse register(RegisterDeviceRequest request) {
@@ -47,6 +55,11 @@ public class DeviceService {
             .eq(AiOrg::getFgActive, "1"));
         if (org == null) {
             throw new BusinessException("机构编码不存在: " + request.getCdOrg());
+        }
+
+        if (releaseService.isUpdateRequired(request.getUpdateChannel(), request.getClientVersion())) {
+            ReleasePolicyView policy = releaseService.getRequiredPolicy(request.getUpdateChannel());
+            throw new UpdateRequiredException(policy.getMinSupportedVersion());
         }
 
         AiDevice existing = aiDeviceMapper.selectOne(new LambdaQueryWrapper<AiDevice>()

@@ -12,6 +12,7 @@ public class ReleaseUploadRequest {
     private String signature;
     private String notes;
     private String pubDate;
+    private Boolean forceUpdate;
     private MultipartFile metadataFile;
     private MultipartFile file;
 }

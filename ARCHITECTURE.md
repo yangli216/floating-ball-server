@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-04-24
+> 更新日期：2026-04-27
 
 ## 1. 项目定位
 
@@ -100,15 +100,20 @@ floating-ball-server/
 - `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管独立审查 AI 与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
 - `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并与客户端 `templates/delta` 聚合，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源
-- `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件与 `latest.json` 元数据，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新
+- `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
 
 ### 4.2.1 内网客户端版本发布
 
 - 存储根目录由 `FB_RELEASE_STORAGE_DIR` / `floating-ball.release.storage-dir` 配置，默认 `${java.io.tmpdir}/floating-ball-server/releases`
 - 对外更新源地址可通过 `FB_RELEASE_PUBLIC_BASE_URL` / `floating-ball.release.public-base-url` 固定指定；为空时若请求 Host 为 `localhost` / `127.0.0.1`，服务端会尽量自动替换为本机局域网 IPv4
 - 上传大小由 `FB_RELEASE_MAX_FILE_SIZE` / `FB_RELEASE_MAX_REQUEST_SIZE` 控制，默认 `2048MB`
-- 管理端通过 `/admin/api/releases` 查看当前发布，通过 `/admin/api/releases/upload` 上传 Tauri `latest.json` 与安装包；服务端自动解析版本号、平台 target、签名和更新说明，并重写为内网下载地址
-- 客户端更新检测不走设备鉴权，避免 Tauri updater 无法附带 `Authorization`；仅暴露静态安装包与 Tauri 兼容元数据，不暴露管理能力
+- 管理端通过 `/admin/api/releases` 查看当前发布，通过 `/admin/api/releases/upload` 上传 Tauri `latest.json` 与安装包；服务端自动解析版本号、平台 target、签名和更新说明，并重写为内网下载地址；上传时可勾选强制更新，服务端会把当前发布版本写入 `policy.json` 的 `minSupportedVersion`
+- 管理端通过 `/admin/api/releases/policy` 独立开启或关闭当前通道强制更新，不需要重新上传安装包；开启时最低可用版本固定为当前通道 `latestVersion`，关闭时清空 `minSupportedVersion`
+- 管理端通过 `/admin/api/releases/history` 查看历史发布快照，通过 `/admin/api/releases/rollback` 回滚到历史版本；回滚只恢复当前通道的 `latest.json` 与 `policy.json`，不会重新上传安装包
+- 每次上传新版本前，服务端会先把当前发布保存为历史快照；上传后也保存新版本快照。若同一版本分平台多次上传，服务端会合并同版本平台；若版本号变化，则重新开始该版本的 `platforms` 集合，避免把上一版本平台误混入新版本 `latest.json`
+- 客户端更新检测与策略查询不走设备鉴权，避免 Tauri updater 无法附带 `Authorization`；仅暴露静态安装包、Tauri 兼容元数据和强制更新策略，不暴露管理能力
+- 设备业务接口通过 `DeviceAuthFilter` 统一执行强制更新拦截：`/v1/client/releases/**` 始终放行，其他 `/v1/*` 在 `forceUpdate=true` 且客户端版本低于 `minSupportedVersion` 时返回 `426 / UPDATE-REQUIRED`
+- 桌面端请求头优先携带 `X-Client-Version` 与 `X-Update-Channel` 供拦截器判断；旧客户端缺失请求头时，服务端回退设备表 `client_version` 与 `production` 通道策略
 - 通道固定为 `production` / `testing`，分别对应桌面端设置页中的“正式内网”与“测试内网”更新源
 - 平台值需与 Tauri updater target 匹配，例如 `darwin-aarch64`、`darwin-x86_64`、`windows-x86_64`
 
@@ -135,10 +140,11 @@ floating-ball-server/
 
 1. `floating-ball` 首次启动调用 `POST /v1/client/register`
 2. 服务端返回 `deviceToken`
-3. 客户端带 `Bearer deviceToken` 调用 `GET /v1/client/bootstrap`
-4. 客户端按版本号调用 `prompts/templates/mappings delta`
-5. 客户端周期性调用 `POST /v1/client/heartbeat`
-6. 若客户端持久化的 `deviceToken` 因环境切换或服务端重建失效，客户端会清理本地注册缓存并重新执行 `register -> bootstrap`
+3. 客户端查询当前更新通道的 `GET /v1/client/releases/{channel}/policy.json`，若命中强制更新门禁，则仅保留检查更新与下载安装能力
+4. 客户端带 `Bearer deviceToken`、`X-Client-Version` 和 `X-Update-Channel` 调用 `GET /v1/client/bootstrap`
+5. 客户端按版本号调用 `prompts/templates/mappings delta`
+6. 客户端周期性调用 `POST /v1/client/heartbeat`
+7. 若客户端持久化的 `deviceToken` 因环境切换或服务端重建失效，客户端会清理本地注册缓存并重新执行 `register -> bootstrap`
 
 删库重建补充约定：
 

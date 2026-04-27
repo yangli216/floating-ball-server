@@ -2,6 +2,10 @@ package com.regionalai.floatingball.server.modules.release.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseHistoryView;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyUpdateRequest;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseRollbackRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseUploadRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseView;
 import com.regionalai.floatingball.server.modules.release.dto.TauriLatestJson;
@@ -14,6 +18,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -27,9 +32,13 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @Service
 public class ReleaseService {
@@ -37,6 +46,8 @@ public class ReleaseService {
     private static final List<String> CHANNELS = Arrays.asList("production", "testing");
     private static final Pattern SAFE_SEGMENT = Pattern.compile("[A-Za-z0-9._-]+");
     private static final String LATEST_FILE = "latest.json";
+    private static final String POLICY_FILE = "policy.json";
+    private static final String HISTORY_DIR = "history";
 
     private final Path storageRoot;
     private final ObjectMapper objectMapper;
@@ -62,6 +73,84 @@ public class ReleaseService {
         return views;
     }
 
+    public List<ReleaseHistoryView> history(String channel) {
+        if (StringUtils.hasText(channel)) {
+            return readHistoryViews(normalizeChannel(channel));
+        }
+
+        List<ReleaseHistoryView> views = new ArrayList<ReleaseHistoryView>();
+        for (String item : CHANNELS) {
+            views.addAll(readHistoryViews(item));
+        }
+        views.sort(historyUpdatedAtDesc());
+        return views;
+    }
+
+    public ReleaseView rollback(ReleaseRollbackRequest request) {
+        if (request == null) {
+            throw new BusinessException("请求体不能为空");
+        }
+        String channel = normalizeChannel(request.getChannel());
+        String version = requireSafeText(request.getVersion(), "回滚版本不能为空", "回滚版本号非法");
+        TauriLatestJson snapshotLatestJson = readHistoryLatestJson(channel, version);
+        ReleasePolicyView snapshotPolicy = readHistoryPolicy(channel, version, snapshotLatestJson);
+        validateSnapshotFiles(channel, snapshotLatestJson);
+
+        TauriLatestJson currentLatestJson = readLatestJson(channel);
+        if (StringUtils.hasText(currentLatestJson.getVersion()) && !version.equals(currentLatestJson.getVersion())) {
+            try {
+                writeHistorySnapshot(channel, currentLatestJson, readPolicy(channel));
+            } catch (IOException ex) {
+                throw new BusinessException("RELEASE-IO", "保存当前发布快照失败: " + ex.getMessage());
+            }
+        }
+
+        rewritePlatformUrls(snapshotLatestJson, channel);
+        normalizePolicyForLatest(channel, snapshotPolicy, snapshotLatestJson);
+        snapshotPolicy.setUpdatedAt(System.currentTimeMillis());
+
+        try {
+            writeLatestJson(channel, snapshotLatestJson);
+            writePolicy(channel, snapshotPolicy);
+            writeHistorySnapshot(channel, snapshotLatestJson, snapshotPolicy);
+        } catch (IOException ex) {
+            throw new BusinessException("RELEASE-IO", "回滚发布版本失败: " + ex.getMessage());
+        }
+
+        return readReleaseView(channel);
+    }
+
+    public ReleaseView updatePolicy(ReleasePolicyUpdateRequest request) {
+        if (request == null) {
+            throw new BusinessException("请求体不能为空");
+        }
+        String channel = normalizeChannel(request.getChannel());
+        boolean forceUpdate = Boolean.TRUE.equals(request.getForceUpdate());
+        TauriLatestJson latestJson = readLatestJson(channel);
+        if (!StringUtils.hasText(latestJson.getVersion()) || latestJson.getPlatforms().isEmpty()) {
+            throw new BusinessException("RELEASE-404", "当前通道暂无可用版本，无法切换强制更新");
+        }
+
+        ReleasePolicyView policy = readPolicy(channel);
+        policy.setChannel(channel);
+        policy.setLatestVersion(latestJson.getVersion());
+        policy.setForceUpdate(forceUpdate);
+        policy.setMinSupportedVersion(forceUpdate ? latestJson.getVersion() : null);
+        policy.setLatestJsonUrl(buildLatestJsonUrl(channel));
+        policy.setNotes(latestJson.getNotes());
+        policy.setPubDate(latestJson.getPubDate());
+        policy.setUpdatedAt(System.currentTimeMillis());
+
+        try {
+            writePolicy(channel, policy);
+            writeHistorySnapshot(channel, latestJson, policy);
+        } catch (IOException ex) {
+            throw new BusinessException("RELEASE-IO", "更新强制更新策略失败: " + ex.getMessage());
+        }
+
+        return readReleaseView(channel);
+    }
+
     public ReleaseView upload(ReleaseUploadRequest request) {
         String channel = normalizeChannel(request.getChannel());
         MultipartFile file = request.getFile();
@@ -72,6 +161,7 @@ public class ReleaseService {
         String originalFileName = safeFileName(file.getOriginalFilename());
         TauriLatestJson uploadedLatestJson = readUploadedLatestJson(request.getMetadataFile());
         ReleaseMetadata releaseMetadata = resolveReleaseMetadata(request, uploadedLatestJson, originalFileName);
+        TauriLatestJson currentLatestJson = readLatestJson(channel);
         String version = releaseMetadata.version;
         String target = releaseMetadata.target;
         String signature = releaseMetadata.signature;
@@ -89,7 +179,11 @@ public class ReleaseService {
                 Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
             }
 
-            TauriLatestJson latestJson = readLatestJson(channel);
+            TauriLatestJson latestJson = currentLatestJson;
+            if (StringUtils.hasText(currentLatestJson.getVersion()) && !version.equals(currentLatestJson.getVersion())) {
+                writeHistorySnapshot(channel, currentLatestJson, readPolicy(channel));
+                latestJson = new TauriLatestJson();
+            }
             latestJson.setVersion(version);
             latestJson.setNotes(notes);
             latestJson.setPubDate(pubDate);
@@ -98,8 +192,10 @@ public class ReleaseService {
             platformInfo.setUrl(buildFileUrl(channel, target, originalFileName));
             latestJson.getPlatforms().put(target, platformInfo);
             writeLatestJson(channel, latestJson);
+            ReleasePolicyView policy = updateReleasePolicy(channel, version, pubDate, notes, request.getForceUpdate());
+            writeHistorySnapshot(channel, latestJson, policy);
 
-            return toReleaseView(channel, version, target, originalFileName, Files.size(targetPath), platformInfo.getUrl(), pubDate, notes);
+            return toReleaseView(channel, version, target, originalFileName, Files.size(targetPath), platformInfo.getUrl(), pubDate, notes, policy);
         } catch (IOException ex) {
             throw new BusinessException("RELEASE-IO", "保存发布文件失败: " + ex.getMessage());
         }
@@ -205,6 +301,39 @@ public class ReleaseService {
         return latestJson;
     }
 
+    public ReleasePolicyView getPolicy(String channel) {
+        return getPolicy(channel, null);
+    }
+
+    public ReleasePolicyView getPolicy(String channel, String baseUrl) {
+        String normalizedChannel = normalizeChannel(channel);
+        ReleasePolicyView policy = readPolicy(normalizedChannel);
+        if (StringUtils.hasText(baseUrl)) {
+            policy.setLatestJsonUrl(baseUrl.trim().replaceAll("/+$", "") + "/v1/client/releases/" + normalizedChannel + "/latest.json");
+        }
+        return policy;
+    }
+
+    public boolean isUpdateRequired(String channel, String clientVersion) {
+        ReleasePolicyView policy = readPolicy(normalizePolicyChannel(channel));
+        String minSupportedVersion = trimToNull(policy.getMinSupportedVersion());
+        if (!Boolean.TRUE.equals(policy.getForceUpdate()) || !StringUtils.hasText(minSupportedVersion)) {
+            return false;
+        }
+        return compareVersions(clientVersion, minSupportedVersion) < 0;
+    }
+
+    public ReleasePolicyView getRequiredPolicy(String channel) {
+        ReleasePolicyView policy = readPolicy(normalizePolicyChannel(channel));
+        if (StringUtils.hasText(policy.getMinSupportedVersion())) {
+            return policy;
+        }
+        String normalizedChannel = normalizePolicyChannel(channel);
+        policy.setChannel(normalizedChannel);
+        policy.setLatestJsonUrl(buildLatestJsonUrl(normalizedChannel));
+        return policy;
+    }
+
     private void rewriteDownloadUrls(TauriLatestJson latestJson, String channel, String baseUrl) {
         for (String target : latestJson.getPlatforms().keySet()) {
             TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
@@ -233,6 +362,11 @@ public class ReleaseService {
             ReleaseView empty = new ReleaseView();
             empty.setChannel(channel);
             empty.setLatestJsonUrl(buildLatestJsonUrl(channel));
+            empty.setPolicyUrl(buildPolicyUrl(channel));
+            ReleasePolicyView policy = readPolicy(channel);
+            empty.setForceUpdate(Boolean.TRUE.equals(policy.getForceUpdate()));
+            empty.setMinSupportedVersion(policy.getMinSupportedVersion());
+            empty.setUpdatedAt(policy.getUpdatedAt());
             return empty;
         }
 
@@ -250,7 +384,80 @@ public class ReleaseService {
                 }
             }
         }
-        return toReleaseView(channel, latestJson.getVersion(), target, fileName, fileSize, platformInfo.getUrl(), latestJson.getPubDate(), latestJson.getNotes());
+        return toReleaseView(channel, latestJson.getVersion(), target, fileName, fileSize, platformInfo.getUrl(), latestJson.getPubDate(), latestJson.getNotes(), readPolicy(channel));
+    }
+
+    private List<ReleaseHistoryView> readHistoryViews(String channel) {
+        List<ReleaseHistoryView> views = new ArrayList<ReleaseHistoryView>();
+        TauriLatestJson activeLatestJson = readLatestJson(channel);
+        String activeVersion = activeLatestJson.getVersion();
+        Set<String> versions = new HashSet<String>();
+        Path root = historyRoot(channel);
+
+        if (Files.isDirectory(root)) {
+            try (Stream<Path> stream = Files.list(root)) {
+                stream
+                    .filter(Files::isDirectory)
+                    .forEach(path -> {
+                        String version = path.getFileName().toString();
+                        TauriLatestJson latestJson = readHistoryLatestJson(channel, version);
+                        ReleasePolicyView policy = readHistoryPolicy(channel, version, latestJson);
+                        String historyVersion = latestJson.getVersion();
+                        if (StringUtils.hasText(historyVersion)) {
+                            versions.add(historyVersion);
+                        }
+                        views.add(toHistoryView(channel, latestJson, policy, version.equals(activeVersion)));
+                    });
+            } catch (IOException ex) {
+                throw new BusinessException("RELEASE-IO", "读取历史版本失败: " + ex.getMessage());
+            }
+        }
+
+        if (StringUtils.hasText(activeVersion) && !versions.contains(activeVersion)) {
+            views.add(toHistoryView(channel, activeLatestJson, readPolicy(channel), true));
+        }
+        views.sort(historyUpdatedAtDesc());
+        return views;
+    }
+
+    private ReleaseHistoryView toHistoryView(String channel,
+                                             TauriLatestJson latestJson,
+                                             ReleasePolicyView policy,
+                                             boolean active) {
+        ReleaseHistoryView view = new ReleaseHistoryView();
+        view.setChannel(channel);
+        view.setVersion(latestJson.getVersion());
+        view.setActive(active);
+        view.setForceUpdate(Boolean.TRUE.equals(policy.getForceUpdate()));
+        view.setMinSupportedVersion(policy.getMinSupportedVersion());
+        view.setLatestJsonUrl(buildLatestJsonUrl(channel));
+        view.setNotes(firstText(policy.getNotes(), latestJson.getNotes()));
+        view.setPubDate(firstText(policy.getPubDate(), latestJson.getPubDate()));
+        view.setUpdatedAt(policy.getUpdatedAt());
+
+        if (latestJson.getPlatforms() != null) {
+            for (String target : latestJson.getPlatforms().keySet()) {
+                view.getTargets().add(target);
+                TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
+                String fileName = platformInfo == null ? "" : extractFileName(platformInfo.getUrl());
+                if (StringUtils.hasText(fileName)) {
+                    view.getFileNames().add(fileName);
+                }
+            }
+        }
+        return view;
+    }
+
+    private Comparator<ReleaseHistoryView> historyUpdatedAtDesc() {
+        return (left, right) -> {
+            long leftValue = left.getUpdatedAt() == null ? 0L : left.getUpdatedAt();
+            long rightValue = right.getUpdatedAt() == null ? 0L : right.getUpdatedAt();
+            int updatedCompare = Long.compare(rightValue, leftValue);
+            if (updatedCompare != 0) {
+                return updatedCompare;
+            }
+            return String.valueOf(right.getVersion()).compareTo(String.valueOf(left.getVersion()));
+        };
     }
 
     private TauriLatestJson readLatestJson(String channel) {
@@ -272,10 +479,224 @@ public class ReleaseService {
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(latestJsonPath(channel).toFile(), latestJson);
     }
 
+    private ReleasePolicyView updateReleasePolicy(String channel,
+                                                  String version,
+                                                  String pubDate,
+                                                  String notes,
+                                                  Boolean forceUpdate) throws IOException {
+        ReleasePolicyView existing = readPolicy(channel);
+        boolean force = forceUpdate == null ? Boolean.TRUE.equals(existing.getForceUpdate()) : Boolean.TRUE.equals(forceUpdate);
+        ReleasePolicyView policy = new ReleasePolicyView();
+        policy.setChannel(channel);
+        policy.setLatestVersion(version);
+        policy.setForceUpdate(force);
+        policy.setMinSupportedVersion(force ? version : null);
+        policy.setLatestJsonUrl(buildLatestJsonUrl(channel));
+        policy.setNotes(notes);
+        policy.setPubDate(pubDate);
+        policy.setUpdatedAt(System.currentTimeMillis());
+        writePolicy(channel, policy);
+        return policy;
+    }
+
+    private ReleasePolicyView readPolicy(String channel) {
+        ReleasePolicyView policy = readStoredPolicy(channel);
+        TauriLatestJson latestJson = readLatestJson(channel);
+        if (!StringUtils.hasText(policy.getChannel())) {
+            policy.setChannel(channel);
+        }
+        if (!StringUtils.hasText(policy.getLatestVersion())) {
+            policy.setLatestVersion(latestJson.getVersion());
+        }
+        if (policy.getForceUpdate() == null) {
+            policy.setForceUpdate(false);
+        }
+        if (!StringUtils.hasText(policy.getLatestJsonUrl())) {
+            policy.setLatestJsonUrl(buildLatestJsonUrl(channel));
+        }
+        if (!StringUtils.hasText(policy.getNotes())) {
+            policy.setNotes(latestJson.getNotes());
+        }
+        if (!StringUtils.hasText(policy.getPubDate())) {
+            policy.setPubDate(latestJson.getPubDate());
+        }
+        return policy;
+    }
+
+    private ReleasePolicyView readStoredPolicy(String channel) {
+        Path policyPath = policyPath(channel);
+        if (!Files.isRegularFile(policyPath)) {
+            return new ReleasePolicyView();
+        }
+        try {
+            return objectMapper.readValue(policyPath.toFile(), ReleasePolicyView.class);
+        } catch (IOException ex) {
+            throw new BusinessException("RELEASE-JSON", "读取 policy.json 失败: " + ex.getMessage());
+        }
+    }
+
+    private void writePolicy(String channel, ReleasePolicyView policy) throws IOException {
+        Path channelDirectory = storageRoot.resolve(channel).normalize();
+        ensureInsideStorage(channelDirectory);
+        Files.createDirectories(channelDirectory);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(policyPath(channel).toFile(), policy);
+    }
+
+    private void writeHistorySnapshot(String channel,
+                                      TauriLatestJson latestJson,
+                                      ReleasePolicyView policy) throws IOException {
+        if (latestJson == null || !StringUtils.hasText(latestJson.getVersion())) {
+            return;
+        }
+        String version = requireSafeText(latestJson.getVersion(), "历史版本号不能为空", "历史版本号非法");
+        ReleasePolicyView snapshotPolicy = copyPolicy(policy);
+        normalizePolicyForLatest(channel, snapshotPolicy, latestJson);
+        Path directory = historyVersionPath(channel, version);
+        ensureInsideStorage(directory);
+        Files.createDirectories(directory);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(historyLatestJsonPath(channel, version).toFile(), latestJson);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(historyPolicyPath(channel, version).toFile(), snapshotPolicy);
+    }
+
+    private TauriLatestJson readHistoryLatestJson(String channel, String version) {
+        String normalizedVersion = requireSafeText(version, "历史版本号不能为空", "历史版本号非法");
+        Path path = historyLatestJsonPath(channel, normalizedVersion);
+        if (!Files.isRegularFile(path)) {
+            throw new BusinessException("RELEASE-404", "历史版本不存在: " + normalizedVersion);
+        }
+        try {
+            return objectMapper.readValue(path.toFile(), TauriLatestJson.class);
+        } catch (IOException ex) {
+            throw new BusinessException("RELEASE-JSON", "读取历史 latest.json 失败: " + ex.getMessage());
+        }
+    }
+
+    private ReleasePolicyView readHistoryPolicy(String channel, String version, TauriLatestJson latestJson) {
+        String normalizedVersion = requireSafeText(version, "历史版本号不能为空", "历史版本号非法");
+        Path path = historyPolicyPath(channel, normalizedVersion);
+        ReleasePolicyView policy = new ReleasePolicyView();
+        if (Files.isRegularFile(path)) {
+            try {
+                policy = objectMapper.readValue(path.toFile(), ReleasePolicyView.class);
+            } catch (IOException ex) {
+                throw new BusinessException("RELEASE-JSON", "读取历史 policy.json 失败: " + ex.getMessage());
+            }
+        }
+        normalizePolicyForLatest(channel, policy, latestJson);
+        return policy;
+    }
+
+    private ReleasePolicyView copyPolicy(ReleasePolicyView source) {
+        ReleasePolicyView target = new ReleasePolicyView();
+        if (source == null) {
+            return target;
+        }
+        target.setChannel(source.getChannel());
+        target.setLatestVersion(source.getLatestVersion());
+        target.setForceUpdate(source.getForceUpdate());
+        target.setMinSupportedVersion(source.getMinSupportedVersion());
+        target.setLatestJsonUrl(source.getLatestJsonUrl());
+        target.setNotes(source.getNotes());
+        target.setPubDate(source.getPubDate());
+        target.setUpdatedAt(source.getUpdatedAt());
+        return target;
+    }
+
+    private void normalizePolicyForLatest(String channel, ReleasePolicyView policy, TauriLatestJson latestJson) {
+        policy.setChannel(channel);
+        policy.setLatestVersion(latestJson.getVersion());
+        policy.setLatestJsonUrl(buildLatestJsonUrl(channel));
+        if (policy.getForceUpdate() == null) {
+            policy.setForceUpdate(false);
+        }
+        if (Boolean.TRUE.equals(policy.getForceUpdate())) {
+            if (!StringUtils.hasText(policy.getMinSupportedVersion())) {
+                policy.setMinSupportedVersion(latestJson.getVersion());
+            }
+        } else {
+            policy.setMinSupportedVersion(null);
+        }
+        if (!StringUtils.hasText(policy.getNotes())) {
+            policy.setNotes(latestJson.getNotes());
+        }
+        if (!StringUtils.hasText(policy.getPubDate())) {
+            policy.setPubDate(latestJson.getPubDate());
+        }
+        if (policy.getUpdatedAt() == null) {
+            policy.setUpdatedAt(System.currentTimeMillis());
+        }
+    }
+
+    private void validateSnapshotFiles(String channel, TauriLatestJson latestJson) {
+        if (latestJson.getPlatforms() == null || latestJson.getPlatforms().isEmpty()) {
+            throw new BusinessException("历史版本缺少平台安装包信息");
+        }
+        for (String target : latestJson.getPlatforms().keySet()) {
+            String normalizedTarget = requireSafeText(target, "历史版本平台 target 不能为空", "历史版本平台 target 非法");
+            TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
+            String fileName = platformInfo == null ? "" : extractFileName(platformInfo.getUrl());
+            if (!StringUtils.hasText(fileName)) {
+                throw new BusinessException("历史版本缺少 " + target + " 的安装包文件名");
+            }
+            Path path = storageRoot.resolve(channel).resolve(normalizedTarget).resolve(fileName).normalize();
+            ensureInsideStorage(path);
+            if (!Files.isRegularFile(path)) {
+                throw new BusinessException("历史版本安装包不存在: " + target + "/" + fileName);
+            }
+        }
+    }
+
+    private void rewritePlatformUrls(TauriLatestJson latestJson, String channel) {
+        if (latestJson.getPlatforms() == null) {
+            return;
+        }
+        for (String target : latestJson.getPlatforms().keySet()) {
+            TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
+            if (platformInfo == null) {
+                continue;
+            }
+            String fileName = extractFileName(platformInfo.getUrl());
+            if (StringUtils.hasText(fileName)) {
+                platformInfo.setUrl(buildFileUrl(channel, target, fileName));
+            }
+        }
+    }
+
     private Path latestJsonPath(String channel) {
         Path latestPath = storageRoot.resolve(channel).resolve(LATEST_FILE).normalize();
         ensureInsideStorage(latestPath);
         return latestPath;
+    }
+
+    private Path policyPath(String channel) {
+        Path path = storageRoot.resolve(channel).resolve(POLICY_FILE).normalize();
+        ensureInsideStorage(path);
+        return path;
+    }
+
+    private Path historyRoot(String channel) {
+        Path path = storageRoot.resolve(channel).resolve(HISTORY_DIR).normalize();
+        ensureInsideStorage(path);
+        return path;
+    }
+
+    private Path historyVersionPath(String channel, String version) {
+        String normalizedVersion = requireSafeText(version, "历史版本号不能为空", "历史版本号非法");
+        Path path = historyRoot(channel).resolve(normalizedVersion).normalize();
+        ensureInsideStorage(path);
+        return path;
+    }
+
+    private Path historyLatestJsonPath(String channel, String version) {
+        Path path = historyVersionPath(channel, version).resolve(LATEST_FILE).normalize();
+        ensureInsideStorage(path);
+        return path;
+    }
+
+    private Path historyPolicyPath(String channel, String version) {
+        Path path = historyVersionPath(channel, version).resolve(POLICY_FILE).normalize();
+        ensureInsideStorage(path);
+        return path;
     }
 
     private ReleaseView toReleaseView(String channel,
@@ -285,7 +706,8 @@ public class ReleaseService {
                                       Long fileSize,
                                       String downloadUrl,
                                       String pubDate,
-                                      String notes) {
+                                      String notes,
+                                      ReleasePolicyView policy) {
         ReleaseView view = new ReleaseView();
         view.setChannel(channel);
         view.setVersion(version);
@@ -294,9 +716,12 @@ public class ReleaseService {
         view.setFileSize(fileSize);
         view.setDownloadUrl(downloadUrl);
         view.setLatestJsonUrl(buildLatestJsonUrl(channel));
+        view.setPolicyUrl(buildPolicyUrl(channel));
         view.setPubDate(pubDate);
         view.setNotes(notes);
-        view.setUpdatedAt(System.currentTimeMillis());
+        view.setForceUpdate(Boolean.TRUE.equals(policy.getForceUpdate()));
+        view.setMinSupportedVersion(policy.getMinSupportedVersion());
+        view.setUpdatedAt(policy.getUpdatedAt() == null ? System.currentTimeMillis() : policy.getUpdatedAt());
         return view;
     }
 
@@ -374,6 +799,14 @@ public class ReleaseService {
             .toUriString();
     }
 
+    private String buildPolicyUrl(String channel) {
+        return externalBaseUrlBuilder()
+            .path("/v1/client/releases/")
+            .path(channel)
+            .path("/policy.json")
+            .toUriString();
+    }
+
     private String buildFileUrl(String channel, String target, String fileName) {
         return externalBaseUrlBuilder()
             .path("/v1/client/releases/")
@@ -383,6 +816,64 @@ public class ReleaseService {
             .path("/")
             .path(fileName)
             .toUriString();
+    }
+
+    private String normalizePolicyChannel(String channel) {
+        if (!StringUtils.hasText(channel)) {
+            return "production";
+        }
+        String value = channel.trim();
+        return CHANNELS.contains(value) ? value : "production";
+    }
+
+    private int compareVersions(String currentVersion, String requiredVersion) {
+        String current = normalizeVersionText(currentVersion);
+        String required = normalizeVersionText(requiredVersion);
+        if (!StringUtils.hasText(current) && !StringUtils.hasText(required)) {
+            return 0;
+        }
+        if (!StringUtils.hasText(current)) {
+            return -1;
+        }
+        if (!StringUtils.hasText(required)) {
+            return 1;
+        }
+
+        String[] currentParts = current.split("[._-]");
+        String[] requiredParts = required.split("[._-]");
+        int length = Math.max(currentParts.length, requiredParts.length);
+        for (int i = 0; i < length; i += 1) {
+            String left = i < currentParts.length ? currentParts[i] : "0";
+            String right = i < requiredParts.length ? requiredParts[i] : "0";
+            int result = compareVersionPart(left, right);
+            if (result != 0) {
+                return result;
+            }
+        }
+        return 0;
+    }
+
+    private String normalizeVersionText(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String text = value.trim();
+        if (text.length() > 1 && (text.charAt(0) == 'v' || text.charAt(0) == 'V')) {
+            return text.substring(1);
+        }
+        return text;
+    }
+
+    private int compareVersionPart(String left, String right) {
+        boolean leftNumeric = left.matches("\\d+");
+        boolean rightNumeric = right.matches("\\d+");
+        if (leftNumeric && rightNumeric) {
+            return new BigInteger(left).compareTo(new BigInteger(right));
+        }
+        if (leftNumeric != rightNumeric) {
+            return leftNumeric ? 1 : -1;
+        }
+        return left.compareToIgnoreCase(right);
     }
 
     public String normalizeExternalBaseUrl(String requestBaseUrl) {

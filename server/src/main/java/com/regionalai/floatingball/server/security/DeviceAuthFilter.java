@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.ApiResponse;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
+import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import javax.servlet.FilterChain;
@@ -18,10 +21,12 @@ import java.io.IOException;
 public class DeviceAuthFilter extends OncePerRequestFilter {
 
     private final DeviceService deviceService;
+    private final ReleaseService releaseService;
     private final ObjectMapper objectMapper;
 
-    public DeviceAuthFilter(DeviceService deviceService, ObjectMapper objectMapper) {
+    public DeviceAuthFilter(DeviceService deviceService, ReleaseService releaseService, ObjectMapper objectMapper) {
         this.deviceService = deviceService;
+        this.releaseService = releaseService;
         this.objectMapper = objectMapper;
     }
 
@@ -52,6 +57,17 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
             return;
         }
 
+        String updateChannel = request.getHeader("X-Update-Channel");
+        String clientVersion = request.getHeader("X-Client-Version");
+        if (!StringUtils.hasText(clientVersion)) {
+            clientVersion = device.getClientVersion();
+        }
+        if (releaseService.isUpdateRequired(updateChannel, clientVersion)) {
+            ReleasePolicyView policy = releaseService.getRequiredPolicy(updateChannel);
+            writeUpdateRequired(response, request, policy.getMinSupportedVersion());
+            return;
+        }
+
         try {
             DeviceContextHolder.set(device);
             filterChain.doFilter(request, response);
@@ -69,6 +85,23 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
         String requestId = request.getHeader("X-Request-Id");
         response.getWriter().write(objectMapper.writeValueAsString(
             ApiResponse.error("AUTH-401", message, requestId == null ? "N/A" : requestId)
+        ));
+    }
+
+    private void writeUpdateRequired(HttpServletResponse response,
+                                     HttpServletRequest request,
+                                     String minSupportedVersion) throws IOException {
+        response.setStatus(426);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        String requestId = request.getHeader("X-Request-Id");
+        String targetVersion = StringUtils.hasText(minSupportedVersion) ? minSupportedVersion : "最新版本";
+        response.getWriter().write(objectMapper.writeValueAsString(
+            ApiResponse.error(
+                "UPDATE-REQUIRED",
+                "当前客户端版本过低，请升级到 " + targetVersion + " 或更高版本后继续使用",
+                requestId == null ? "N/A" : requestId
+            )
         ));
     }
 }

@@ -28,6 +28,17 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ex.getCode(), ex.getMessage(), resolveRequestId(request));
     }
 
+    @ExceptionHandler(UpdateRequiredException.class)
+    @ResponseStatus(HttpStatus.UPGRADE_REQUIRED)
+    public ApiResponse<Void> handleUpdateRequired(UpdateRequiredException ex, HttpServletRequest request) {
+        log.warn("update required. method={}, uri={}, requestId={}, minSupportedVersion={}",
+            request.getMethod(),
+            request.getRequestURI(),
+            resolveRequestId(request),
+            ex.getMinSupportedVersion());
+        return ApiResponse.error("UPDATE-REQUIRED", ex.getMessage(), resolveRequestId(request));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {

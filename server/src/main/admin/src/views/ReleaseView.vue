@@ -19,6 +19,20 @@
       <el-table-column prop="version" label="版本" width="120">
         <template slot-scope="{ row }">{{ row.version || '--' }}</template>
       </el-table-column>
+      <el-table-column label="强制更新" width="130">
+        <template slot-scope="{ row }">
+          <el-switch
+            v-model="row.forceUpdate"
+            :disabled="!row.version || policySavingKey === row.channel"
+            active-color="#1D9E75"
+            inactive-color="#dcdfe6"
+            @change="toggleForceUpdate(row, $event)"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
+        <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
+      </el-table-column>
       <el-table-column prop="target" label="平台" width="160">
         <template slot-scope="{ row }"><code>{{ row.target || '--' }}</code></template>
       </el-table-column>
@@ -39,6 +53,50 @@
       <el-table-column label="操作" width="120" fixed="right">
         <template slot-scope="{ row }">
           <a class="table-action" :class="{ 'is-disabled': !row.latestJsonUrl }" @click="row.latestJsonUrl && copy(row.latestJsonUrl)">复制源</a>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <div class="history-header">
+      <span>历史版本</span>
+    </div>
+    <el-table v-loading="historyLoading" :data="historyRecords" class="page-card admin-table history-table" :row-key="historyKey">
+      <el-table-column label="通道" width="130">
+        <template slot-scope="{ row }">
+          <span class="status-pill status-pill--success">{{ channelLabel(row.channel) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="version" label="版本" width="120">
+        <template slot-scope="{ row }">
+          <span>{{ row.version || '--' }}</span>
+          <span v-if="row.active" class="current-marker">当前</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="强制更新" width="130">
+        <template slot-scope="{ row }">
+          <span class="status-pill" :class="row.forceUpdate ? 'status-pill--warning' : 'status-pill--muted'">
+            {{ row.forceUpdate ? '已开启' : '未开启' }}
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
+        <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
+      </el-table-column>
+      <el-table-column label="平台" width="180">
+        <template slot-scope="{ row }"><code>{{ formatList(row.targets) }}</code></template>
+      </el-table-column>
+      <el-table-column label="安装包" min-width="260">
+        <template slot-scope="{ row }">{{ formatList(row.fileNames) || '暂无上传文件' }}</template>
+      </el-table-column>
+      <el-table-column prop="pubDate" label="发布时间" width="190">
+        <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
+      </el-table-column>
+      <el-table-column prop="updatedAt" label="最后激活" width="170">
+        <template slot-scope="{ row }">{{ formatTimestamp(row.updatedAt) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="120" fixed="right">
+        <template slot-scope="{ row }">
+          <a class="table-action" :class="{ 'is-disabled': row.active }" @click="!row.active && rollback(row)">回滚</a>
         </template>
       </el-table-column>
     </el-table>
@@ -65,6 +123,16 @@
           </el-form-item>
           <el-form-item label="发布时间">
             <el-input v-model.trim="form.pubDate" placeholder="留空由服务端生成" />
+          </el-form-item>
+          <el-form-item label="强制更新">
+            <div class="switch-row">
+              <el-switch
+                v-model="form.forceUpdate"
+                active-color="#1D9E75"
+                inactive-color="#dcdfe6"
+              />
+              <span>低于本版本的客户端不可使用业务功能</span>
+            </div>
           </el-form-item>
           <el-form-item label="更新说明" class="form-span-2">
             <el-input v-model="form.notes" type="textarea" :rows="4" placeholder="可选，展示在桌面端更新内容中" />
@@ -100,6 +168,7 @@ function createDefaultForm() {
     target: '',
     notes: '',
     pubDate: '',
+    forceUpdate: false,
     metadataFile: null,
     file: null
   }
@@ -111,9 +180,12 @@ export default {
       channelOptions,
       targetOptions,
       loading: false,
+      historyLoading: false,
+      policySavingKey: '',
       saving: false,
       dialogVisible: false,
       records: [],
+      historyRecords: [],
       filters: {
         channel: ''
       },
@@ -131,22 +203,40 @@ export default {
   methods: {
     async loadData() {
       this.loading = true
+      this.historyLoading = true
       try {
-        const data = await http.get('/admin/api/releases', {
-          params: {
-            channel: this.filters.channel || undefined
-          }
-        })
+        const params = {
+          channel: this.filters.channel || undefined
+        }
+        const [data, history] = await Promise.all([
+          http.get('/admin/api/releases', { params }),
+          http.get('/admin/api/releases/history', { params })
+        ])
         this.records = Array.isArray(data) ? data : []
+        this.historyRecords = Array.isArray(history) ? history : []
       } catch (error) {
         this.$message.error(error.message || '加载版本发布状态失败')
       } finally {
         this.loading = false
+        this.historyLoading = false
       }
+    },
+    historyKey(row) {
+      return `${row.channel || 'unknown'}:${row.version || 'unknown'}`
     },
     channelLabel(value) {
       const item = channelOptions.find(option => option.value === value)
       return item ? item.label : value || '--'
+    },
+    formatList(value) {
+      return Array.isArray(value) ? value.filter(Boolean).join('、') : ''
+    },
+    formatTimestamp(value) {
+      const timestamp = Number(value || 0)
+      if (!timestamp) {
+        return '--'
+      }
+      return new Date(timestamp).toLocaleString()
     },
     formatFileSize(value) {
       const size = Number(value || 0)
@@ -231,6 +321,7 @@ export default {
           formData.append('target', this.form.target)
           formData.append('notes', this.form.notes || '')
           formData.append('pubDate', this.form.pubDate || '')
+          formData.append('forceUpdate', this.form.forceUpdate ? 'true' : 'false')
           formData.append('metadataFile', this.form.metadataFile)
           formData.append('file', this.form.file)
           await http.post('/admin/api/releases/upload', formData, {
@@ -254,6 +345,60 @@ export default {
       } catch (error) {
         this.$message.error('复制失败，请手动选择文本复制')
       }
+    },
+    async toggleForceUpdate(row, value) {
+      if (value) {
+        try {
+          await this.$confirm(
+            `确认开启${this.channelLabel(row.channel)}强制更新？低于 ${row.version} 的客户端将无法使用业务功能。`,
+            '开启强制更新',
+            { type: 'warning', confirmButtonText: '确认开启', cancelButtonText: '取消' }
+          )
+        } catch {
+          row.forceUpdate = false
+          return
+        }
+      }
+
+      this.policySavingKey = row.channel
+      try {
+        await http.post('/admin/api/releases/policy', {
+          channel: row.channel,
+          forceUpdate: value
+        })
+        this.$message.success(value ? '已开启强制更新' : '已关闭强制更新')
+        await this.loadData()
+      } catch (error) {
+        row.forceUpdate = !value
+        this.$message.error(error.message || '切换强制更新失败')
+      } finally {
+        this.policySavingKey = ''
+      }
+    },
+    async rollback(row) {
+      try {
+        await this.$confirm(
+          `确认将${this.channelLabel(row.channel)}回滚到 ${row.version}？回滚会恢复该版本的更新包和强制更新策略。`,
+          '回滚版本',
+          { type: 'warning', confirmButtonText: '确认回滚', cancelButtonText: '取消' }
+        )
+      } catch {
+        return
+      }
+
+      this.historyLoading = true
+      try {
+        await http.post('/admin/api/releases/rollback', {
+          channel: row.channel,
+          version: row.version
+        })
+        this.$message.success('版本回滚成功')
+        await this.loadData()
+      } catch (error) {
+        this.$message.error(error.message || '版本回滚失败')
+      } finally {
+        this.historyLoading = false
+      }
     }
   }
 }
@@ -264,6 +409,28 @@ export default {
   justify-content: space-between;
 }
 
+.history-header {
+  margin: 18px 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.history-table {
+  margin-top: 0;
+}
+
+.current-marker {
+  display: inline-flex;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(29, 158, 117, 0.12);
+  color: #13795b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .muted {
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -271,6 +438,14 @@ export default {
 
 .upload-hint {
   margin-top: 8px;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  color: var(--color-text-regular);
 }
 
 code {

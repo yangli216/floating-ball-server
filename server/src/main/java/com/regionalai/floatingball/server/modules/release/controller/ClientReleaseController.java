@@ -1,5 +1,6 @@
 package com.regionalai.floatingball.server.modules.release.controller;
 
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.dto.TauriLatestJson;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
 import org.springframework.core.io.FileSystemResource;
@@ -34,6 +35,16 @@ public class ClientReleaseController {
             .build()
             .toUriString();
         return releaseService.getLatestJson(channel, releaseService.normalizeExternalBaseUrl(baseUrl));
+    }
+
+    @GetMapping("/{channel}/policy.json")
+    public ReleasePolicyView policy(@PathVariable String channel, HttpServletRequest request) {
+        String baseUrl = ServletUriComponentsBuilder.fromRequestUri(request)
+            .replacePath(null)
+            .replaceQuery(null)
+            .build()
+            .toUriString();
+        return releaseService.getPolicy(channel, releaseService.normalizeExternalBaseUrl(baseUrl));
     }
 
     @GetMapping("/{channel}/files/{target}/{fileName:.+}")

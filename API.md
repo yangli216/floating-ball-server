@@ -1,6 +1,6 @@
 # floating-ball-server API 说明
 
-> 更新日期：2026-04-24
+> 更新日期：2026-04-27
 > 范围：`floating-ball` 区域化模式下调用的远端 `/v1/*` 接口
 
 ## 1. 约束说明
@@ -118,9 +118,10 @@
 | signature | string | 否 | 对安装包生成的 Tauri/minisign 签名内容；默认从 `metadataFile.platforms.{target}.signature` 读取 |
 | notes | string | 否 | 更新说明；默认从 `metadataFile.notes` 读取，手工填写时覆盖文件值 |
 | pubDate | string | 否 | 发布时间，ISO-8601；默认从 `metadataFile.pub_date` 读取，均为空时由服务端生成 |
+| forceUpdate | boolean | 否 | 是否强制更新；为 `true` 时，低于本次发布版本的客户端只能访问更新检查和安装包下载 |
 | file | file | 是 | 安装包或更新包文件，通常为 Tauri bundle 产物 |
 
-说明：运维推荐只选择 `latest.json` 与对应安装包文件；`version`、`target`、`signature` 仅作为解析失败或多平台歧义时的兜底覆盖项。安装包文件名必须与 `latest.json.platforms.{target}.url` 中的文件名一致，例如签名对应 `MedHermes.app.tar.gz` 时不能上传 `MedHermes.dmg`，否则 Tauri updater 会签名校验失败。
+说明：运维推荐只选择 `latest.json` 与对应安装包文件；`version`、`target`、`signature` 仅作为解析失败或多平台歧义时的兜底覆盖项。安装包文件名必须与 `latest.json.platforms.{target}.url` 中的文件名一致，例如签名对应 `MedHermes.app.tar.gz` 时不能上传 `MedHermes.dmg`，否则 Tauri updater 会签名校验失败。勾选强制更新前，必须确认该通道所有实际部署平台的安装包均已上传到当前 `latest.json`，否则旧客户端会被禁止使用但无法下载对应平台更新。
 
 部署说明：生产/内网环境推荐设置 `FB_RELEASE_PUBLIC_BASE_URL=http://后端内网IP:8080`，确保管理端展示、复制的更新源以及 `latest.json` 内下载地址都不出现 `localhost`。
 
@@ -135,7 +136,10 @@
   "fileSize": 12345678,
   "downloadUrl": "http://127.0.0.1:8080/v1/client/releases/production/files/darwin-aarch64/MedHermes_1.2.13_aarch64.dmg",
   "latestJsonUrl": "http://127.0.0.1:8080/v1/client/releases/production/latest.json",
-  "pubDate": "2026-04-24T10:00:00Z"
+  "policyUrl": "http://127.0.0.1:8080/v1/client/releases/production/policy.json",
+  "pubDate": "2026-04-24T10:00:00Z",
+  "forceUpdate": true,
+  "minSupportedVersion": "1.2.13"
 }
 ```
 
@@ -145,7 +149,121 @@
 
 用途：返回指定通道当前可见版本；`channel` 为空时返回所有通道。
 
-### 3.3 客户端检查更新元数据
+### 3.3 管理端切换强制更新策略
+
+`POST /admin/api/releases/policy`
+
+用途：独立开启或关闭当前通道的强制更新策略，不需要重新上传安装包。
+
+请求：
+
+```json
+{
+  "channel": "production",
+  "forceUpdate": true
+}
+```
+
+响应 `data`：同 `GET /admin/api/releases` 的单条 `ReleaseView`。
+
+说明：
+
+1. 开启强制更新时，`minSupportedVersion` 固定为当前通道正在发布的 `latestVersion`。
+2. 关闭强制更新时，`minSupportedVersion` 清空，旧客户端不再因版本低被业务接口拦截。
+3. 切换策略会同步更新当前版本的历史快照，确保后续回滚能恢复该版本当时的策略状态。
+
+### 3.4 管理端查询历史版本
+
+`GET /admin/api/releases/history?channel=production`
+
+用途：返回指定通道的历史发布快照；`channel` 为空时返回所有通道。历史快照由服务端在上传与回滚时自动维护，不依赖数据库表。
+
+响应 `data`：
+
+```json
+[
+  {
+    "channel": "production",
+    "version": "1.2.13",
+    "active": false,
+    "forceUpdate": false,
+    "minSupportedVersion": null,
+    "targets": ["darwin-aarch64", "windows-x86_64"],
+    "fileNames": ["MedHermes_1.2.13_aarch64.app.tar.gz", "MedHermes_1.2.13_x64-setup.nsis.zip"],
+    "notes": "修复内网升级流程",
+    "pubDate": "2026-04-24T10:00:00Z",
+    "updatedAt": 1777250000000
+  }
+]
+```
+
+### 3.5 管理端回滚到历史版本
+
+`POST /admin/api/releases/rollback`
+
+用途：把指定通道的当前发布回滚到历史快照，同时恢复该版本当时的强制更新策略。回滚只切换 `latest.json` / `policy.json` 指针，不重新上传安装包。
+
+请求：
+
+```json
+{
+  "channel": "production",
+  "version": "1.2.13"
+}
+```
+
+响应 `data`：同 `GET /admin/api/releases` 的单条 `ReleaseView`。
+
+说明：
+
+1. 回滚前服务端会校验历史快照中每个平台的安装包文件仍存在。
+2. 如果当前发布目录中没有历史快照，服务端会把当前 `latest.json` 作为兼容历史记录展示；但只有已写入快照的版本才能执行回滚。
+3. 从一个版本切换到另一个版本时，服务端会先保存当前版本快照，确保刚发错的新版本也能被再次回滚回来。
+
+### 3.6 客户端检查更新策略
+
+`GET /v1/client/releases/{channel}/policy.json`
+
+用途：公开返回指定通道的客户端更新策略。该接口不需要设备令牌，强制更新状态下仍允许旧客户端访问。
+
+示例：
+
+```json
+{
+  "channel": "production",
+  "latestVersion": "1.2.13",
+  "forceUpdate": true,
+  "minSupportedVersion": "1.2.13",
+  "latestJsonUrl": "http://127.0.0.1:8080/v1/client/releases/production/latest.json",
+  "notes": "修复内网升级流程",
+  "pubDate": "2026-04-24T10:00:00Z",
+  "updatedAt": 1777250000000
+}
+```
+
+说明：
+
+1. `forceUpdate=false` 时，客户端可提示可选更新，但服务端不因版本较低拦截业务接口。
+2. `forceUpdate=true` 时，低于 `minSupportedVersion` 的客户端只能访问 `/v1/client/releases/**`。
+3. 桌面端每个 `/v1/*` 业务请求应携带 `X-Client-Version` 与 `X-Update-Channel`；服务端在缺失请求头时回退设备表 `client_version` 与 `production` 通道策略。
+
+强制更新拦截响应：
+
+```http
+HTTP/1.1 426 Upgrade Required
+Content-Type: application/json
+```
+
+```json
+{
+  "code": "UPDATE-REQUIRED",
+  "message": "当前客户端版本过低，请升级到 1.2.13 或更高版本后继续使用",
+  "data": null,
+  "requestId": "..."
+}
+```
+
+### 3.7 客户端检查更新元数据
 
 `GET /v1/client/releases/{channel}/latest.json`
 
@@ -167,7 +285,7 @@
 }
 ```
 
-### 3.4 客户端下载安装包
+### 3.8 客户端下载安装包
 
 `GET /v1/client/releases/{channel}/files/{target}/{fileName}`
 

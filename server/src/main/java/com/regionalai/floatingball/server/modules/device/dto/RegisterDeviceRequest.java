@@ -17,5 +17,7 @@ public class RegisterDeviceRequest {
 
     private String clientVersion;
 
+    private String updateChannel;
+
     private String osInfo;
 }

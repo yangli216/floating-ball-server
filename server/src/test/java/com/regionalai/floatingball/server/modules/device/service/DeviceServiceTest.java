@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.device.service;
 
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.exception.UpdateRequiredException;
 import com.regionalai.floatingball.server.common.util.MaskingUtils;
 import com.regionalai.floatingball.server.modules.device.dto.AiDeviceSaveRequest;
 import com.regionalai.floatingball.server.modules.device.dto.RegisterDeviceRequest;
@@ -11,6 +12,8 @@ import com.regionalai.floatingball.server.modules.device.mapper.AiDeviceMapper;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
+import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -40,11 +44,14 @@ class DeviceServiceTest {
     @Mock
     private AiRegionMapper aiRegionMapper;
 
+    @Mock
+    private ReleaseService releaseService;
+
     private DeviceService deviceService;
 
     @BeforeEach
     void setUp() {
-        deviceService = new DeviceService(aiDeviceMapper, aiOrgMapper, aiRegionMapper);
+        deviceService = new DeviceService(aiDeviceMapper, aiOrgMapper, aiRegionMapper, releaseService);
     }
 
     @Test
@@ -75,6 +82,29 @@ class DeviceServiceTest {
         assertEquals("1.0.0", existing.getClientVersion());
         assertEquals("Windows 11", existing.getOsInfo());
         verify(aiDeviceMapper, times(1)).updateById(existing);
+    }
+
+    @Test
+    void registerShouldRejectWhenClientVersionRequiresUpdate() {
+        AiOrg org = buildOrg("ORG001", "REG001");
+        ReleasePolicyView policy = new ReleasePolicyView();
+        policy.setMinSupportedVersion("1.2.13");
+
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(releaseService.isUpdateRequired(eq("production"), eq("1.2.12"))).thenReturn(true);
+        when(releaseService.getRequiredPolicy("production")).thenReturn(policy);
+
+        RegisterDeviceRequest request = new RegisterDeviceRequest();
+        request.setCdOrg("ORG-CODE");
+        request.setCdDevice("DEV-CODE");
+        request.setClientVersion("1.2.12");
+        request.setUpdateChannel("production");
+
+        UpdateRequiredException ex = assertThrows(UpdateRequiredException.class, () -> deviceService.register(request));
+
+        assertEquals("1.2.13", ex.getMinSupportedVersion());
+        verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
+        verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
     }
 
     @Test

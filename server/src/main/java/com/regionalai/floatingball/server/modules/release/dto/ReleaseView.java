@@ -12,7 +12,10 @@ public class ReleaseView {
     private Long fileSize;
     private String downloadUrl;
     private String latestJsonUrl;
+    private String policyUrl;
     private String pubDate;
     private String notes;
+    private Boolean forceUpdate;
+    private String minSupportedVersion;
     private Long updatedAt;
 }
