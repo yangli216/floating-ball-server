@@ -1,36 +1,23 @@
 <template>
-  <div>
-    <div class="filter-bar">
+  <div class="page-card">
+    <div class="page-toolbar">
       <div class="page-toolbar__filters">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索反馈说明、追踪标识、会话标识、设备或机构"
+          placeholder="搜索反馈内容、医生、科室、机构"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
-        <el-select
-          v-model="filters.score"
-          clearable
-          placeholder="评分"
-          class="filter-select"
-        >
+        <el-select v-model="filters.kind" clearable placeholder="反馈类型" class="filter-select">
+          <el-option v-for="item in KIND_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select v-model="filters.score" clearable placeholder="评分" class="filter-select">
           <el-option v-for="value in scoreOptions" :key="value" :label="`${value} 分`" :value="value" />
         </el-select>
-        <el-select
-          v-model="filters.sourceModule"
-          clearable
-          filterable
-          placeholder="来源模块"
-          class="filter-select"
-        >
-          <el-option
-            v-for="item in sourceModuleOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
+        <el-input v-model.trim="filters.doctor" clearable placeholder="医生" class="filter-narrow" />
+        <el-input v-model.trim="filters.dept" clearable placeholder="科室" class="filter-narrow" />
+        <el-input v-model.trim="filters.org" clearable placeholder="机构" class="filter-narrow" />
         <el-date-picker
           v-model="filters.dateRange"
           type="datetimerange"
@@ -44,48 +31,87 @@
         />
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
+        <el-checkbox v-model="advancedMode" class="filter-toggle">高级筛选</el-checkbox>
+      </div>
+      <div v-if="advancedMode" class="page-toolbar__filters page-toolbar__filters--advanced">
+        <el-select v-model="filters.severity" clearable placeholder="严重度" class="filter-select">
+          <el-option v-for="item in SEVERITY_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select v-model="filters.sourceModule" clearable filterable placeholder="来源模块" class="filter-select">
+          <el-option
+            v-for="item in sourceModuleOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        <el-select v-model="filters.hasCorrection" clearable placeholder="是否含修正" class="filter-select">
+          <el-option label="包含医生修正" :value="true" />
+          <el-option label="无修正" :value="false" />
+        </el-select>
+        <el-select v-model="filters.hasTrace" clearable placeholder="是否含 trace" class="filter-select">
+          <el-option label="有 traceId" :value="true" />
+          <el-option label="无 traceId" :value="false" />
+        </el-select>
       </div>
     </div>
 
-    <div class="page-card">
-      <el-table :data="records" v-loading="loading">
-      <el-table-column label="评分" width="90">
+    <el-table :data="records" border stripe v-loading="loading">
+      <el-table-column label="评分" width="80">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="scoreTagType(row.score)">
-            {{ row.score || '--' }} 分
-          </el-tag>
+          <el-tag size="mini" :type="scoreTagType(row.score)">{{ row.score || '--' }} 分</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="反馈说明" min-width="280" show-overflow-tooltip>
+      <el-table-column label="类型" width="100">
         <template slot-scope="{ row }">
-          {{ displayText(row.comment) }}
+          <el-tag size="mini" :type="kindTagType(row.kind)">{{ kindLabel(row.kind) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="来源模块" min-width="120" show-overflow-tooltip>
+      <el-table-column label="反馈目标" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          {{ moduleLabel(row.sourceModule) }}
+          <span v-if="row.targetSummary">{{ row.targetSummary }}</span>
+          <span v-else class="text-muted">--</span>
         </template>
       </el-table-column>
-      <el-table-column label="追踪标识" min-width="180" show-overflow-tooltip>
+      <el-table-column label="反馈说明" min-width="220" show-overflow-tooltip>
+        <template slot-scope="{ row }">{{ displayText(row.comment) }}</template>
+      </el-table-column>
+      <el-table-column label="标签" min-width="160">
         <template slot-scope="{ row }">
-          {{ displayText(row.traceId) }}
+          <el-tag
+            v-for="tag in (row.tags || [])"
+            :key="tag"
+            size="mini"
+            class="tag-chip"
+            type="info"
+          >{{ tag }}</el-tag>
+          <span v-if="!row.tags || !row.tags.length" class="text-muted">--</span>
         </template>
       </el-table-column>
-      <el-table-column label="截图" width="90">
+      <el-table-column label="医生" min-width="110">
+        <template slot-scope="{ row }">{{ displayText(row.naDoctor) }}</template>
+      </el-table-column>
+      <el-table-column label="科室" min-width="110">
+        <template slot-scope="{ row }">{{ displayText(row.naDept) }}</template>
+      </el-table-column>
+      <el-table-column label="机构" min-width="120">
+        <template slot-scope="{ row }">{{ displayText(row.naOrg || row.idOrg) }}</template>
+      </el-table-column>
+      <el-table-column v-if="advancedMode" label="来源模块" min-width="130" show-overflow-tooltip>
+        <template slot-scope="{ row }">{{ moduleLabel(row.sourceModule) }}</template>
+      </el-table-column>
+      <el-table-column v-if="advancedMode" label="trace" min-width="130" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="row.hasScreenshot ? 'success' : 'info'">
-            {{ row.hasScreenshot ? '已上传' : '无' }}
-          </el-tag>
+          <el-tag v-if="row.hasTrace" size="mini" type="success">有 trace</el-tag>
+          <span v-else class="text-muted">无</span>
         </template>
       </el-table-column>
-      <el-table-column label="时间" min-width="180">
-        <template slot-scope="{ row }">
-          {{ formatDateTime(row.createdAt) }}
-        </template>
+      <el-table-column label="时间" min-width="160">
+        <template slot-scope="{ row }">{{ formatDateTime(row.createdAt) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
         <template slot-scope="{ row }">
-          <a class="table-action" @click="openDetail(row)">查看详情</a>
+          <el-button type="text" size="mini" @click="openDetail(row)">查看详情</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -100,46 +126,145 @@
         @current-change="loadData"
       />
     </div>
-    </div>
 
-    <el-dialog v-if="detailDialogVisible" title="反馈详情" :visible.sync="detailDialogVisible" width="1000px">
-      <div v-if="detailData" class="detail-layout">
-        <div class="detail-column">
+    <el-dialog title="反馈详情" :visible.sync="detailDialogVisible" width="1100px">
+      <el-tabs v-if="detailData" v-model="detailTab" type="border-card">
+        <el-tab-pane label="反馈摘要" name="summary">
           <div class="detail-section">
-            <div class="section-title">反馈内容</div>
+            <div class="section-title">基础信息</div>
             <div class="detail-grid">
               <div class="detail-card">
                 <div class="detail-card__label">评分</div>
-                <div class="detail-card__value">{{ detailData.feedback.score }} 分</div>
+                <div class="detail-card__value">
+                  <el-tag size="mini" :type="scoreTagType(detailData.feedback.score)">{{ detailData.feedback.score }} 分</el-tag>
+                </div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">类型</div>
+                <div class="detail-card__value">
+                  <el-tag size="mini" :type="kindTagType(detailData.feedback.kind)">{{ kindLabel(detailData.feedback.kind) }}</el-tag>
+                </div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">严重度</div>
+                <div class="detail-card__value">{{ severityLabel(detailData.feedback.severity) }}</div>
+              </div>
+              <div class="detail-card detail-card--wide">
+                <div class="detail-card__label">反馈目标</div>
+                <div class="detail-card__value">
+                  <span v-if="detailData.feedback.targetSummary">{{ detailData.feedback.targetSummary }}</span>
+                  <span v-else class="text-muted">--</span>
+                </div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">医生</div>
+                <div class="detail-card__value">{{ displayText(detailData.feedback.naDoctor) }}</div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">科室</div>
+                <div class="detail-card__value">{{ displayText(detailData.feedback.naDept) }}</div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">机构</div>
+                <div class="detail-card__value">{{ displayText(detailData.feedback.naOrg || detailData.feedback.idOrg) }}</div>
               </div>
               <div class="detail-card">
                 <div class="detail-card__label">来源模块</div>
                 <div class="detail-card__value">{{ moduleLabel(detailData.feedback.sourceModule) }}</div>
               </div>
               <div class="detail-card">
-                <div class="detail-card__label">追踪标识</div>
-                <div class="detail-card__value">{{ displayText(detailData.feedback.traceId) }}</div>
-              </div>
-              <div class="detail-card">
-                <div class="detail-card__label">会话标识</div>
-                <div class="detail-card__value">{{ displayText(detailData.feedback.sessionId) }}</div>
+                <div class="detail-card__label">提交时间</div>
+                <div class="detail-card__value">{{ formatDateTime(detailData.feedback.createdAt) }}</div>
               </div>
             </div>
+            <div class="tag-row" v-if="detailData.feedback.tags && detailData.feedback.tags.length">
+              <span class="tag-row__label">问题标签：</span>
+              <el-tag v-for="tag in detailData.feedback.tags" :key="tag" size="small" type="warning" class="tag-chip">{{ tag }}</el-tag>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <div class="section-title">医生原话</div>
             <div class="comment-block">{{ detailData.feedback.comment || '--' }}</div>
+          </div>
+
+          <div class="detail-section" v-if="recordFieldDetail">
+            <div class="section-title">字段对比（{{ recordFieldDetail.fieldLabel || recordFieldDetail.fieldKey }}）</div>
+            <div class="diff-grid">
+              <div class="diff-card">
+                <div class="diff-card__label">AI 原文</div>
+                <div class="diff-card__value">{{ recordFieldDetail.originalValue || '--' }}</div>
+              </div>
+              <div class="diff-card">
+                <div class="diff-card__label">当前内容</div>
+                <div class="diff-card__value">{{ recordFieldDetail.currentValue || '--' }}</div>
+              </div>
+              <div class="diff-card" v-if="recordFieldDetail.correctedValue">
+                <div class="diff-card__label">医生修正</div>
+                <div class="diff-card__value">{{ recordFieldDetail.correctedValue }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-section" v-if="recommendationDetail">
+            <div class="section-title">推荐项详情</div>
+            <div class="detail-grid">
+              <div class="detail-card">
+                <div class="detail-card__label">类型</div>
+                <div class="detail-card__value">{{ targetTypeLabel(recommendationDetail.targetType) }}</div>
+              </div>
+              <div class="detail-card detail-card--wide">
+                <div class="detail-card__label">推荐项</div>
+                <div class="detail-card__value">{{ recommendationDetail.recommendationTitle || '--' }}</div>
+              </div>
+              <div class="detail-card" v-if="recommendationDetail.action">
+                <div class="detail-card__label">医生处置</div>
+                <div class="detail-card__value">{{ actionLabel(recommendationDetail.action) }}</div>
+              </div>
+              <div class="detail-card detail-card--wide" v-if="recommendationDetail.correctedValue">
+                <div class="detail-card__label">修正结果</div>
+                <div class="detail-card__value">{{ recommendationDetail.correctedValue }}</div>
+              </div>
+            </div>
           </div>
 
           <div class="detail-section" v-if="detailData.feedback.screenshotDataUrl">
             <div class="section-title">截图</div>
             <img class="preview-image" :src="detailData.feedback.screenshotDataUrl" :alt="detailData.feedback.screenshotFileName || '反馈截图'" />
           </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="技术诊断" name="technical">
+          <div class="detail-section">
+            <div class="section-title">追踪信息</div>
+            <div class="detail-grid">
+              <div class="detail-card">
+                <div class="detail-card__label">traceId</div>
+                <div class="detail-card__value mono">{{ displayText(detailData.feedback.traceId) }}</div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">sessionId</div>
+                <div class="detail-card__value mono">{{ displayText(detailData.feedback.sessionId) }}</div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">设备 ID</div>
+                <div class="detail-card__value mono">{{ displayText(detailData.feedback.idDevice) }}</div>
+              </div>
+              <div class="detail-card">
+                <div class="detail-card__label">含修正 / 含 trace</div>
+                <div class="detail-card__value">
+                  <el-tag size="mini" :type="detailData.feedback.hasCorrection ? 'warning' : 'info'">{{ detailData.feedback.hasCorrection ? '含修正' : '无修正' }}</el-tag>
+                  <el-tag size="mini" :type="detailData.feedback.hasTrace ? 'success' : 'info'" class="tag-chip">{{ detailData.feedback.hasTrace ? '有 trace' : '无 trace' }}</el-tag>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div class="detail-section">
             <div class="section-title">链路上下文快照</div>
-            <pre class="code-block">{{ formatRawData(detailData.feedback.chainContext) }}</pre>
+            <pre class="payload-block">{{ formatPayload(detailData.feedback.chainContext) }}</pre>
           </div>
-        </div>
 
-        <div class="detail-column">
           <div class="detail-section">
             <div class="section-title">调用链路时间线</div>
             <div v-if="detailData.timeline && detailData.timeline.length" class="timeline-list">
@@ -150,13 +275,13 @@
                   <span :class="['timeline-result', item.result]">{{ normalizeResult(item.result) }}</span>
                 </div>
                 <div class="timeline-item__title">{{ timelineTitle(item) }}</div>
-                <pre class="code-block small">{{ formatRawData(item.payload) }}</pre>
+                <pre class="payload-block small">{{ formatPayload(item.payload) }}</pre>
               </div>
             </div>
             <div v-else class="empty-state">暂无可关联的调用链路记录</div>
           </div>
-        </div>
-      </div>
+        </el-tab-pane>
+      </el-tabs>
       <span slot="footer">
         <el-button @click="detailDialogVisible = false">关闭</el-button>
       </span>
@@ -170,6 +295,9 @@ import http from '../api/http'
 const MODULE_LABELS = {
   feedback: '反馈弹层',
   settings_feedback: '设置页反馈',
+  voice_session: '语音问诊整页',
+  voice_recommendation: '语音推荐项',
+  voice_record_field: '语音病例字段',
   llm: 'AI 对话代理',
   aliyunSpeech: '语音识别代理',
   operation: '操作日志',
@@ -204,27 +332,33 @@ const TIMELINE_TYPE_LABELS = {
   speech_proxy: '语音代理调用'
 }
 
-const SOURCE_MODULE_OPTIONS = [
-  { value: 'feedback', label: MODULE_LABELS.feedback },
-  { value: 'settings_feedback', label: MODULE_LABELS.settings_feedback },
-  { value: 'view:chat', label: MODULE_LABELS['view:chat'] },
-  { value: 'view:settings', label: MODULE_LABELS['view:settings'] },
-  { value: 'view:consultation', label: MODULE_LABELS['view:consultation'] },
-  { value: 'view:risk-alert', label: MODULE_LABELS['view:risk-alert'] },
-  { value: 'view:voice-interaction', label: MODULE_LABELS['view:voice-interaction'] },
-  { value: 'view:voice-result', label: MODULE_LABELS['view:voice-result'] },
-  { value: 'view:voice-consultation', label: MODULE_LABELS['view:voice-consultation'] },
-  { value: 'view:reception-capsule', label: MODULE_LABELS['view:reception-capsule'] },
-  { value: 'view:analytics', label: MODULE_LABELS['view:analytics'] },
-  { value: 'view:symptom-manage', label: MODULE_LABELS['view:symptom-manage'] },
-  { value: 'view:knowledge-base', label: MODULE_LABELS['view:knowledge-base'] }
+const KIND_OPTIONS = [
+  { value: 'general', label: '通用反馈' },
+  { value: 'recommendation', label: '推荐项反馈' },
+  { value: 'record_field', label: '病例字段反馈' },
+  { value: 'session', label: '整页评分反馈' }
 ]
+
+const SEVERITY_OPTIONS = [
+  { value: 'low', label: '轻度' },
+  { value: 'medium', label: '一般' },
+  { value: 'high', label: '严重' }
+]
+
+const SOURCE_MODULE_OPTIONS = Object.entries(MODULE_LABELS).map(([value, label]) => ({ value, label }))
 
 function createDefaultFilters() {
   return {
     keyword: '',
+    kind: '',
+    severity: '',
     score: '',
+    doctor: '',
+    dept: '',
+    org: '',
     sourceModule: '',
+    hasCorrection: '',
+    hasTrace: '',
     dateRange: []
   }
 }
@@ -234,6 +368,8 @@ export default {
     return {
       loading: false,
       detailLoading: false,
+      advancedMode: false,
+      detailTab: 'summary',
       current: 1,
       size: 10,
       total: 0,
@@ -241,6 +377,8 @@ export default {
       filters: createDefaultFilters(),
       scoreOptions: [1, 2, 3, 4, 5],
       sourceModuleOptions: SOURCE_MODULE_OPTIONS,
+      KIND_OPTIONS,
+      SEVERITY_OPTIONS,
       detailDialogVisible: false,
       detailData: null
     }
@@ -248,22 +386,48 @@ export default {
   mounted() {
     this.loadData()
   },
+  computed: {
+    recordFieldDetail() {
+      const ctx = this.detailData && this.detailData.feedback && this.detailData.feedback.chainContext
+      if (!ctx || typeof ctx !== 'object') return null
+      const node = ctx.recordField
+      if (!node || typeof node !== 'object') return null
+      return node
+    },
+    recommendationDetail() {
+      const ctx = this.detailData && this.detailData.feedback && this.detailData.feedback.chainContext
+      if (!ctx || typeof ctx !== 'object') return null
+      const node = ctx.recommendation
+      if (!node || typeof node !== 'object') return null
+      return node
+    }
+  },
   methods: {
     async loadData() {
       this.loading = true
       try {
         const dateRange = Array.isArray(this.filters.dateRange) ? this.filters.dateRange : []
-        const data = await http.get('/admin/api/feedbacks', {
-          params: {
-            current: this.current,
-            size: this.size,
-            keyword: this.filters.keyword || undefined,
-            score: this.filters.score || undefined,
-            sourceModule: this.filters.sourceModule || undefined,
-            dateFrom: dateRange[0] || undefined,
-            dateTo: dateRange[1] || undefined
-          }
-        })
+        const params = {
+          current: this.current,
+          size: this.size,
+          keyword: this.filters.keyword || undefined,
+          kind: this.filters.kind || undefined,
+          severity: this.filters.severity || undefined,
+          score: this.filters.score || undefined,
+          doctor: this.filters.doctor || undefined,
+          dept: this.filters.dept || undefined,
+          org: this.filters.org || undefined,
+          sourceModule: this.filters.sourceModule || undefined,
+          dateFrom: dateRange[0] || undefined,
+          dateTo: dateRange[1] || undefined
+        }
+        if (this.filters.hasCorrection !== '' && this.filters.hasCorrection !== null && this.filters.hasCorrection !== undefined) {
+          params.hasCorrection = this.filters.hasCorrection
+        }
+        if (this.filters.hasTrace !== '' && this.filters.hasTrace !== null && this.filters.hasTrace !== undefined) {
+          params.hasTrace = this.filters.hasTrace
+        }
+        const data = await http.get('/admin/api/feedbacks', { params })
         this.records = data.records || []
         this.total = data.total || 0
       } catch (error) {
@@ -285,6 +449,7 @@ export default {
       this.detailLoading = true
       this.detailDialogVisible = true
       this.detailData = null
+      this.detailTab = 'summary'
       try {
         this.detailData = await http.get(`/admin/api/feedbacks/${row.feedbackId}`)
       } catch (error) {
@@ -295,105 +460,104 @@ export default {
       }
     },
     displayText(value) {
-      if (value === null || value === undefined) {
-        return '--'
-      }
+      if (value === null || value === undefined) return '--'
       const text = String(value).trim()
       return text || '--'
     },
     moduleLabel(value) {
       const text = this.displayText(value)
-      if (text === '--') {
-        return text
-      }
+      if (text === '--') return text
       return MODULE_LABELS[text] || text
+    },
+    kindLabel(value) {
+      const found = KIND_OPTIONS.find(item => item.value === value)
+      return found ? found.label : (value || '--')
+    },
+    kindTagType(value) {
+      switch (value) {
+        case 'recommendation': return 'success'
+        case 'record_field': return 'warning'
+        case 'session': return 'danger'
+        default: return 'info'
+      }
+    },
+    severityLabel(value) {
+      const found = SEVERITY_OPTIONS.find(item => item.value === value)
+      return found ? found.label : (value || '一般')
+    },
+    targetTypeLabel(value) {
+      switch (value) {
+        case 'diagnosis': return '推荐诊断'
+        case 'medication':
+        case 'medicine': return '推荐用药'
+        case 'exam': return '推荐检查'
+        case 'lab': return '推荐检验'
+        case 'procedure':
+        case 'treatment': return '推荐处置'
+        case 'chiefComplaint': return '主诉'
+        case 'historyOfPresentIllness': return '现病史'
+        case 'pastHistory': return '既往史'
+        default: return value || '--'
+      }
+    },
+    actionLabel(value) {
+      switch (value) {
+        case 'useful': return '已采纳'
+        case 'corrected': return '已修正'
+        case 'dissatisfied': return '不满意'
+        case 'ignored': return '已忽略'
+        default: return value || '--'
+      }
     },
     formatDateTime(value) {
       const text = this.displayText(value)
-      if (text === '--') {
-        return text
-      }
+      if (text === '--') return text
       return text.replace('T', ' ').replace(/\.\d+$/, '')
     },
     scoreTagType(score) {
-      if (Number(score) >= 4) {
-        return 'success'
-      }
-      if (Number(score) === 3) {
-        return 'warning'
-      }
+      if (Number(score) >= 4) return 'success'
+      if (Number(score) === 3) return 'warning'
       return 'danger'
     },
-    formatRawData(value) {
-      if (!value) {
-        return '无数据'
-      }
-      try {
-        return JSON.stringify(value, null, 2)
-      } catch (error) {
-        return String(value)
-      }
+    formatPayload(value) {
+      if (!value) return '无数据'
+      try { return JSON.stringify(value, null, 2) } catch (error) { return String(value) }
     },
     timelineType(type) {
       const normalized = String(type || '').toLowerCase()
-      if (normalized === 'feedback') {
-        return 'warning'
-      }
-      if (normalized.indexOf('speech') > -1) {
-        return 'info'
-      }
-      if (normalized.indexOf('ai') > -1) {
-        return 'danger'
-      }
+      if (normalized === 'feedback') return 'warning'
+      if (normalized.indexOf('speech') > -1) return 'info'
+      if (normalized.indexOf('ai') > -1) return 'danger'
       return 'success'
     },
     timelineTypeLabel(type) {
       const text = this.displayText(type)
-      if (text === '--') {
-        return text
-      }
+      if (text === '--') return text
       return TIMELINE_TYPE_LABELS[text] || this.moduleLabel(text)
     },
     timelineTitle(item) {
-      if (!item) {
-        return '--'
-      }
+      if (!item) return '--'
       const payload = item.payload || {}
       const explicitTitle = this.displayText(item.title)
       const payloadTitle = this.displayText(payload.title || payload.operationName || payload.action)
       const sourceModule = this.moduleLabel(payload.sourceModule || payload.module)
       const traceId = this.displayText(payload.traceId)
       const parts = []
-
       if (explicitTitle !== '--') {
         parts.push(explicitTitle)
       } else {
         const typeLabel = this.timelineTypeLabel(item.type)
-        if (typeLabel !== '--') {
-          parts.push(typeLabel)
-        }
+        if (typeLabel !== '--') parts.push(typeLabel)
       }
-
-      if (sourceModule !== '--') {
-        parts.push(sourceModule)
-      }
-      if (payloadTitle !== '--' && payloadTitle !== explicitTitle) {
-        parts.push(payloadTitle)
-      }
-      if (traceId !== '--') {
-        parts.push(`追踪标识: ${traceId}`)
-      }
-
+      if (sourceModule !== '--') parts.push(sourceModule)
+      if (payloadTitle !== '--' && payloadTitle !== explicitTitle) parts.push(payloadTitle)
+      if (traceId !== '--') parts.push(`traceId: ${traceId}`)
       return parts.length ? parts.join(' / ') : '--'
     },
     normalizeResult(value) {
       const normalized = String(value || '').toLowerCase()
-      if (normalized === 'success' || normalized === '1') {
-        return '成功'
-      }
-      if (normalized === 'failure' || normalized === '0') {
-        return '失败'
-      }
+      if (normalized === 'success' || normalized === '1') return '成功'
+      if (normalized === 'failure' || normalized === '0') return '失败'
       return value || '--'
     }
   }
@@ -401,58 +565,100 @@ export default {
 </script>
 
 <style scoped>
-.detail-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
-}
-
-.detail-column {
+.page-toolbar__filters {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
+.page-toolbar__filters--advanced {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #ebeef5;
+}
+.search-input { width: 280px; }
+.filter-select { width: 150px; }
+.filter-narrow { width: 130px; }
+.filter-date { width: 360px; }
+.filter-toggle { margin-left: 8px; }
+
+.text-muted { color: #909399; }
+.tag-chip { margin-right: 4px; margin-bottom: 4px; }
 
 .detail-section {
   padding: 16px;
   border: 1px solid #ebeef5;
   border-radius: 12px;
   background: #fff;
+  margin-bottom: 16px;
 }
-
 .section-title {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   color: #303133;
   margin-bottom: 12px;
 }
-
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-
 .detail-card {
   padding: 12px;
   border-radius: 10px;
   background: #f8fafc;
 }
-
+.detail-card--wide {
+  grid-column: 1 / -1;
+}
+.diff-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.diff-card {
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #ebeef5;
+}
+.diff-card__label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+.diff-card__value {
+  font-size: 13px;
+  color: #303133;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .detail-card__label {
   font-size: 12px;
   color: #909399;
   margin-bottom: 4px;
 }
-
 .detail-card__value {
   font-size: 13px;
   color: #303133;
   word-break: break-all;
 }
-
-.comment-block {
+.detail-card__value.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.tag-row {
   margin-top: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-row__label {
+  font-size: 12px;
+  color: #909399;
+}
+.comment-block {
   padding: 12px;
   border-radius: 10px;
   background: #f8fafc;
@@ -460,7 +666,6 @@ export default {
   color: #303133;
   white-space: pre-wrap;
 }
-
 .preview-image {
   display: block;
   width: 100%;
@@ -469,20 +674,13 @@ export default {
   border-radius: 10px;
   background: #f5f7fa;
 }
-
-.timeline-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
+.timeline-list { display: flex; flex-direction: column; gap: 12px; }
 .timeline-item {
   padding: 14px;
   border: 1px solid #ebeef5;
   border-radius: 10px;
   background: #fafcff;
 }
-
 .timeline-item__meta {
   display: flex;
   align-items: center;
@@ -492,22 +690,10 @@ export default {
   font-size: 12px;
   color: #909399;
 }
-
-.timeline-item__title {
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 8px;
-}
-
-.timeline-result.success {
-  color: #67c23a;
-}
-
-.timeline-result.failure {
-  color: #f56c6c;
-}
-
-.code-block {
+.timeline-item__title { font-size: 14px; color: #303133; margin-bottom: 8px; }
+.timeline-result.success { color: #67c23a; }
+.timeline-result.failure { color: #f56c6c; }
+.payload-block {
   margin: 0;
   padding: 12px;
   border-radius: 10px;
@@ -518,15 +704,6 @@ export default {
   white-space: pre-wrap;
   word-break: break-all;
 }
-
-.code-block.small {
-  max-height: 220px;
-  overflow: auto;
-}
-
-@media (max-width: 1200px) {
-  .detail-layout {
-    grid-template-columns: 1fr;
-  }
-}
+.payload-block.small { max-height: 220px; overflow: auto; }
+.empty-state { padding: 16px; text-align: center; color: #909399; }
 </style>

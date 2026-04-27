@@ -294,6 +294,10 @@ floating-ball-server/
    - 代理日志主体仍保存在 `payload_json`
    - 语音代理的录音文件路径保存在 `audio_file_path`
 9. `c_ai_feedback`
+   - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）
+   - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
+   - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`（机构 ID 沿用 `id_org`），由桌面端 SDK handshake 解析的 `urt` 信息回填
+   - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`
 9. `c_ai_user`
 10. `c_ai_role`
 11. `c_ai_user_role`

@@ -338,9 +338,19 @@ CREATE TABLE c_ai_feedback (
     id_feedback           VARCHAR2(32) PRIMARY KEY,
     id_device             VARCHAR2(32),
     id_org                VARCHAR2(32),
+    na_org                VARCHAR2(255),
+    id_doctor             VARCHAR2(64),
+    na_doctor             VARCHAR2(128),
+    id_dept               VARCHAR2(64),
+    na_dept               VARCHAR2(128),
     session_id            VARCHAR2(64),
     trace_id              VARCHAR2(64),
     source_module         VARCHAR2(128),
+    kind                  VARCHAR2(32) DEFAULT 'general',
+    severity              VARCHAR2(16) DEFAULT 'medium',
+    tags_json             VARCHAR2(1000),
+    has_correction        CHAR(1) DEFAULT '0',
+    has_trace             CHAR(1) DEFAULT '0',
     score                 NUMBER(2) NOT NULL,
     comment_text          VARCHAR2(2000) NOT NULL,
     screenshot_file_name  VARCHAR2(255),
@@ -357,9 +367,19 @@ COMMENT ON TABLE c_ai_feedback IS '用户反馈表';
 COMMENT ON COLUMN c_ai_feedback.id_feedback IS '反馈主键ID';
 COMMENT ON COLUMN c_ai_feedback.id_device IS '设备ID';
 COMMENT ON COLUMN c_ai_feedback.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_feedback.na_org IS '机构名称';
+COMMENT ON COLUMN c_ai_feedback.id_doctor IS '反馈医生ID';
+COMMENT ON COLUMN c_ai_feedback.na_doctor IS '反馈医生姓名';
+COMMENT ON COLUMN c_ai_feedback.id_dept IS '反馈科室ID';
+COMMENT ON COLUMN c_ai_feedback.na_dept IS '反馈科室名称';
 COMMENT ON COLUMN c_ai_feedback.session_id IS '会话ID';
 COMMENT ON COLUMN c_ai_feedback.trace_id IS '关联的 AI 调用 traceId';
 COMMENT ON COLUMN c_ai_feedback.source_module IS '反馈来源模块';
+COMMENT ON COLUMN c_ai_feedback.kind IS '反馈类型：general/recommendation/record_field/session';
+COMMENT ON COLUMN c_ai_feedback.severity IS '严重度：low/medium/high';
+COMMENT ON COLUMN c_ai_feedback.tags_json IS '问题标签 JSON 数组';
+COMMENT ON COLUMN c_ai_feedback.has_correction IS '是否包含医生修正';
+COMMENT ON COLUMN c_ai_feedback.has_trace IS '是否包含 AI traceId';
 COMMENT ON COLUMN c_ai_feedback.score IS '反馈评分';
 COMMENT ON COLUMN c_ai_feedback.comment_text IS '反馈说明';
 COMMENT ON COLUMN c_ai_feedback.screenshot_file_name IS '截图文件名';
@@ -374,6 +394,9 @@ COMMENT ON COLUMN c_ai_feedback.update_time IS '更新时间';
 CREATE INDEX idx_c_ai_feedback_time ON c_ai_feedback (feedback_time, fg_active);
 CREATE INDEX idx_c_ai_feedback_trace ON c_ai_feedback (trace_id, fg_active);
 CREATE INDEX idx_c_ai_feedback_device ON c_ai_feedback (id_device, fg_active);
+CREATE INDEX idx_c_ai_feedback_kind ON c_ai_feedback (kind, fg_active);
+CREATE INDEX idx_c_ai_feedback_doctor ON c_ai_feedback (id_doctor, fg_active);
+CREATE INDEX idx_c_ai_feedback_dept ON c_ai_feedback (id_dept, fg_active);
 
 
 CREATE TABLE c_ai_user (

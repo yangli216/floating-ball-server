@@ -24,6 +24,21 @@ public class AiFeedback extends BaseEntity {
     @TableField("id_org")
     private String idOrg;
 
+    @TableField("na_org")
+    private String naOrg;
+
+    @TableField("id_doctor")
+    private String idDoctor;
+
+    @TableField("na_doctor")
+    private String naDoctor;
+
+    @TableField("id_dept")
+    private String idDept;
+
+    @TableField("na_dept")
+    private String naDept;
+
     @TableField("session_id")
     private String sessionId;
 
@@ -32,6 +47,21 @@ public class AiFeedback extends BaseEntity {
 
     @TableField("source_module")
     private String sourceModule;
+
+    @TableField("kind")
+    private String kind;
+
+    @TableField("severity")
+    private String severity;
+
+    @TableField("tags_json")
+    private String tagsJson;
+
+    @TableField("has_correction")
+    private String hasCorrection;
+
+    @TableField("has_trace")
+    private String hasTrace;
 
     @TableField("score")
     private Integer score;

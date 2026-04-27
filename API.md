@@ -353,7 +353,7 @@
 
 ### 3.8 POST `/v1/client/feedbacks`
 
-用途：桌面端提交问题反馈，支持评分、说明、内置截图结果/上传图片，以及最近一次 AI 调用链路上下文。
+用途：桌面端提交问题反馈，统一覆盖**通用反馈（设置入口）**、**语音推荐反馈**、**语音病例字段反馈**、**语音整页评分反馈**四种场景。支持评分、说明、内置截图、问题标签、医生/机构/科室身份回填，以及最近一次 AI 调用链路上下文。
 
 请求：
 
@@ -361,35 +361,52 @@
 {
   "sessionId": "session-123",
   "traceId": "trace-123",
-  "sourceModule": "settings_feedback",
-  "score": 2,
-  "comment": "语音转写后诊断建议为空白，请排查。",
+  "sourceModule": "voice_record_field",
+  "kind": "record_field",
+  "severity": "medium",
+  "score": 3,
+  "comment": "主诉漏掉了发热三天",
+  "tags": ["data_accuracy", "workflow"],
+  "hasCorrection": true,
+  "doctorId": "10001",
+  "doctorName": "张医生",
+  "orgName": "示例社区卫生服务中心",
+  "deptId": "DEPT001",
+  "deptName": "全科诊疗",
   "screenshot": {
     "fileName": "feedback-2026-04-22.png",
     "mimeType": "image/png",
     "dataUrl": "data:image/png;base64,iVBORw0KGgoAAA..."
   },
   "chainContext": {
-    "channel": "chat",
-    "scene": "chat-panel",
-    "configProfile": "default",
-    "model": "deepseek-chat",
-    "requestSummary": "1 条用户问题，约 48 字",
-    "responseSummary": "返回为空白回复",
-    "startedAt": 1770000000000,
-    "finishedAt": 1770000001523,
-    "durationMs": 1523,
-    "success": false
+    "kind": "record_field",
+    "consultationId": "...",
+    "aiTrace": { "traceId": "...", "model": "...", "requestSummary": "..." },
+    "recordField": { "fieldKey": "chiefComplaint", "originalValue": "...", "currentValue": "...", "correctedValue": "..." }
   }
 }
 ```
 
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `kind` | enum | `general` \| `recommendation` \| `record_field` \| `session`，默认 `general` |
+| `severity` | enum | `low` \| `medium` \| `high`，默认 `medium`；通用反馈按评分推导（≤2 high / 3 medium / ≥4 low） |
+| `tags` | string[] | 问题标签，最多 20 条，去重并修剪空白；通用反馈使用预置标签 (`recommendation_quality`, `data_accuracy`, `workflow`, `stability`, `ui`, `other`)，语音反馈使用 `issueTags` |
+| `hasCorrection` | boolean | 是否包含医生修正（语音 `record_field` / `recommendation` 反馈用） |
+| `doctorId` / `doctorName` | string | 医生身份；桌面端从 SDK handshake `urt.idDoctor / naDoctor` 缓存 |
+| `orgName` | string | 机构名称；`orgCode` 已经由设备鉴权携带，此处仅补名称 |
+| `deptId` / `deptName` | string | 科室身份；从 `urt.userRoleDepts[0]` 解析 |
+| `sourceModule` | string | 反馈入口标识。常见取值：`settings_feedback`、`voice_session`、`voice_recommendation`、`voice_record_field` |
+
 约束：
 
 1. `score` 范围为 `1-5`
-2. `comment` 必填，建议不超过 2000 字
+2. `comment` 必填（通用反馈若仅勾选标签则前端拼成 `问题标签：xxx` 兜底），建议不超过 2000 字
 3. `screenshot` 为可选；若存在，必须是 `data:image/*;base64,...` 形式
 4. `traceId` 为可选，但若桌面端能拿到最近一次 AI 代理调用上下文，必须优先回传
+5. 设备鉴权携带的 `orgCode` 与请求体 `orgName` 不冲突时同时持久化
 
 响应 `data`：
 
@@ -1217,17 +1234,18 @@
 
 ### 5.49 GET `/admin/api/feedbacks`
 
-用途：分页查询用户反馈列表。
+用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。
 
 请求参数：
 
-- `current`
-- `size`
-- `keyword`
-- `score`
-- `sourceModule`
-- `dateFrom`
-- `dateTo`
+- `current`、`size`
+- `keyword`：跨 `comment / sourceModule / traceId / sessionId / na_org / na_doctor / na_dept` 模糊搜索
+- `score`、`sourceModule`、`kind`（`general | recommendation | record_field | session`）、`severity`（`low | medium | high`）
+- `doctor`：医生模糊（先按 `id_doctor` 精确，再 `na_doctor` 模糊）
+- `dept`：科室模糊（同上）
+- `org`：机构模糊（按 `id_org` 精确 + `na_org` 模糊）
+- `hasCorrection`、`hasTrace`：布尔过滤
+- `dateFrom`、`dateTo`
 
 响应 `data.records[*]` 重点字段：
 
@@ -1235,18 +1253,30 @@
 {
   "feedbackId": "uuid",
   "score": 2,
-  "comment": "语音转写后诊断建议为空白，请排查。",
-  "sourceModule": "settings_feedback",
+  "kind": "record_field",
+  "severity": "medium",
+  "comment": "主诉漏掉发热三天",
+  "sourceModule": "voice_record_field",
+  "tags": ["data_accuracy"],
+  "hasCorrection": true,
+  "hasTrace": true,
+  "hasScreenshot": false,
+  "idDoctor": "10001",
+  "naDoctor": "张医生",
+  "idDept": "DEPT001",
+  "naDept": "全科诊疗",
+  "idOrg": "ORG-DEMO",
+  "naOrg": "示例社区卫生服务中心",
   "traceId": "trace-123",
   "sessionId": "session-123",
-  "hasScreenshot": true,
+  "idDevice": "device-uuid",
   "createdAt": "2026-04-22T10:11:12"
 }
 ```
 
 ### 5.50 GET `/admin/api/feedbacks/{feedbackId}`
 
-用途：查看反馈详情及调用链路时间线。
+用途：查看反馈详情。管理端将其拆分为「摘要」与「技术详情」两个 Tab，前者展示评分/说明/医生身份/标签/截图，后者展示 traceId/chainContext/sessionId 等技术字段，便于工程师排查。
 
 响应 `data`：
 
@@ -1255,33 +1285,32 @@
   "feedback": {
     "feedbackId": "uuid",
     "score": 2,
-    "comment": "语音转写后诊断建议为空白，请排查。",
-    "sourceModule": "settings_feedback",
+    "kind": "record_field",
+    "severity": "medium",
+    "comment": "主诉漏掉发热三天",
+    "sourceModule": "voice_record_field",
+    "tags": ["data_accuracy"],
+    "hasCorrection": true,
+    "hasTrace": true,
+    "hasScreenshot": false,
+    "idDoctor": "10001",
+    "naDoctor": "张医生",
+    "idDept": "DEPT001",
+    "naDept": "全科诊疗",
+    "idOrg": "ORG-DEMO",
+    "naOrg": "示例社区卫生服务中心",
     "traceId": "trace-123",
     "sessionId": "session-123",
-    "screenshotDataUrl": "data:image/png;base64,...",
+    "screenshotDataUrl": null,
     "chainContext": {
-      "channel": "chat",
-      "scene": "chat-panel",
-      "requestSummary": "1 条用户问题，约 48 字",
-      "responseSummary": "返回为空白回复"
+      "kind": "record_field",
+      "aiTrace": { "traceId": "trace-123", "model": "deepseek-chat" },
+      "recordField": { "fieldKey": "chiefComplaint", "originalValue": "...", "currentValue": "...", "correctedValue": "..." }
     }
   },
   "timeline": [
-    {
-      "type": "ai_proxy",
-      "time": "2026-04-22T10:11:10",
-      "title": "chat",
-      "result": "success",
-      "payload": {}
-    },
-    {
-      "type": "feedback",
-      "time": "2026-04-22T10:11:12",
-      "title": "用户提交反馈",
-      "result": "success",
-      "payload": {}
-    }
+    { "type": "ai_proxy", "time": "2026-04-22T10:11:10", "title": "chat", "result": "success", "payload": {} },
+    { "type": "feedback", "time": "2026-04-22T10:11:12", "title": "用户提交反馈", "result": "success", "payload": {} }
   ]
 }
 ```

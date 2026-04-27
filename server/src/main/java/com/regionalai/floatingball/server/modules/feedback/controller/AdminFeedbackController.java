@@ -5,11 +5,11 @@ import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.util.RequestIdUtils;
 import com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackDetailResponse;
 import com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackListItem;
+import com.regionalai.floatingball.server.modules.feedback.dto.FeedbackListQuery;
 import com.regionalai.floatingball.server.modules.feedback.service.FeedbackService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
@@ -25,16 +25,16 @@ public class AdminFeedbackController {
     }
 
     @GetMapping
-    public ApiResponse<PageResponse<AdminFeedbackListItem>> list(@RequestParam(defaultValue = "1") long current,
-                                                                 @RequestParam(defaultValue = "10") long size,
-                                                                 @RequestParam(required = false) String keyword,
-                                                                 @RequestParam(required = false) Integer score,
-                                                                 @RequestParam(required = false) String sourceModule,
-                                                                 @RequestParam(required = false) String dateFrom,
-                                                                 @RequestParam(required = false) String dateTo,
+    public ApiResponse<PageResponse<AdminFeedbackListItem>> list(FeedbackListQuery query,
                                                                  HttpServletRequest request) {
+        if (query.getCurrent() <= 0) {
+            query.setCurrent(1);
+        }
+        if (query.getSize() <= 0) {
+            query.setSize(10);
+        }
         return ApiResponse.success(
-            feedbackService.list(current, size, keyword, score, sourceModule, dateFrom, dateTo),
+            feedbackService.list(query),
             RequestIdUtils.resolve(request)
         );
     }

@@ -13,6 +13,7 @@ import com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackDeta
 import com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackListItem;
 import com.regionalai.floatingball.server.modules.feedback.dto.ClientFeedbackSubmitRequest;
 import com.regionalai.floatingball.server.modules.feedback.dto.ClientFeedbackSubmitResponse;
+import com.regionalai.floatingball.server.modules.feedback.dto.FeedbackListQuery;
 import com.regionalai.floatingball.server.modules.feedback.dto.FeedbackTimelineItem;
 import com.regionalai.floatingball.server.modules.feedback.entity.AiFeedback;
 import com.regionalai.floatingball.server.modules.feedback.mapper.AiFeedbackMapper;
@@ -59,6 +60,33 @@ public class FeedbackService {
         feedback.setSessionId(trimToNull(request.getSessionId()));
         feedback.setTraceId(trimToNull(request.getTraceId()));
         feedback.setSourceModule(firstNonBlank(request.getSourceModule(), "settings_feedback"));
+        feedback.setKind(normalizeKind(request.getKind()));
+        feedback.setSeverity(normalizeSeverity(request.getSeverity()));
+        feedback.setIdDoctor(trimToNull(request.getDoctorId()));
+        feedback.setNaDoctor(trimToNull(request.getDoctorName()));
+        feedback.setIdDept(trimToNull(request.getDeptId()));
+        feedback.setNaDept(trimToNull(request.getDeptName()));
+        feedback.setNaOrg(trimToNull(request.getOrgName()));
+
+        List<String> tags = request.getTags();
+        if (tags != null && !tags.isEmpty()) {
+            List<String> cleaned = tags.stream()
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .limit(20)
+                .collect(Collectors.toList());
+            if (!cleaned.isEmpty()) {
+                try {
+                    feedback.setTagsJson(objectMapper.writeValueAsString(cleaned));
+                } catch (Exception ex) {
+                    throw new BusinessException("反馈标签序列化失败");
+                }
+            }
+        }
+
+        feedback.setHasCorrection(Boolean.TRUE.equals(request.getHasCorrection()) ? "1" : "0");
+        feedback.setHasTrace(StringUtils.hasText(feedback.getTraceId()) ? "1" : "0");
         feedback.setScore(request.getScore());
         feedback.setCommentText(request.getComment().trim());
         feedback.setFeedbackTime(LocalDateTime.now());
@@ -83,36 +111,57 @@ public class FeedbackService {
         return new ClientFeedbackSubmitResponse(feedback.getIdFeedback(), "accepted");
     }
 
-    public PageResponse<AdminFeedbackListItem> list(long current,
-                                                    long size,
-                                                    String keyword,
-                                                    Integer score,
-                                                    String sourceModule,
-                                                    String dateFrom,
-                                                    String dateTo) {
-        Page<AiFeedback> page = new Page<AiFeedback>(current, size);
+    public PageResponse<AdminFeedbackListItem> list(FeedbackListQuery query) {
+        Page<AiFeedback> page = new Page<AiFeedback>(query.getCurrent(), query.getSize());
         QueryWrapper<AiFeedback> wrapper = new QueryWrapper<AiFeedback>()
             .eq("fg_active", "1")
             .orderByDesc("feedback_time");
 
-        if (StringUtils.hasText(keyword)) {
-            String trimmed = keyword.trim();
-            wrapper.and(query -> query
+        if (StringUtils.hasText(query.getKeyword())) {
+            String trimmed = query.getKeyword().trim();
+            wrapper.and(q -> q
                 .like("comment_text", trimmed)
                 .or().like("trace_id", trimmed)
                 .or().like("session_id", trimmed)
                 .or().like("id_device", trimmed)
-                .or().like("id_org", trimmed));
+                .or().like("id_org", trimmed)
+                .or().like("na_org", trimmed)
+                .or().like("na_doctor", trimmed)
+                .or().like("na_dept", trimmed));
         }
-        if (score != null) {
-            wrapper.eq("score", score);
+        if (query.getScore() != null) {
+            wrapper.eq("score", query.getScore());
         }
-        if (StringUtils.hasText(sourceModule)) {
-            wrapper.like("source_module", sourceModule.trim());
+        if (StringUtils.hasText(query.getSourceModule())) {
+            wrapper.like("source_module", query.getSourceModule().trim());
+        }
+        if (StringUtils.hasText(query.getKind())) {
+            wrapper.eq("kind", query.getKind().trim());
+        }
+        if (StringUtils.hasText(query.getSeverity())) {
+            wrapper.eq("severity", query.getSeverity().trim());
+        }
+        if (StringUtils.hasText(query.getDoctor())) {
+            String trimmed = query.getDoctor().trim();
+            wrapper.and(q -> q.like("na_doctor", trimmed).or().eq("id_doctor", trimmed));
+        }
+        if (StringUtils.hasText(query.getDept())) {
+            String trimmed = query.getDept().trim();
+            wrapper.and(q -> q.like("na_dept", trimmed).or().eq("id_dept", trimmed));
+        }
+        if (StringUtils.hasText(query.getOrg())) {
+            String trimmed = query.getOrg().trim();
+            wrapper.and(q -> q.like("na_org", trimmed).or().eq("id_org", trimmed));
+        }
+        if (query.getHasCorrection() != null) {
+            wrapper.eq("has_correction", query.getHasCorrection() ? "1" : "0");
+        }
+        if (query.getHasTrace() != null) {
+            wrapper.eq("has_trace", query.getHasTrace() ? "1" : "0");
         }
 
-        LocalDateTime startTime = parseDateTime(dateFrom, false);
-        LocalDateTime endTime = parseDateTime(dateTo, true);
+        LocalDateTime startTime = parseDateTime(query.getDateFrom(), false);
+        LocalDateTime endTime = parseDateTime(query.getDateTo(), true);
         if (startTime != null) {
             wrapper.ge("feedback_time", startTime);
         }
@@ -169,11 +218,24 @@ public class FeedbackService {
         item.setScore(feedback.getScore());
         item.setComment(feedback.getCommentText());
         item.setSourceModule(feedback.getSourceModule());
+        item.setKind(normalizeKind(feedback.getKind()));
+        item.setSeverity(normalizeSeverity(feedback.getSeverity()));
+        item.setTags(parseTags(feedback.getTagsJson()));
+        item.setHasCorrection("1".equals(feedback.getHasCorrection()));
+        item.setHasTrace("1".equals(feedback.getHasTrace()) || StringUtils.hasText(feedback.getTraceId()));
+        item.setHasScreenshot(StringUtils.hasText(feedback.getScreenshotDataUrl()));
+        Map<String, Object> chainCtx = parseJsonMap(feedback.getChainContextJson());
+        item.setTargetSummary(extractTargetSummary(item.getKind(), chainCtx));
+        item.setTargetType(extractTargetType(item.getKind(), chainCtx));
+        item.setIdDoctor(feedback.getIdDoctor());
+        item.setNaDoctor(feedback.getNaDoctor());
+        item.setIdDept(feedback.getIdDept());
+        item.setNaDept(feedback.getNaDept());
+        item.setIdOrg(feedback.getIdOrg());
+        item.setNaOrg(feedback.getNaOrg());
         item.setTraceId(feedback.getTraceId());
         item.setSessionId(feedback.getSessionId());
-        item.setHasScreenshot(StringUtils.hasText(feedback.getScreenshotDataUrl()));
         item.setIdDevice(feedback.getIdDevice());
-        item.setIdOrg(feedback.getIdOrg());
         item.setCreatedAt(feedback.getFeedbackTime());
         return item;
     }
@@ -184,16 +246,154 @@ public class FeedbackService {
         detail.setScore(feedback.getScore());
         detail.setComment(feedback.getCommentText());
         detail.setSourceModule(feedback.getSourceModule());
+        detail.setKind(normalizeKind(feedback.getKind()));
+        detail.setSeverity(normalizeSeverity(feedback.getSeverity()));
+        detail.setTags(parseTags(feedback.getTagsJson()));
+        detail.setHasCorrection("1".equals(feedback.getHasCorrection()));
+        detail.setHasTrace("1".equals(feedback.getHasTrace()) || StringUtils.hasText(feedback.getTraceId()));
         detail.setTraceId(feedback.getTraceId());
         detail.setSessionId(feedback.getSessionId());
-        detail.setIdDevice(feedback.getIdDevice());
+        Map<String, Object> chainCtx = parseJsonMap(feedback.getChainContextJson());
+        detail.setTargetSummary(extractTargetSummary(detail.getKind(), chainCtx));
+        detail.setTargetType(extractTargetType(detail.getKind(), chainCtx));
+        detail.setIdDoctor(feedback.getIdDoctor());
+        detail.setNaDoctor(feedback.getNaDoctor());
+        detail.setIdDept(feedback.getIdDept());
+        detail.setNaDept(feedback.getNaDept());
         detail.setIdOrg(feedback.getIdOrg());
+        detail.setNaOrg(feedback.getNaOrg());
+        detail.setIdDevice(feedback.getIdDevice());
         detail.setScreenshotFileName(feedback.getScreenshotFileName());
         detail.setScreenshotMimeType(feedback.getScreenshotMimeType());
         detail.setScreenshotDataUrl(feedback.getScreenshotDataUrl());
-        detail.setChainContext(parseJsonMap(feedback.getChainContextJson()));
+        detail.setChainContext(chainCtx);
         detail.setCreatedAt(feedback.getFeedbackTime());
         return detail;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractTargetSummary(String kind, Map<String, Object> chainCtx) {
+        if (chainCtx == null || chainCtx.isEmpty() || kind == null) {
+            return null;
+        }
+        try {
+            if ("recommendation".equals(kind)) {
+                Object node = chainCtx.get("recommendation");
+                if (node instanceof Map) {
+                    Map<String, Object> rec = (Map<String, Object>) node;
+                    String title = trimToNull(asString(rec.get("recommendationTitle")));
+                    String type = trimToNull(asString(rec.get("targetType")));
+                    String typeLabel = labelOfTargetType(type);
+                    if (title != null) {
+                        return typeLabel != null ? typeLabel + "：" + title : title;
+                    }
+                    return typeLabel;
+                }
+            } else if ("record_field".equals(kind)) {
+                Object node = chainCtx.get("recordField");
+                if (node instanceof Map) {
+                    Map<String, Object> rf = (Map<String, Object>) node;
+                    String label = trimToNull(asString(rf.get("fieldLabel")));
+                    String key = trimToNull(asString(rf.get("fieldKey")));
+                    String resolved = label != null ? label : labelOfRecordField(key);
+                    return resolved != null ? "病例字段：" + resolved : null;
+                }
+            } else if ("session".equals(kind)) {
+                return "整页评分";
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractTargetType(String kind, Map<String, Object> chainCtx) {
+        if (chainCtx == null || chainCtx.isEmpty() || kind == null) {
+            return null;
+        }
+        try {
+            if ("recommendation".equals(kind)) {
+                Object node = chainCtx.get("recommendation");
+                if (node instanceof Map) {
+                    return trimToNull(asString(((Map<String, Object>) node).get("targetType")));
+                }
+            } else if ("record_field".equals(kind)) {
+                Object node = chainCtx.get("recordField");
+                if (node instanceof Map) {
+                    return trimToNull(asString(((Map<String, Object>) node).get("fieldKey")));
+                }
+            } else if ("session".equals(kind)) {
+                return "session";
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private String labelOfTargetType(String type) {
+        if (type == null) return null;
+        switch (type) {
+            case "diagnosis": return "推荐诊断";
+            case "medication":
+            case "medicine": return "推荐用药";
+            case "exam": return "推荐检查";
+            case "lab": return "推荐检验";
+            case "procedure": return "推荐处置";
+            case "treatment": return "推荐处置";
+            default: return "推荐项";
+        }
+    }
+
+    private String labelOfRecordField(String key) {
+        if (key == null) return null;
+        switch (key) {
+            case "chiefComplaint": return "主诉";
+            case "historyOfPresentIllness": return "现病史";
+            case "pastHistory": return "既往史";
+            case "personalHistory": return "个人史";
+            case "familyHistory": return "家族史";
+            case "physicalExamination": return "查体";
+            case "diagnosis": return "诊断";
+            default: return key;
+        }
+    }
+
+    private static final java.util.Set<String> KIND_VALUES = new java.util.HashSet<>(java.util.Arrays.asList(
+        "general", "recommendation", "record_field", "session"));
+    private static final java.util.Set<String> SEVERITY_VALUES = new java.util.HashSet<>(java.util.Arrays.asList(
+        "low", "medium", "high"));
+
+    private String normalizeKind(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return "general";
+        }
+        String lower = trimmed.toLowerCase();
+        return KIND_VALUES.contains(lower) ? lower : "general";
+    }
+
+    private String normalizeSeverity(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return "medium";
+        }
+        String lower = trimmed.toLowerCase();
+        return SEVERITY_VALUES.contains(lower) ? lower : "medium";
+    }
+
+    private List<String> parseTags(String value) {
+        if (!StringUtils.hasText(value)) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(value, new TypeReference<List<String>>() {});
+        } catch (Exception ex) {
+            return Collections.emptyList();
+        }
     }
 
     private List<FeedbackTimelineItem> buildTimeline(AiFeedback feedback) {
