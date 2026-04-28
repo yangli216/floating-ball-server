@@ -13,6 +13,7 @@
   --bg-page: #eef1f5;
   --bg-white: #FFFFFF;
   --font-mono: "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+  --font-size-min: 12px;
 }
 
 html,
@@ -160,7 +161,7 @@ select {
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--font-size-min);
   font-weight: 500;
 }
 
@@ -212,7 +213,7 @@ select {
   background: #F1EFE8;
   color: #444441;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-min);
   border-radius: 4px;
 }
 
@@ -376,7 +377,7 @@ select {
 
 .el-tag {
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--font-size-min);
   font-weight: 500;
   border: none;
 }

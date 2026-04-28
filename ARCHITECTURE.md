@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-04-27
+> 更新日期：2026-04-28
 
 ## 1. 项目定位
 
@@ -61,6 +61,7 @@ floating-ball-server/
         │   ├── modules/release/    # 内网客户端版本发布与 Tauri latest.json
         │   ├── modules/audit/      # 审计事件与日志
         │   ├── modules/feedback/   # 用户反馈与调用链路聚合
+        │   ├── modules/userlog/    # 运维用户日志，按一次问诊聚合首版与最终内容
         │   ├── modules/knowledge/  # PMPHAI/知识库代理
         │   ├── modules/adminui/    # 管理端静态页面入口控制
         │   └── modules/ai/         # chat / transcribe / realtime 代理
@@ -91,7 +92,7 @@ floating-ball-server/
 - `ClientController`：设备注册、心跳、bootstrap、delta、审计上报
 - `AiProxyController`：聊天代理、语音转写、实时语音
 - `PmphaiProxyController`：PMPHAI 搜索、详情、列表浏览、签名跳转
-- `Admin*Controller`：区域、机构、设备、配置、Prompt、症状模板、数据包、客户端版本发布、日志
+- `Admin*Controller`：区域、机构、设备、配置、Prompt、症状模板、数据包、客户端版本发布、日志、用户日志
 
 ### 4.2 服务层
 
@@ -112,6 +113,7 @@ floating-ball-server/
 - 管理端通过 `/admin/api/releases/history` 查看历史发布快照，通过 `/admin/api/releases/rollback` 回滚到历史版本；回滚只恢复当前通道的 `latest.json` 与 `policy.json`，不会重新上传安装包
 - 每次上传新版本前，服务端会先把当前发布保存为历史快照；上传后也保存新版本快照。若同一版本分平台多次上传，服务端会合并同版本平台；若版本号变化，则重新开始该版本的 `platforms` 集合，避免把上一版本平台误混入新版本 `latest.json`
 - 客户端更新检测与策略查询不走设备鉴权，避免 Tauri updater 无法附带 `Authorization`；仅暴露静态安装包、Tauri 兼容元数据和强制更新策略，不暴露管理能力
+- 未上传版本的通道在访问 `/v1/client/releases/{channel}/latest.json` 时返回 `204 No Content`，作为 Tauri updater 可识别的“无可用更新”状态，不走业务异常日志
 - 设备业务接口通过 `DeviceAuthFilter` 统一执行强制更新拦截：`/v1/client/releases/**` 始终放行，其他 `/v1/*` 在 `forceUpdate=true` 且客户端版本低于 `minSupportedVersion` 时返回 `426 / UPDATE-REQUIRED`
 - 桌面端请求头优先携带 `X-Client-Version` 与 `X-Update-Channel` 供拦截器判断；旧客户端缺失请求头时，服务端回退设备表 `client_version` 与 `production` 通道策略
 - 通道固定为 `production` / `testing`，分别对应桌面端设置页中的“正式内网”与“测试内网”更新源
@@ -176,11 +178,13 @@ floating-ball-server/
 
 语音代理补充约束：
 
-1. `floating-ball` 区域化模式下，`/v1/ai/speech/transcribe` 与 `/v1/ai/speech/realtime` 接收的是 base64 录音内容，而不是浏览器原生 `FormData`
-2. 服务端必须先把 base64 录音解码为真实字节数组，再按上游 `/audio/transcriptions` 要求组装为 `multipart/form-data`
+1. `floating-ball` 区域化模式下，聊天录音与语音兜底批量转写通过 `/v1/ai/speech/transcribe`、`/v1/ai/speech/realtime` 上传 base64 录音内容；DashScope 实时语音通过 `/v1/ai/speech/realtime/ws` WebSocket 逐帧代理 PCM 音频
+2. 服务端必须先把 base64 录音解码为真实字节数组，再按 `speech_provider` 选择上游协议：`openai-compatible` 组装为 `multipart/form-data` 调用 `/audio/transcriptions`，`aliyun-dashscope` 组装为 DashScope 兼容模式 chat completion 音频请求
 3. 对原始 PCM 录音，服务端先补 WAV 头后再上游转发，避免不同语音供应商对裸 PCM 兼容不一致
 4. 服务端应保留录音元数据（`mimeType`、`format`、`fileName`、`scene`）用于排障和审计，但不在日志中落原始音频内容
 5. 语音代理日志中的录音内容需要单独落为文件，默认写入 `floating-ball.audit.speech-file-dir` 指定目录；`c_ai_op_log` 只保存该录音文件路径，不把 base64 或二进制音频写入 `payload_json`
+6. 服务端实际访问语音上游时使用 `audio_base_url` / `audio_model` / `audio_api_key_encrypted`；语音独立密钥为空时回退主模型 `api_key_encrypted`
+7. `speech_provider` / `speech_model` 作为 bootstrap 下发给桌面端的语音提供方与实时识别模型；当 `speech_provider=aliyun-dashscope` 时，`speech_model` 也是服务端连接 DashScope `/api-ws/v1/inference` WebSocket 实时识别的模型名，默认 `paraformer-realtime-v2`，也可配置同协议 Fun-ASR / Gummy / Paraformer realtime 模型
 
 ### 5.3 审计链路
 
@@ -205,6 +209,14 @@ floating-ball-server/
 2. 反馈请求携带最近一次 AI 代理调用的 `traceId`、会话 ID、来源模块、请求/响应摘要等链路上下文。
 3. 服务端保存反馈主体与截图数据，并按 `traceId` 优先、`sessionId + 时间窗口` 兜底聚合相关 `c_ai_op_log`。
 4. 管理端“反馈管理”页面同时展示反馈内容、截图预览、上下文快照和调用链路时间线，便于排障。
+
+### 5.6 运维用户日志链路
+
+1. 用户日志是面向运维人员的问诊聚合视图，独立于 `modules/audit` 的原始操作日志，不复用 `/admin/api/logs` 与 `c_ai_op_log`。
+2. 桌面端区域化模式下，语音问诊停止录音后先上报 `speechText` 与录音 base64；服务端将录音文件落到 `floating-ball.audit.speech-file-dir`，表内仅保存 `audio_file_path`、原文件名、MIME 和大小，避免把原始音频写入 JSON。
+3. 桌面端区域化模式下，在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交时上报 `finalSnapshot` 与 `selectionSnapshot`。
+4. 服务端按 `consultationId + consultationType + idDevice` upsert 到 `c_ai_user_consultation_log`，保证“一个病人一次问诊一条记录”，不记录医生每次中间编辑。
+5. 管理端新增“用户日志”模块，列表列为机构、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
 
 ### 5.4 PMPHAI 知识库代理链路
 
@@ -231,6 +243,7 @@ floating-ball-server/
 7. `/v1/ai/chat`
 8. `/v1/ai/speech/transcribe`
 9. `/v1/client/audit/events/batch`
+10. `/v1/client/user-logs/consultations`
 10. `/v1/knowledge/pmphai/search`
 11. `/v1/knowledge/pmphai/clip`
 12. `/v1/knowledge/pmphai/list`
@@ -304,6 +317,11 @@ floating-ball-server/
    - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
    - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`（机构 ID 沿用 `id_org`），由桌面端 SDK handshake 解析的 `urt` 信息回填
    - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`
+10. `c_ai_user_consultation_log`
+   - 按一次问诊聚合运维用户日志，关键列包括机构、医生、患者、问诊类型、问诊时间
+   - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
+   - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
+   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`
 9. `c_ai_user`
 10. `c_ai_role`
 11. `c_ai_user_role`
@@ -336,5 +354,6 @@ Oracle 初始化拆成两步：
 3. 发布结果为单个 Spring Boot 服务，前后端同端口、同域名、同进程。
 4. 开发阶段允许保留 Vite 独立调试能力，但这不再是默认交付形态。
 5. 管理端表单交互优先复用 `floating-ball` 现有设置页的分组式信息架构：按“基础信息 / 主模型 / 语音 / 知识库 / 审查模型 / 作用域与功能开关”分段展示，避免把所有配置字段平铺在单一网格中。
-6. 服务端 AI / 语音上游出站请求允许通过 `floating-ball.ai.proxy.*` 配置显式走 HTTP 代理；在 macOS 开发环境下同时建议启用 Netty 的 native DNS 解析依赖，避免 Java 进程与终端 `curl` 的网络行为不一致。
-7. AI 配置页应提供“服务端到上游 LLM”的单独测试入口，用于区分“floating-ball -> server”链路故障与“server -> LLM”链路故障。
+6. 语音配置页必须区分“服务端实际转写地址/密钥/模型”和“桌面端感知的 provider/model”：前者用于服务端上游语音协议选择与调用，后者用于 `floating-ball` 区域化设置页展示与策略选择。
+7. 服务端 AI / 语音上游出站请求允许通过 `floating-ball.ai.proxy.*` 配置显式走 HTTP 代理；在 macOS 开发环境下同时建议启用 Netty 的 native DNS 解析依赖，避免 Java 进程与终端 `curl` 的网络行为不一致。
+8. AI 配置页应提供“服务端到上游 LLM”的单独测试入口，用于区分“floating-ball -> server”链路故障与“server -> LLM”链路故障。

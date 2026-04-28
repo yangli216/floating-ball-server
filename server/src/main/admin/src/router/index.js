@@ -17,6 +17,7 @@ const SymptomTemplateView = () => import('../views/SymptomTemplateView.vue')
 const DataPackageView = () => import('../views/DataPackageView.vue')
 const ReleaseView = () => import('../views/ReleaseView.vue')
 const LogView = () => import('../views/LogView.vue')
+const UserLogView = () => import('../views/UserLogView.vue')
 const FeedbackView = () => import('../views/FeedbackView.vue')
 
 function resolveRedirectPath(value) {
@@ -40,6 +41,7 @@ const router = new Router({
     { path: '/data-packages', component: DataPackageView, meta: { title: '数据包管理' } },
     { path: '/releases', component: ReleaseView, meta: { title: '版本发布' } },
     { path: '/logs', component: LogView, meta: { title: '操作日志' } },
+    { path: '/user-logs', component: UserLogView, meta: { title: '用户日志' } },
     { path: '/feedbacks', component: FeedbackView, meta: { title: '反馈管理' } },
     { path: '*', redirect: '/overview' }
   ]

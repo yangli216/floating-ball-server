@@ -28,13 +28,17 @@ public class ClientReleaseController {
     }
 
     @GetMapping("/{channel}/latest.json")
-    public TauriLatestJson latest(@PathVariable String channel, HttpServletRequest request) {
+    public ResponseEntity<TauriLatestJson> latest(@PathVariable String channel, HttpServletRequest request) {
         String baseUrl = ServletUriComponentsBuilder.fromRequestUri(request)
             .replacePath(null)
             .replaceQuery(null)
             .build()
             .toUriString();
-        return releaseService.getLatestJson(channel, releaseService.normalizeExternalBaseUrl(baseUrl));
+        TauriLatestJson latestJson = releaseService.getAvailableLatestJson(channel, releaseService.normalizeExternalBaseUrl(baseUrl));
+        if (latestJson == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(latestJson);
     }
 
     @GetMapping("/{channel}/policy.json")

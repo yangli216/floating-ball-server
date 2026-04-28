@@ -58,7 +58,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 
 `init.sql` 当前是“删库重建”的权威基线，已包含：
 
-1. `c_ai_config` 的 PMPHAI / Reviewer 服务端托管字段
+1. `c_ai_config` 的语音独立密钥、PMPHAI / Reviewer 服务端托管字段
 2. 默认区域 `REGION001`
 3. 默认机构 `ORG001`
 4. 默认管理员 `admin`
@@ -78,9 +78,10 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 
 ```sql
 @upgrade_20260421_ai_config_server_managed.sql
+@upgrade_20260428_ai_config_audio_key.sql
 ```
 
-该脚本会为旧表补齐以下服务端托管字段：
+这些脚本会为旧表补齐以下服务端托管字段：
 
 1. `pmphai_enabled`
 2. `pmphai_base_url`
@@ -90,6 +91,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 6. `reviewer_base_url`
 7. `reviewer_api_key_encrypted`
 8. `reviewer_model`
+9. `audio_api_key_encrypted`
 
 ## 症状模板表升级
 
@@ -119,6 +121,20 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 1. 该脚本会为 `c_ai_op_log` 补齐 `audio_file_path`
 2. 升级完成后，语音代理日志不再把原始 base64 音频写入 `payload_json`
 3. 录音内容会单独落为文件，数据库只保存对应文件路径
+
+## 运维用户日志语音复盘升级
+
+如果库里已经存在旧版 `c_ai_user_consultation_log`，但还没有语音问诊录音和 ASR 文本字段，请继续使用当前应用账号执行：
+
+```sql
+@upgrade_20260428_user_consultation_log_audio.sql
+```
+
+说明：
+
+1. 该脚本会为 `c_ai_user_consultation_log` 补齐 `speech_text`、`audio_file_path`、`audio_file_name`、`audio_mime_type`、`audio_size`
+2. 升级完成后，桌面端语音问诊会把录音和识别文字追加到同一条用户日志
+3. 录音内容会单独落为文件，数据库只保存对应文件路径和元数据，后台详情通过鉴权接口播放
 
 ## 如果暂时继续使用 `SYSTEM`
 

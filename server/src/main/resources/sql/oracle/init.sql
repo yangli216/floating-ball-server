@@ -126,6 +126,7 @@ CREATE TABLE c_ai_config (
     api_base_url             VARCHAR2(500),
     api_key_encrypted        VARCHAR2(1000),
     model_name               VARCHAR2(128),
+    audio_api_key_encrypted  VARCHAR2(1000),
     audio_base_url           VARCHAR2(500),
     audio_model              VARCHAR2(128),
     speech_provider          VARCHAR2(64),
@@ -157,6 +158,7 @@ COMMENT ON COLUMN c_ai_config.provider IS '服务提供商';
 COMMENT ON COLUMN c_ai_config.api_base_url IS '模型接口基础地址';
 COMMENT ON COLUMN c_ai_config.api_key_encrypted IS '加密后的接口密钥';
 COMMENT ON COLUMN c_ai_config.model_name IS '模型名称';
+COMMENT ON COLUMN c_ai_config.audio_api_key_encrypted IS '加密后的语音接口密钥，为空时复用主模型密钥';
 COMMENT ON COLUMN c_ai_config.audio_base_url IS '语音接口基础地址';
 COMMENT ON COLUMN c_ai_config.audio_model IS '语音模型名称';
 COMMENT ON COLUMN c_ai_config.speech_provider IS '语音服务提供商';
@@ -334,6 +336,71 @@ COMMENT ON COLUMN c_ai_op_log.update_time IS '更新时间';
 CREATE INDEX idx_c_ai_log_time ON c_ai_op_log (operation_time, fg_active);
 
 
+CREATE TABLE c_ai_user_consultation_log (
+    id_log               VARCHAR2(32) PRIMARY KEY,
+    consultation_id      VARCHAR2(64) NOT NULL,
+    id_device            VARCHAR2(32),
+    id_org               VARCHAR2(32),
+    na_org               VARCHAR2(255),
+    id_doctor            VARCHAR2(64),
+    na_doctor            VARCHAR2(128),
+    id_dept              VARCHAR2(64),
+    na_dept              VARCHAR2(128),
+    consultation_type    VARCHAR2(32) NOT NULL,
+    consultation_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    patient_id           VARCHAR2(64),
+    patient_name         VARCHAR2(128),
+    patient_gender       VARCHAR2(32),
+    patient_age          VARCHAR2(32),
+    speech_text          CLOB,
+    audio_file_path      VARCHAR2(1000),
+    audio_file_name      VARCHAR2(255),
+    audio_mime_type      VARCHAR2(128),
+    audio_size           NUMBER(12),
+    first_snapshot_json  CLOB,
+    final_snapshot_json  CLOB,
+    selection_json       CLOB,
+    status               VARCHAR2(32) DEFAULT 'generated',
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_user_consultation_log IS '运维用户日志-问诊聚合表';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_log IS '用户日志主键ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.consultation_id IS '问诊ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_device IS '设备ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.na_org IS '机构名称';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_doctor IS '医生ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.na_doctor IS '医生姓名';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_dept IS '科室ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.na_dept IS '科室名称';
+COMMENT ON COLUMN c_ai_user_consultation_log.consultation_type IS '问诊类型：voice语音问诊 smart智能问诊';
+COMMENT ON COLUMN c_ai_user_consultation_log.consultation_time IS '问诊时间';
+COMMENT ON COLUMN c_ai_user_consultation_log.patient_id IS '患者ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.patient_name IS '患者姓名';
+COMMENT ON COLUMN c_ai_user_consultation_log.patient_gender IS '患者性别';
+COMMENT ON COLUMN c_ai_user_consultation_log.patient_age IS '患者年龄';
+COMMENT ON COLUMN c_ai_user_consultation_log.speech_text IS '语音问诊ASR识别文字';
+COMMENT ON COLUMN c_ai_user_consultation_log.audio_file_path IS '语音问诊录音文件路径';
+COMMENT ON COLUMN c_ai_user_consultation_log.audio_file_name IS '语音问诊录音原文件名';
+COMMENT ON COLUMN c_ai_user_consultation_log.audio_mime_type IS '语音问诊录音MIME类型';
+COMMENT ON COLUMN c_ai_user_consultation_log.audio_size IS '语音问诊录音字节数';
+COMMENT ON COLUMN c_ai_user_consultation_log.first_snapshot_json IS '首次AI生成内容JSON';
+COMMENT ON COLUMN c_ai_user_consultation_log.final_snapshot_json IS '医生最终修改内容JSON';
+COMMENT ON COLUMN c_ai_user_consultation_log.selection_json IS '最终选中状态JSON';
+COMMENT ON COLUMN c_ai_user_consultation_log.status IS '状态：generated已生成 completed已完成';
+COMMENT ON COLUMN c_ai_user_consultation_log.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_user_consultation_log.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_user_consultation_log.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_user_log_time ON c_ai_user_consultation_log (consultation_time, fg_active);
+CREATE INDEX idx_c_ai_user_log_patient ON c_ai_user_consultation_log (patient_id, consultation_time, fg_active);
+CREATE INDEX idx_c_ai_user_log_doctor ON c_ai_user_consultation_log (id_doctor, consultation_time, fg_active);
+CREATE INDEX idx_c_ai_user_log_consultation ON c_ai_user_consultation_log (consultation_id, consultation_type, id_device, fg_active);
+
+
 CREATE TABLE c_ai_feedback (
     id_feedback           VARCHAR2(32) PRIMARY KEY,
     id_device             VARCHAR2(32),
@@ -485,6 +552,8 @@ INSERT INTO c_ai_config (
     api_base_url,
     model_name,
     audio_model,
+    speech_provider,
+    speech_model,
     knowledge_base_enabled,
     pmphai_enabled,
     reviewer_enabled,
@@ -500,6 +569,8 @@ INSERT INTO c_ai_config (
     'openai-compatible',
     'http://127.0.0.1:65535/v1',
     'gpt-4o-mini',
+    'whisper-1',
+    'openai-compatible',
     'whisper-1',
     '0',
     '0',

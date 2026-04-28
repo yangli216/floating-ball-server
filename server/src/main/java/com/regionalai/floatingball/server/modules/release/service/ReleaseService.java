@@ -290,10 +290,18 @@ public class ReleaseService {
     }
 
     public TauriLatestJson getLatestJson(String channel, String baseUrl) {
+        TauriLatestJson latestJson = getAvailableLatestJson(channel, baseUrl);
+        if (latestJson == null) {
+            throw new BusinessException("RELEASE-404", "当前通道暂无可用版本");
+        }
+        return latestJson;
+    }
+
+    public TauriLatestJson getAvailableLatestJson(String channel, String baseUrl) {
         String normalizedChannel = normalizeChannel(channel);
         TauriLatestJson latestJson = readLatestJson(normalizedChannel);
         if (!StringUtils.hasText(latestJson.getVersion()) || latestJson.getPlatforms().isEmpty()) {
-            throw new BusinessException("RELEASE-404", "当前通道暂无可用版本");
+            return null;
         }
         if (StringUtils.hasText(baseUrl)) {
             rewriteDownloadUrls(latestJson, normalizedChannel, baseUrl.trim().replaceAll("/+$", ""));

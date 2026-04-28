@@ -42,10 +42,28 @@ public class AudioLogStorageService {
             return;
         }
         try {
-            Files.deleteIfExists(Paths.get(storedPath));
-        } catch (IOException ignored) {
+            Path path = Paths.get(storedPath).toAbsolutePath().normalize();
+            if (!path.startsWith(storageRoot)) {
+                return;
+            }
+            Files.deleteIfExists(path);
+        } catch (IOException | InvalidPathException ignored) {
             // 日志文件清理失败不影响主链路
         }
+    }
+
+    public Path resolveExistingPath(String storedPath) throws IOException {
+        if (!StringUtils.hasText(storedPath)) {
+            throw new IOException("音频文件路径为空");
+        }
+        Path path = Paths.get(storedPath).toAbsolutePath().normalize();
+        if (!path.startsWith(storageRoot)) {
+            throw new IOException("音频文件路径不在允许目录内");
+        }
+        if (!Files.isRegularFile(path)) {
+            throw new IOException("音频文件不存在");
+        }
+        return path;
     }
 
     private String buildStoredFileName(String originalFileName, String logId) {

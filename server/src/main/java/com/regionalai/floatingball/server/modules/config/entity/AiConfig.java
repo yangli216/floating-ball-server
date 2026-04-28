@@ -34,6 +34,9 @@ public class AiConfig extends BaseEntity {
     @TableField("model_name")
     private String modelName;
 
+    @TableField("audio_api_key_encrypted")
+    private String audioApiKeyEncrypted;
+
     @TableField("audio_base_url")
     private String audioBaseUrl;
 

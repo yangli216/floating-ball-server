@@ -12,6 +12,7 @@ public class AiConfigSaveRequest {
     private String apiBaseUrl;
     private String apiKey;
     private String modelName;
+    private String audioApiKey;
     private String audioBaseUrl;
     private String audioModel;
     private String speechProvider;

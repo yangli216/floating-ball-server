@@ -41,6 +41,10 @@ import java.util.Map;
 @Service
 public class AiProxyService {
 
+    private static final String ALIYUN_SPEECH_PROVIDER = "aliyun-dashscope";
+    private static final String DEFAULT_OPENAI_AUDIO_MODEL = "whisper-1";
+    private static final String DEFAULT_DASHSCOPE_AUDIO_MODEL = "qwen3-asr-flash";
+
     private final ConfigService configService;
     private final AuditService auditService;
     private final RestTemplate restTemplate;
@@ -306,7 +310,22 @@ public class AiProxyService {
         }
         PreparedSpeechFile preparedFile = prepareSpeechFile(request);
         String audioModel = resolveAudioModel(config);
+        String audioApiKey = resolveAudioApiKey(config);
 
+        if (isDashScopeSpeech(config)) {
+            return proxyDashScopeSpeech(device, request, action, config, preparedFile, audioModel, audioApiKey);
+        }
+
+        return proxyOpenAiCompatibleSpeech(device, request, action, config, preparedFile, audioModel, audioApiKey);
+    }
+
+    private String proxyOpenAiCompatibleSpeech(AiDevice device,
+                                               SpeechRequest request,
+                                               String action,
+                                               ResolvedAiConfig config,
+                                               PreparedSpeechFile preparedFile,
+                                               String audioModel,
+                                               String audioApiKey) {
         try {
             MultiValueMap<String, Object> formData = new LinkedMultiValueMap<String, Object>();
             formData.add("file", new ByteArrayResource(preparedFile.audioBytes) {
@@ -319,10 +338,11 @@ public class AiProxyService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-            headers.setBearerAuth(config.getApiKey());
+            headers.setBearerAuth(audioApiKey);
 
+            String endpoint = buildOpenAiSpeechEndpoint(config.getAudioBaseUrl());
             ResponseEntity<JsonNode> responseEntity = restTemplate.postForEntity(
-                config.getAudioBaseUrl() + "/audio/transcriptions",
+                endpoint,
                 new HttpEntity<MultiValueMap<String, Object>>(formData, headers),
                 JsonNode.class
             );
@@ -339,7 +359,7 @@ public class AiProxyService {
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, config.getAudioBaseUrl(), audioModel, text, true, null, response.toString()),
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, text, true, null, response.toString()),
                 true,
                 preparedFile.audioBytes,
                 preparedFile.fileName
@@ -352,7 +372,7 @@ public class AiProxyService {
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, config.getAudioBaseUrl(), audioModel, null, false, errorMessage, ex.getResponseBodyAsString()),
+                buildSpeechLogPayload(request, preparedFile, buildOpenAiSpeechEndpoint(config.getAudioBaseUrl()), audioModel, null, false, errorMessage, ex.getResponseBodyAsString()),
                 false,
                 preparedFile.audioBytes,
                 preparedFile.fileName
@@ -365,7 +385,7 @@ public class AiProxyService {
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, config.getAudioBaseUrl(), audioModel, null, false, errorMessage, null),
+                buildSpeechLogPayload(request, preparedFile, buildOpenAiSpeechEndpoint(config.getAudioBaseUrl()), audioModel, null, false, errorMessage, null),
                 false,
                 preparedFile.audioBytes,
                 preparedFile.fileName
@@ -377,7 +397,86 @@ public class AiProxyService {
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, config.getAudioBaseUrl(), audioModel, null, false, ex.getMessage(), null),
+                buildSpeechLogPayload(request, preparedFile, buildOpenAiSpeechEndpoint(config.getAudioBaseUrl()), audioModel, null, false, ex.getMessage(), null),
+                false,
+                preparedFile.audioBytes,
+                preparedFile.fileName
+            );
+            throw ex;
+        }
+    }
+
+    private String proxyDashScopeSpeech(AiDevice device,
+                                        SpeechRequest request,
+                                        String action,
+                                        ResolvedAiConfig config,
+                                        PreparedSpeechFile preparedFile,
+                                        String audioModel,
+                                        String audioApiKey) {
+        String endpoint = buildDashScopeSpeechEndpoint(config.getAudioBaseUrl());
+        Map<String, Object> payload = buildDashScopeSpeechPayload(preparedFile, audioModel);
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(audioApiKey);
+
+            ResponseEntity<JsonNode> responseEntity = restTemplate.postForEntity(
+                endpoint,
+                new HttpEntity<Map<String, Object>>(payload, headers),
+                JsonNode.class
+            );
+            JsonNode response = responseEntity.getBody();
+
+            if (response == null) {
+                throw new BusinessException("语音转写响应为空");
+            }
+
+            String text = extractDashScopeSpeechText(response);
+            auditService.saveSystemLogWithAudioFile(
+                device,
+                "speech_proxy",
+                "speech",
+                action,
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, text, true, null, response.toString()),
+                true,
+                preparedFile.audioBytes,
+                preparedFile.fileName
+            );
+            return text;
+        } catch (HttpStatusCodeException ex) {
+            String errorMessage = buildUpstreamErrorMessage("语音服务", ex);
+            auditService.saveSystemLogWithAudioFile(
+                device,
+                "speech_proxy",
+                "speech",
+                action,
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, errorMessage, ex.getResponseBodyAsString()),
+                false,
+                preparedFile.audioBytes,
+                preparedFile.fileName
+            );
+            throw new BusinessException(errorMessage);
+        } catch (ResourceAccessException ex) {
+            String errorMessage = buildUpstreamRequestErrorMessage("语音服务", ex);
+            auditService.saveSystemLogWithAudioFile(
+                device,
+                "speech_proxy",
+                "speech",
+                action,
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, errorMessage, null),
+                false,
+                preparedFile.audioBytes,
+                preparedFile.fileName
+            );
+            throw new BusinessException(errorMessage);
+        } catch (RuntimeException ex) {
+            auditService.saveSystemLogWithAudioFile(
+                device,
+                "speech_proxy",
+                "speech",
+                action,
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, ex.getMessage(), null),
                 false,
                 preparedFile.audioBytes,
                 preparedFile.fileName
@@ -482,7 +581,89 @@ public class AiProxyService {
     }
 
     private String resolveAudioModel(ResolvedAiConfig config) {
-        return StringUtils.hasText(config.getAudioModel()) ? config.getAudioModel().trim() : "whisper-1";
+        String model = StringUtils.hasText(config.getAudioModel()) ? config.getAudioModel().trim() : null;
+        if (isDashScopeSpeech(config)) {
+            if (!StringUtils.hasText(model) || DEFAULT_OPENAI_AUDIO_MODEL.equalsIgnoreCase(model)
+                || model.toLowerCase().startsWith("paraformer")) {
+                return DEFAULT_DASHSCOPE_AUDIO_MODEL;
+            }
+            return model;
+        }
+        return StringUtils.hasText(model) ? model : DEFAULT_OPENAI_AUDIO_MODEL;
+    }
+
+    private String resolveAudioApiKey(ResolvedAiConfig config) {
+        String apiKey = StringUtils.hasText(config.getAudioApiKey()) ? config.getAudioApiKey() : config.getApiKey();
+        if (!StringUtils.hasText(apiKey)) {
+            throw new BusinessException("未配置语音服务密钥");
+        }
+        return apiKey;
+    }
+
+    private boolean isDashScopeSpeech(ResolvedAiConfig config) {
+        return ALIYUN_SPEECH_PROVIDER.equalsIgnoreCase(config.getSpeechProvider());
+    }
+
+    private String buildOpenAiSpeechEndpoint(String baseUrl) {
+        String trimmedBaseUrl = trimRightSlash(baseUrl);
+        if (trimmedBaseUrl.endsWith("/audio/transcriptions")) {
+            return trimmedBaseUrl;
+        }
+        return trimmedBaseUrl + "/audio/transcriptions";
+    }
+
+    private String buildDashScopeSpeechEndpoint(String baseUrl) {
+        String normalizedBaseUrl = normalizeDashScopeBaseUrl(baseUrl);
+        if (normalizedBaseUrl.endsWith("/chat/completions")) {
+            return normalizedBaseUrl;
+        }
+        return normalizedBaseUrl + "/chat/completions";
+    }
+
+    private String normalizeDashScopeBaseUrl(String baseUrl) {
+        String trimmedBaseUrl = trimRightSlash(baseUrl);
+        if (trimmedBaseUrl.endsWith("/chat/completions")) {
+            return trimmedBaseUrl.substring(0, trimmedBaseUrl.length() - "/chat/completions".length());
+        }
+        if (trimmedBaseUrl.contains("/compatible-mode/v1")) {
+            return trimmedBaseUrl;
+        }
+        if ("https://dashscope.aliyuncs.com".equalsIgnoreCase(trimmedBaseUrl)
+            || "https://dashscope-intl.aliyuncs.com".equalsIgnoreCase(trimmedBaseUrl)) {
+            return trimmedBaseUrl + "/compatible-mode/v1";
+        }
+        return trimmedBaseUrl;
+    }
+
+    private Map<String, Object> buildDashScopeSpeechPayload(PreparedSpeechFile preparedFile, String audioModel) {
+        String dataUrl = "data:" + preparedFile.mimeType + ";base64,"
+            + Base64.getEncoder().encodeToString(preparedFile.audioBytes);
+
+        Map<String, Object> inputAudio = new LinkedHashMap<String, Object>();
+        inputAudio.put("data", dataUrl);
+
+        Map<String, Object> contentItem = new LinkedHashMap<String, Object>();
+        contentItem.put("type", "input_audio");
+        contentItem.put("input_audio", inputAudio);
+
+        Map<String, Object> message = new LinkedHashMap<String, Object>();
+        message.put("role", "user");
+        message.put("content", Collections.singletonList(contentItem));
+
+        Map<String, Object> asrOptions = new LinkedHashMap<String, Object>();
+        asrOptions.put("enable_itn", Boolean.TRUE);
+
+        Map<String, Object> payload = new LinkedHashMap<String, Object>();
+        payload.put("model", audioModel);
+        payload.put("messages", Collections.singletonList(message));
+        payload.put("stream", Boolean.FALSE);
+        payload.put("asr_options", asrOptions);
+        return payload;
+    }
+
+    private String extractDashScopeSpeechText(JsonNode response) {
+        JsonNode contentNode = response.path("choices").path(0).path("message").path("content");
+        return contentNode.isMissingNode() ? response.toString() : contentNode.asText();
     }
 
     private String resolveFileName(SpeechRequest request) {

@@ -5,6 +5,7 @@ import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.AesUtils;
 import com.regionalai.floatingball.server.common.util.MaskingUtils;
 import com.regionalai.floatingball.server.modules.config.dto.AiConfigSaveRequest;
+import com.regionalai.floatingball.server.modules.config.dto.AiConfigView;
 import com.regionalai.floatingball.server.modules.config.dto.BootstrapVO;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.entity.AiConfig;
@@ -81,6 +82,11 @@ class ConfigServiceTest {
         assertEquals("https://org.example.com", resolved.getBaseUrl());
         assertEquals("org-key", resolved.getApiKey());
         assertEquals("org-model", resolved.getModel());
+        assertEquals("org-key", resolved.getAudioApiKey());
+        assertEquals("https://org.example.com", resolved.getAudioBaseUrl());
+        assertEquals("whisper-1", resolved.getAudioModel());
+        assertEquals("openai-compatible", resolved.getSpeechProvider());
+        assertEquals("whisper-1", resolved.getSpeechModel());
         assertTrue(resolved.getFeatures().get("voice"));
     }
 
@@ -90,7 +96,7 @@ class ConfigServiceTest {
         config.setAudioBaseUrl(null);
         config.setAudioModel("whisper-1");
         config.setSpeechProvider("aliyun");
-        config.setSpeechModel("paraformer");
+        config.setSpeechModel("paraformer-realtime-v2");
         config.setKnowledgeBaseEnabled("1");
         config.setKnowledgeBaseBaseUrl("https://kb.example.com");
         config.setPmphaiEnabled("0");
@@ -111,8 +117,9 @@ class ConfigServiceTest {
 
         assertEquals("https://llm.example.com", bootstrap.getLlm().getBaseUrl());
         assertEquals("https://llm.example.com", bootstrap.getLlm().getAudioBaseUrl());
-        assertEquals("whisper-1", bootstrap.getLlm().getAudioModel());
-        assertEquals("aliyun", bootstrap.getSpeech().getProvider());
+        assertEquals("qwen3-asr-flash", bootstrap.getLlm().getAudioModel());
+        assertEquals("aliyun-dashscope", bootstrap.getSpeech().getProvider());
+        assertEquals("paraformer-realtime-v2", bootstrap.getSpeech().getModel());
         assertTrue(bootstrap.getKnowledgeBase().getEnabled());
         assertFalse(bootstrap.getPmphai().getEnabled());
         assertTrue(bootstrap.getReviewer().getEnabled());
@@ -124,9 +131,30 @@ class ConfigServiceTest {
     }
 
     @Test
+    void resolveByDeviceShouldKeepDashScopeInferenceRealtimeSpeechModel() {
+        AiConfig config = buildConfig("ORG001", "REG001", "https://llm.example.com/", "secret-key", "deepseek-chat");
+        config.setSpeechProvider("dashscope");
+        config.setAudioModel("qwen3-asr-flash");
+        config.setSpeechModel("fun-asr-realtime");
+
+        when(aiConfigMapper.selectList(any())).thenReturn(Arrays.asList(config));
+
+        AiDevice device = new AiDevice();
+        device.setIdOrg("ORG001");
+        device.setIdRegion("REG001");
+
+        ResolvedAiConfig resolved = configService.resolveByDevice(device);
+
+        assertEquals("aliyun-dashscope", resolved.getSpeechProvider());
+        assertEquals("qwen3-asr-flash", resolved.getAudioModel());
+        assertEquals("fun-asr-realtime", resolved.getSpeechModel());
+    }
+
+    @Test
     void updateShouldRetainExistingEncryptedApiKeyWhenRequestOmitsIt() {
         AiConfig existing = buildConfig("ORG001", "REG001", "https://llm.example.com", "persisted-key", "deepseek-chat");
         existing.setIdConfig("CFG001");
+        existing.setAudioApiKeyEncrypted(aesUtils.encrypt("persisted-speech-key"));
 
         when(aiConfigMapper.selectById("CFG001")).thenReturn(existing);
 
@@ -142,15 +170,36 @@ class ConfigServiceTest {
         request.setSdStatus("1");
 
         String encryptedBefore = existing.getApiKeyEncrypted();
+        String encryptedAudioBefore = existing.getAudioApiKeyEncrypted();
         String maskedExpected = MaskingUtils.maskSecret("persisted-key");
+        String maskedAudioExpected = MaskingUtils.maskSecret("persisted-speech-key");
 
-        String apiKeyMasked = configService.update("CFG001", request).getApiKeyMasked();
+        AiConfigView view = configService.update("CFG001", request);
 
         assertEquals(encryptedBefore, existing.getApiKeyEncrypted());
+        assertEquals(encryptedAudioBefore, existing.getAudioApiKeyEncrypted());
         assertEquals("https://new.example.com/", existing.getApiBaseUrl());
         assertEquals("deepseek-v2", existing.getModelName());
+        assertEquals("whisper-1", existing.getAudioModel());
+        assertEquals("openai-compatible", existing.getSpeechProvider());
+        assertEquals("whisper-1", existing.getSpeechModel());
         verify(aiConfigMapper).updateById(existing);
-        assertEquals(maskedExpected, apiKeyMasked);
+        assertEquals(maskedExpected, view.getApiKeyMasked());
+        assertEquals(maskedAudioExpected, view.getAudioApiKeyMasked());
+    }
+
+    @Test
+    void saveShouldRejectUnknownSpeechProvider() {
+        AiConfigSaveRequest request = new AiConfigSaveRequest();
+        request.setNaConfig("配置");
+        request.setApiBaseUrl("https://llm.example.com");
+        request.setModelName("deepseek-chat");
+        request.setSpeechProvider("unknown-provider");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> configService.save(request));
+
+        assertEquals("语音服务提供方必须是 openai-compatible 或 aliyun-dashscope", ex.getMessage());
+        verify(aiConfigMapper, never()).insert(any(AiConfig.class));
     }
 
     @Test

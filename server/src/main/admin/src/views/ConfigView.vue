@@ -32,6 +32,7 @@
         </template>
       </el-table-column>
       <el-table-column label="接口密钥" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.apiKeyMasked || '--' }}</code></template></el-table-column>
+      <el-table-column label="语音密钥" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.audioApiKeyMasked || '复用主密钥' }}</code></template></el-table-column>
       <el-table-column label="功能开关" min-width="220">
         <template slot-scope="{ row }">
           {{ truncate(row.featuresJson) }}
@@ -106,17 +107,32 @@
           <section class="config-section">
             <h3>语音配置</h3>
             <div class="form-grid">
-              <el-form-item label="语音服务地址">
-                <el-input v-model.trim="form.audioBaseUrl" maxlength="500" />
+              <el-form-item label="转写服务地址">
+                <el-input v-model.trim="form.audioBaseUrl" maxlength="500" placeholder="留空则复用主模型服务地址" />
+                <p class="form-hint">服务端实际语音上游 Base URL；OpenAI 兼容走 /audio/transcriptions，DashScope 走 /chat/completions。</p>
               </el-form-item>
-              <el-form-item label="语音模型">
+              <el-form-item label="语音接口密钥">
+                <el-input v-model.trim="form.audioApiKey" show-password maxlength="1000" placeholder="留空则复用主模型接口密钥" />
+                <p class="form-hint">语音供应商或账号与主模型不一致时必须填写。</p>
+              </el-form-item>
+              <el-form-item label="转写模型">
                 <el-input v-model.trim="form.audioModel" maxlength="128" placeholder="例如 whisper-1" />
+                <p class="form-hint">服务端实际提交给上游的语音转写模型；留空默认 whisper-1。</p>
               </el-form-item>
-              <el-form-item label="语音服务商">
-                <el-input v-model.trim="form.speechProvider" maxlength="64" placeholder="例如 openai / dashscope" />
+              <el-form-item label="桌面端提供方">
+                <el-select v-model="form.speechProvider" placeholder="选择桌面端语音提供方" @change="handleSpeechProviderChange">
+                  <el-option
+                    v-for="item in speechProviderOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+                <p class="form-hint">{{ speechProviderHint }}</p>
               </el-form-item>
-              <el-form-item label="语音识别模型">
-                <el-input v-model.trim="form.speechModel" maxlength="128" placeholder="用于实时识别或供应商特定模型" />
+              <el-form-item label="桌面端显示模型">
+                <el-input v-model.trim="form.speechModel" maxlength="128" :placeholder="speechModelPlaceholder" />
+                <p class="form-hint">DashScope 时为 /api-ws/v1/inference 实时识别模型，默认 paraformer-realtime-v2，也可填 Fun-ASR/Gummy/Paraformer realtime 模型；OpenAI 兼容时仅用于桌面端展示。</p>
               </el-form-item>
             </div>
           </section>
@@ -220,6 +236,55 @@ import {
   truncate
 } from '../utils/admin'
 
+const DEFAULT_AUDIO_MODEL = 'whisper-1'
+const DEFAULT_DASHSCOPE_AUDIO_MODEL = 'qwen3-asr-flash'
+const DEFAULT_DASHSCOPE_REALTIME_MODEL = 'paraformer-realtime-v2'
+const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+const DEFAULT_SPEECH_PROVIDER = 'openai-compatible'
+const ALIYUN_SPEECH_PROVIDER = 'aliyun-dashscope'
+const SPEECH_PROVIDER_OPTIONS = [
+  {
+    value: DEFAULT_SPEECH_PROVIDER,
+    label: 'OpenAI 兼容接口',
+    description: '区域后台统一批量转写，默认使用 /audio/transcriptions。'
+  },
+  {
+    value: ALIYUN_SPEECH_PROVIDER,
+    label: '阿里云 DashScope',
+    description: '下发给桌面端作为 DashScope 语音提供方标识。'
+  }
+]
+
+function normalizeSpeechProvider(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'aliyun' || normalized === 'dashscope' || normalized === ALIYUN_SPEECH_PROVIDER) {
+    return ALIYUN_SPEECH_PROVIDER
+  }
+  return DEFAULT_SPEECH_PROVIDER
+}
+
+function resolveSpeechModel(provider, speechModel, audioModel) {
+  const normalizedProvider = normalizeSpeechProvider(provider)
+  if (speechModel) {
+    if (normalizedProvider === ALIYUN_SPEECH_PROVIDER && !isDashScopeInferenceRealtimeModel(speechModel)) {
+      return DEFAULT_DASHSCOPE_REALTIME_MODEL
+    }
+    return speechModel
+  }
+  if (normalizedProvider === ALIYUN_SPEECH_PROVIDER) {
+    return DEFAULT_DASHSCOPE_REALTIME_MODEL
+  }
+  return audioModel || DEFAULT_AUDIO_MODEL
+}
+
+function isDashScopeInferenceRealtimeModel(model) {
+  const normalized = String(model || '').trim().toLowerCase()
+  return (normalized.indexOf('fun-asr') === 0 && normalized.indexOf('realtime') > -1)
+    || normalized.indexOf('paraformer-realtime') === 0
+    || normalized === 'gummy-realtime-v1'
+    || normalized === 'gummy-chat-v1'
+}
+
 function createDefaultForm() {
   return {
     idConfig: '',
@@ -230,9 +295,10 @@ function createDefaultForm() {
     apiKey: '',
     modelName: '',
     audioBaseUrl: '',
-    audioModel: '',
-    speechProvider: '',
-    speechModel: '',
+    audioApiKey: '',
+    audioModel: DEFAULT_AUDIO_MODEL,
+    speechProvider: DEFAULT_SPEECH_PROVIDER,
+    speechModel: DEFAULT_AUDIO_MODEL,
     knowledgeBaseEnabled: false,
     knowledgeBaseBaseUrl: '',
     pmphaiEnabled: false,
@@ -268,6 +334,7 @@ export default {
       regionMap: {},
       orgMap: {},
       testResult: null,
+      speechProviderOptions: SPEECH_PROVIDER_OPTIONS,
       form: createDefaultForm(),
       rules: {
         naConfig: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
@@ -279,6 +346,16 @@ export default {
   computed: {
     dialogTitle() {
       return this.dialogMode === 'create' ? '新增配置' : '编辑配置'
+    },
+    speechProviderHint() {
+      const provider = normalizeSpeechProvider(this.form.speechProvider)
+      const option = SPEECH_PROVIDER_OPTIONS.find(item => item.value === provider)
+      return option ? option.description : ''
+    },
+    speechModelPlaceholder() {
+      return normalizeSpeechProvider(this.form.speechProvider) === ALIYUN_SPEECH_PROVIDER
+        ? DEFAULT_DASHSCOPE_REALTIME_MODEL
+        : (this.form.audioModel || DEFAULT_AUDIO_MODEL)
     }
   },
   async mounted() {
@@ -338,6 +415,8 @@ export default {
     },
     openEdit(row) {
       this.dialogMode = 'edit'
+      const audioModel = row.audioModel || DEFAULT_AUDIO_MODEL
+      const speechProvider = normalizeSpeechProvider(row.speechProvider)
       this.form = {
         idConfig: row.idConfig,
         cdConfig: row.cdConfig || '',
@@ -347,9 +426,10 @@ export default {
         apiKey: '',
         modelName: row.modelName || '',
         audioBaseUrl: row.audioBaseUrl || '',
-        audioModel: row.audioModel || '',
-        speechProvider: row.speechProvider || '',
-        speechModel: row.speechModel || '',
+        audioApiKey: '',
+        audioModel,
+        speechProvider,
+        speechModel: resolveSpeechModel(speechProvider, row.speechModel || '', audioModel),
         knowledgeBaseEnabled: flagToBoolean(row.knowledgeBaseEnabled),
         knowledgeBaseBaseUrl: row.knowledgeBaseBaseUrl || '',
         pmphaiEnabled: flagToBoolean(row.pmphaiEnabled),
@@ -372,6 +452,24 @@ export default {
       const org = this.orgOptions.find(item => item.idOrg === idOrg)
       if (org) {
         this.form.idRegion = org.idRegion || ''
+      }
+    },
+    handleSpeechProviderChange(provider) {
+      const normalized = normalizeSpeechProvider(provider)
+      this.form.speechProvider = normalized
+      const defaultModels = [DEFAULT_AUDIO_MODEL, DEFAULT_DASHSCOPE_AUDIO_MODEL, DEFAULT_DASHSCOPE_REALTIME_MODEL]
+      if (normalized === ALIYUN_SPEECH_PROVIDER) {
+        if (!this.form.audioBaseUrl) {
+          this.form.audioBaseUrl = DEFAULT_DASHSCOPE_BASE_URL
+        }
+        if (!this.form.audioModel || defaultModels.indexOf(this.form.audioModel) > -1) {
+          this.form.audioModel = DEFAULT_DASHSCOPE_AUDIO_MODEL
+        }
+      } else if (!this.form.audioModel || defaultModels.indexOf(this.form.audioModel) > -1) {
+        this.form.audioModel = DEFAULT_AUDIO_MODEL
+      }
+      if (!this.form.speechModel || defaultModels.indexOf(this.form.speechModel) > -1) {
+        this.form.speechModel = resolveSpeechModel(normalized, '', this.form.audioModel)
       }
     },
     resetForm() {
@@ -412,6 +510,8 @@ export default {
         }
         this.saving = true
         try {
+          const audioModel = this.form.audioModel || DEFAULT_AUDIO_MODEL
+          const speechProvider = normalizeSpeechProvider(this.form.speechProvider)
           const payload = {
             cdConfig: this.form.cdConfig,
             naConfig: this.form.naConfig,
@@ -420,9 +520,10 @@ export default {
             apiKey: this.form.apiKey,
             modelName: this.form.modelName,
             audioBaseUrl: this.form.audioBaseUrl,
-            audioModel: this.form.audioModel,
-            speechProvider: this.form.speechProvider,
-            speechModel: this.form.speechModel,
+            audioApiKey: this.form.audioApiKey,
+            audioModel,
+            speechProvider,
+            speechModel: resolveSpeechModel(speechProvider, this.form.speechModel, audioModel),
             knowledgeBaseEnabled: this.form.knowledgeBaseEnabled,
             knowledgeBaseBaseUrl: this.form.knowledgeBaseBaseUrl,
             pmphaiEnabled: this.form.pmphaiEnabled,
@@ -522,6 +623,17 @@ export default {
 
 .test-connection-result.error {
   color: #A32D2D;
+}
+
+.form-hint {
+  margin: 6px 0 0;
+  color: #7A7D85;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.config-form :deep(.el-select) {
+  width: 100%;
 }
 
 .config-form :deep(.el-form-item) {

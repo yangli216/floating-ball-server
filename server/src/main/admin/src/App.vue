@@ -145,6 +145,7 @@ const menuItems = [
   { path: '/data-packages', label: '数据包', icon: '数' },
   { path: '/releases', label: '版本发布', icon: '版' },
   { path: '/logs', label: '日志', icon: '日' },
+  { path: '/user-logs', label: '用户日志', icon: '用' },
   { path: '/feedbacks', label: '反馈', icon: '反' }
 ]
 

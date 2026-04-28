@@ -12,6 +12,7 @@ public class AiConfigView {
     private String apiBaseUrl;
     private String apiKeyMasked;
     private String modelName;
+    private String audioApiKeyMasked;
     private String audioBaseUrl;
     private String audioModel;
     private String speechProvider;

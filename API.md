@@ -1,6 +1,6 @@
 # floating-ball-server API 说明
 
-> 更新日期：2026-04-27
+> 更新日期：2026-04-28
 > 范围：`floating-ball` 区域化模式下调用的远端 `/v1/*` 接口
 
 ## 1. 约束说明
@@ -269,6 +269,8 @@ Content-Type: application/json
 
 用途：公开返回 Tauri updater 兼容的 `latest.json`。该接口不需要设备令牌，避免 updater 无法附带自定义鉴权头。
 
+当指定通道尚未通过管理端上传任何可用版本时，接口返回 `204 No Content`，表示当前没有可用更新，不记录业务异常。
+
 示例：
 
 ```json
@@ -356,8 +358,8 @@ Content-Type: application/json
     "audioModel": "whisper-1"
   },
   "speech": {
-    "provider": "aliyun",
-    "model": "paraformer-realtime"
+    "provider": "openai-compatible",
+    "model": "whisper-1"
   },
   "knowledgeBase": {
     "enabled": true,
@@ -380,6 +382,14 @@ Content-Type: application/json
   "promptVersion": "2026.04.20.1"
 }
 ```
+
+语音配置字段说明：
+
+- `llm.audioBaseUrl`：服务端实际转发 `/v1/ai/speech/*` 时使用的上游语音转写地址；未单独配置时回退 `llm.baseUrl`
+- `llm.audioModel`：服务端实际提交给上游的语音模型；`openai-compatible` 默认 `whisper-1`，`aliyun-dashscope` 默认 `qwen3-asr-flash`
+- `speech.provider`：下发给 `floating-ball` 的语音提供方标识，当前兼容 `openai-compatible`、`aliyun-dashscope`
+- `speech.model`：下发给 `floating-ball` 的实时语音模型标识；`aliyun-dashscope` 默认 `paraformer-realtime-v2`，也可配置 DashScope `/api-ws/v1/inference` 协议下的 Fun-ASR / Gummy / Paraformer realtime 模型，用于 `/v1/ai/speech/realtime/ws`
+- `apiKey`、`audioApiKey` 均不下发给桌面端；区域化模式下主模型和语音上游密钥由 `floating-ball-server` 统一托管
 
 配置优先级：机构级 > 区域级 > 全局级。
 
@@ -469,7 +479,65 @@ Content-Type: application/json
 }
 ```
 
-### 3.8 POST `/v1/client/feedbacks`
+### 3.8 POST `/v1/client/user-logs/consultations`
+
+用途：桌面端提交运维用户日志快照。该接口独立于原始操作日志，用于按“一名患者一次问诊”聚合首版 AI 生成内容和医生最终修改内容。
+
+请求：
+
+```json
+{
+  "consultationId": "CONSULT-001",
+  "consultationType": "voice",
+  "consultationTime": 1770000000000,
+  "patientId": "P001",
+  "patientName": "王某",
+  "patientGender": "男",
+  "patientAge": "45岁",
+  "doctorId": "D001",
+  "doctorName": "张医生",
+  "orgCode": "ORG001",
+  "orgName": "区域中心医院",
+  "deptId": "DEPT001",
+  "deptName": "全科",
+  "speechText": "医生您好，我发热一天，最高39度，伴咳嗽、咽痛。",
+  "audio": "base64-audio",
+  "audioMimeType": "audio/wav",
+  "audioFormat": "wav",
+  "audioFileName": "voice-consultation-1770000000000.wav",
+  "firstSnapshot": {
+    "chiefComplaint": "咳嗽3天",
+    "historyOfPresentIllness": "患者3天前出现咳嗽...",
+    "diagnoses": [{ "name": "急性上呼吸道感染", "selected": true }],
+    "medicines": [{ "name": "氨溴索", "selected": true }],
+    "examinations": [{ "name": "胸部CT", "selected": false }],
+    "labTests": [{ "name": "血常规", "selected": true }]
+  },
+  "finalSnapshot": {
+    "chiefComplaint": "咳嗽、咳痰3天",
+    "historyOfPresentIllness": "医生修改后的最终现病史...",
+    "diagnoses": [{ "name": "急性支气管炎", "selected": true }],
+    "medicines": [{ "name": "氨溴索", "selected": true }],
+    "examinations": [],
+    "labTests": [{ "name": "血常规", "selected": true }]
+  },
+  "selectionSnapshot": {
+    "selectedDiagnosisNames": ["急性支气管炎"],
+    "selectedMedicineNames": ["氨溴索"],
+    "selectedExaminationNames": [],
+    "selectedLabTestNames": ["血常规"]
+  }
+}
+```
+
+约束：
+
+1. `consultationType` 取值：`voice`（语音问诊）、`smart`（智能问诊）。
+2. 服务端按 `consultationId + consultationType + idDevice` upsert；先收到首版快照则创建记录，后收到最终快照则更新同一条记录。
+3. 客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写时的最终状态。
+4. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
+
+### 3.9 POST `/v1/client/feedbacks`
 
 用途：桌面端提交问题反馈，统一覆盖**通用反馈（设置入口）**、**语音推荐反馈**、**语音病例字段反馈**、**语音整页评分反馈**四种场景。支持评分、说明、内置截图、问题标签、医生/机构/科室身份回填，以及最近一次 AI 调用链路上下文。
 
@@ -625,8 +693,9 @@ Content-Type: application/json
 1. 先接收 `floating-ball` 上传的 base64 录音
 2. 在服务端解码为真实字节数组
 3. 若收到 `audio/pcm` / `format=pcm`，服务端会先补 WAV 头再标准化为 `.wav`
-4. 以 `multipart/form-data` 的 `file` 字段转发到上游 `/audio/transcriptions`
-5. 不把原始 base64 音频直接原样透传给上游 OpenAI 兼容接口
+4. `speechProvider=openai-compatible` 时，以 `multipart/form-data` 的 `file` 字段转发到上游 `/audio/transcriptions`
+5. `speechProvider=aliyun-dashscope` 时，将标准化后的音频组装为 Data URL，调用 DashScope 兼容模式 `/chat/completions`
+6. 不把原始 base64 音频直接原样透传给上游 OpenAI 兼容接口
 
 响应 `data`：
 
@@ -638,7 +707,43 @@ Content-Type: application/json
 
 ### 4.3 POST `/v1/ai/speech/realtime`
 
-用途：区域化模式下的实时语音识别代理。
+用途：区域化模式下的实时语音识别批量兜底代理。桌面端实时流式优先使用 `4.3.1` WebSocket 通道；若 WebSocket 不可用，再在录音结束后调用本接口上传整段录音。
+
+### 4.3.1 WebSocket `/v1/ai/speech/realtime/ws`
+
+用途：区域化模式下的 DashScope Paraformer 实时语音识别代理。
+
+连接：
+
+```text
+ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
+```
+
+约束：
+
+1. 浏览器 WebSocket 无法设置 `Authorization` 请求头，因此本通道通过 `token` query 参数携带设备令牌；服务端握手阶段按 `DeviceService.findActiveByToken` 校验。
+2. 当前仅在 `speechProvider=aliyun-dashscope` 时启用，服务端使用 `audioApiKey` 或主模型 `apiKey` 连接 DashScope WebSocket。
+3. 服务端向 DashScope `/api-ws/v1/inference` 发送 `run-task`，模型取 `speechModel`，默认 `paraformer-realtime-v2`；若配置其他同协议 Fun-ASR / Gummy / Paraformer realtime 模型则原样使用；音频格式为 `pcm` / `16000`。
+4. DashScope `qwen3-asr-flash-realtime` 属于另一套 `/api-ws/v1/realtime` session 协议，不属于当前代理通道；若后续要使用该模型，需要新增独立协议适配。
+
+客户端发送：
+
+- 二进制帧：PCM 16k 单声道音频 chunk
+- 文本帧：`{"type":"finish"}` 表示结束录音
+
+服务端返回：
+
+```json
+{ "type": "text", "text": "患者咳嗽", "isSentenceEnd": false }
+```
+
+```json
+{ "type": "final", "text": "完整识别文本" }
+```
+
+```json
+{ "type": "error", "message": "错误说明" }
+```
 
 ### 4.4 POST `/v1/knowledge/pmphai/search`
 
@@ -1049,9 +1154,10 @@ Content-Type: application/json
   "apiKey": "sk-xxx",
   "modelName": "deepseek-chat",
   "audioBaseUrl": "https://example.com/v1",
+  "audioApiKey": "sk-audio",
   "audioModel": "whisper-1",
-  "speechProvider": "aliyun",
-  "speechModel": "paraformer-realtime",
+  "speechProvider": "openai-compatible",
+  "speechModel": "whisper-1",
   "knowledgeBaseEnabled": true,
   "knowledgeBaseBaseUrl": "https://pmphai.example.com",
   "pmphaiEnabled": true,
@@ -1069,9 +1175,22 @@ Content-Type: application/json
 }
 ```
 
+语音配置最小要求：
+
+1. `apiKey` 为主模型密钥，也是 `audioApiKey` 留空时的语音密钥回退值。
+2. `audioApiKey` 为语音上游独立密钥；可留空，留空时复用 `apiKey`，当语音和主模型供应商不一致时必须填写。
+3. `audioBaseUrl` 为服务端实际语音转写地址；可留空，留空时复用 `apiBaseUrl`。
+4. `audioModel` 为服务端实际转写模型；可留空，`openai-compatible` 默认 `whisper-1`，`aliyun-dashscope` 默认 `qwen3-asr-flash`。
+5. `speechProvider` / `speechModel` 用于 `/v1/client/bootstrap` 下发给桌面端；`speechProvider=aliyun-dashscope` 时，`speechModel` 同时作为服务端实时 WebSocket 代理连接 DashScope `/api-ws/v1/inference` 的模型名，默认 `paraformer-realtime-v2`，也可填同协议 Fun-ASR / Gummy / Paraformer realtime 模型名。
+
+语音上游路径：
+
+1. `speechProvider=openai-compatible`：服务端将录音文件转为 multipart，调用 `{audioBaseUrl}/audio/transcriptions`。
+2. `speechProvider=aliyun-dashscope`：服务端将录音转为 Data URL，调用 DashScope 兼容模式 `{audioBaseUrl}/chat/completions`；`audioBaseUrl` 建议配置为 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
+
 ### 5.27 PUT `/admin/api/configs/{idConfig}`
 
-用途：修改 AI 配置；`apiKey`、`reviewerApiKey`、`pmphaiAppKey`、`pmphaiAppSecret` 为空时保留原值。
+用途：修改 AI 配置；`apiKey`、`audioApiKey`、`reviewerApiKey`、`pmphaiAppKey`、`pmphaiAppSecret` 为空时保留原值。
 
 ### 5.28 DELETE `/admin/api/configs/{idConfig}`
 
@@ -1350,7 +1469,89 @@ Content-Type: application/json
 1. `speech_proxy` 日志的 `payloadJson` 只保留录音元数据、请求摘要和上游回文，不再保存原始 base64 音频
 2. 若存在录音文件落盘，返回记录中的 `audioFilePath` 会指向该文件
 
-### 5.49 GET `/admin/api/feedbacks`
+### 5.49 GET `/admin/api/user-logs/consultations`
+
+用途：分页查询运维用户日志列表。该模块是专门给运维人员使用的问诊聚合日志，不替代原有操作日志页面。
+
+请求参数：
+
+- `current`、`size`
+- `keyword`：跨机构、医生、患者、问诊 ID 模糊搜索
+- `consultationType`：`voice` / `smart`
+- `dateFrom`、`dateTo`
+
+响应 `data`：
+
+```json
+{
+  "current": 1,
+  "size": 10,
+  "total": 1,
+  "records": [
+    {
+      "idLog": "uuid",
+      "consultationId": "CONSULT-001",
+      "naOrg": "区域中心医院",
+      "naDoctor": "张医生",
+      "consultationTime": "2026-04-27T10:00:00",
+      "patientName": "王某",
+      "patientGender": "男",
+      "patientAge": "45岁",
+      "consultationType": "voice",
+      "hasAudio": true,
+      "hasSpeechText": true,
+      "status": "completed"
+    }
+  ]
+}
+```
+
+### 5.50 GET `/admin/api/user-logs/consultations/{idLog}`
+
+用途：查看一次问诊的运维用户日志详情。
+
+响应 `data`：
+
+```json
+{
+  "idLog": "uuid",
+  "consultationId": "CONSULT-001",
+  "idOrg": "ORG001",
+  "naOrg": "区域中心医院",
+  "idDoctor": "D001",
+  "naDoctor": "张医生",
+  "patientName": "王某",
+  "consultationType": "voice",
+  "speechText": "医生您好，我发热一天，最高39度，伴咳嗽、咽痛。",
+  "audioFileName": "voice-consultation-1770000000000.wav",
+  "audioMimeType": "audio/wav",
+  "audioSize": 128000,
+  "hasAudio": true,
+  "hasSpeechText": true,
+  "firstSnapshotJson": "{\"chiefComplaint\":\"咳嗽3天\"}",
+  "finalSnapshotJson": "{\"chiefComplaint\":\"咳嗽、咳痰3天\"}",
+  "selectionJson": "{\"selectedMedicineNames\":[\"氨溴索\"]}",
+  "status": "completed",
+  "consultationTime": "2026-04-27T10:00:00"
+}
+```
+
+### 5.50.1 GET `/admin/api/user-logs/consultations/{idLog}/audio`
+
+用途：后台用户日志详情播放语音问诊原始录音。
+
+响应：
+
+- `Content-Type`：优先使用日志中的 `audioMimeType`，缺失时为 `application/octet-stream`
+- `Content-Disposition: inline`
+- Body：录音文件二进制内容
+
+约束：
+
+1. 仅管理端鉴权后可访问。
+2. 接口只根据 `idLog` 查表后读取服务端保存的音频文件，不接受任意文件路径参数。
+
+### 5.51 GET `/admin/api/feedbacks`
 
 用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。
 
@@ -1392,7 +1593,7 @@ Content-Type: application/json
 }
 ```
 
-### 5.50 GET `/admin/api/feedbacks/{feedbackId}`
+### 5.52 GET `/admin/api/feedbacks/{feedbackId}`
 
 用途：查看反馈详情。管理端将其拆分为「摘要」与「技术详情」两个 Tab，前者展示评分/说明/医生身份/标签/截图，后者展示 traceId/chainContext/sessionId 等技术字段，便于工程师排查。
 

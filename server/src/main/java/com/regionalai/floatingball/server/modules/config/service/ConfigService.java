@@ -30,6 +30,12 @@ import java.util.stream.Collectors;
 @Service
 public class ConfigService {
 
+    private static final String DEFAULT_AUDIO_MODEL = "whisper-1";
+    private static final String DEFAULT_DASHSCOPE_AUDIO_MODEL = "qwen3-asr-flash";
+    private static final String DEFAULT_DASHSCOPE_REALTIME_MODEL = "paraformer-realtime-v2";
+    private static final String DEFAULT_SPEECH_PROVIDER = "openai-compatible";
+    private static final String ALIYUN_SPEECH_PROVIDER = "aliyun-dashscope";
+
     private final AiConfigMapper aiConfigMapper;
     private final AesUtils aesUtils;
     private final ObjectMapper objectMapper;
@@ -148,9 +154,11 @@ public class ConfigService {
         target.setApiBaseUrl(request.getApiBaseUrl());
         target.setModelName(request.getModelName());
         target.setAudioBaseUrl(request.getAudioBaseUrl());
-        target.setAudioModel(request.getAudioModel());
-        target.setSpeechProvider(request.getSpeechProvider());
-        target.setSpeechModel(request.getSpeechModel());
+        String speechProvider = normalizeSpeechProvider(request.getSpeechProvider());
+        String audioModel = resolveAudioModel(speechProvider, request.getAudioModel());
+        target.setAudioModel(audioModel);
+        target.setSpeechProvider(speechProvider);
+        target.setSpeechModel(resolveSpeechModel(speechProvider, request.getSpeechModel(), audioModel));
         target.setKnowledgeBaseEnabled(Boolean.TRUE.equals(request.getKnowledgeBaseEnabled()) ? "1" : "0");
         target.setKnowledgeBaseBaseUrl(request.getKnowledgeBaseBaseUrl());
         target.setPmphaiEnabled(Boolean.TRUE.equals(request.getPmphaiEnabled()) ? "1" : "0");
@@ -166,6 +174,11 @@ public class ConfigService {
             target.setApiKeyEncrypted(aesUtils.encrypt(request.getApiKey()));
         } else if (existing != null) {
             target.setApiKeyEncrypted(existing.getApiKeyEncrypted());
+        }
+        if (StringUtils.hasText(request.getAudioApiKey())) {
+            target.setAudioApiKeyEncrypted(aesUtils.encrypt(request.getAudioApiKey()));
+        } else if (existing != null) {
+            target.setAudioApiKeyEncrypted(existing.getAudioApiKeyEncrypted());
         }
         if (StringUtils.hasText(request.getReviewerApiKey())) {
             target.setReviewerApiKeyEncrypted(aesUtils.encrypt(request.getReviewerApiKey()));
@@ -204,6 +217,9 @@ public class ConfigService {
                 throw new BusinessException("featuresJson 必须是合法 JSON");
             }
         }
+        if (StringUtils.hasText(request.getSpeechProvider()) && normalizeSpeechProviderOrNull(request.getSpeechProvider()) == null) {
+            throw new BusinessException("语音服务提供方必须是 openai-compatible 或 aliyun-dashscope");
+        }
     }
 
     private AiConfig resolveVisibleConfig(String orgId, String regionId) {
@@ -236,12 +252,17 @@ public class ConfigService {
     private ResolvedAiConfig toResolved(AiConfig config) {
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setBaseUrl(trimRightSlash(config.getApiBaseUrl()));
-        resolved.setApiKey(aesUtils.decrypt(config.getApiKeyEncrypted()));
+        String apiKey = aesUtils.decrypt(config.getApiKeyEncrypted());
+        String audioApiKey = aesUtils.decrypt(config.getAudioApiKeyEncrypted());
+        resolved.setApiKey(apiKey);
+        resolved.setAudioApiKey(StringUtils.hasText(audioApiKey) ? audioApiKey : apiKey);
         resolved.setModel(config.getModelName());
         resolved.setAudioBaseUrl(StringUtils.hasText(config.getAudioBaseUrl()) ? trimRightSlash(config.getAudioBaseUrl()) : trimRightSlash(config.getApiBaseUrl()));
-        resolved.setAudioModel(config.getAudioModel());
-        resolved.setSpeechProvider(config.getSpeechProvider());
-        resolved.setSpeechModel(config.getSpeechModel());
+        String speechProvider = normalizeSpeechProvider(config.getSpeechProvider());
+        String audioModel = resolveAudioModel(speechProvider, config.getAudioModel());
+        resolved.setAudioModel(audioModel);
+        resolved.setSpeechProvider(speechProvider);
+        resolved.setSpeechModel(resolveSpeechModel(speechProvider, config.getSpeechModel(), audioModel));
         resolved.setKnowledgeBaseEnabled("1".equals(config.getKnowledgeBaseEnabled()));
         resolved.setKnowledgeBaseBaseUrl(config.getKnowledgeBaseBaseUrl());
         resolved.setPmphaiEnabled("1".equals(config.getPmphaiEnabled()));
@@ -276,10 +297,13 @@ public class ConfigService {
         view.setApiBaseUrl(config.getApiBaseUrl());
         view.setApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getApiKeyEncrypted())));
         view.setModelName(config.getModelName());
+        view.setAudioApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getAudioApiKeyEncrypted())));
         view.setAudioBaseUrl(config.getAudioBaseUrl());
-        view.setAudioModel(config.getAudioModel());
-        view.setSpeechProvider(config.getSpeechProvider());
-        view.setSpeechModel(config.getSpeechModel());
+        String speechProvider = normalizeSpeechProvider(config.getSpeechProvider());
+        String audioModel = resolveAudioModel(speechProvider, config.getAudioModel());
+        view.setAudioModel(audioModel);
+        view.setSpeechProvider(speechProvider);
+        view.setSpeechModel(resolveSpeechModel(speechProvider, config.getSpeechModel(), audioModel));
         view.setKnowledgeBaseEnabled(config.getKnowledgeBaseEnabled());
         view.setKnowledgeBaseBaseUrl(config.getKnowledgeBaseBaseUrl());
         view.setPmphaiEnabled(config.getPmphaiEnabled());
@@ -302,5 +326,60 @@ public class ConfigService {
             return value;
         }
         return value.replaceAll("/+$", "");
+    }
+
+    private String resolveAudioModel(String speechProvider, String value) {
+        String model = StringUtils.hasText(value) ? value.trim() : null;
+        if (ALIYUN_SPEECH_PROVIDER.equals(speechProvider)) {
+            if (!StringUtils.hasText(model) || DEFAULT_AUDIO_MODEL.equalsIgnoreCase(model)
+                || model.toLowerCase().startsWith("paraformer")) {
+                return DEFAULT_DASHSCOPE_AUDIO_MODEL;
+            }
+            return model;
+        }
+        return StringUtils.hasText(model) ? model : DEFAULT_AUDIO_MODEL;
+    }
+
+    private String resolveSpeechModel(String speechProvider, String speechModel, String audioModel) {
+        String model = StringUtils.hasText(speechModel) ? speechModel.trim() : null;
+        if (StringUtils.hasText(model)) {
+            if (!ALIYUN_SPEECH_PROVIDER.equals(speechProvider)) {
+                return model;
+            }
+            String lowerModel = model.toLowerCase();
+            if (isDashScopeInferenceRealtimeModel(lowerModel)) {
+                return model;
+            }
+        }
+        if (ALIYUN_SPEECH_PROVIDER.equals(speechProvider)) {
+            return DEFAULT_DASHSCOPE_REALTIME_MODEL;
+        }
+        return resolveAudioModel(speechProvider, audioModel);
+    }
+
+    private boolean isDashScopeInferenceRealtimeModel(String lowerModel) {
+        return (lowerModel.startsWith("fun-asr") && lowerModel.contains("realtime"))
+            || lowerModel.startsWith("paraformer-realtime")
+            || "gummy-realtime-v1".equals(lowerModel)
+            || "gummy-chat-v1".equals(lowerModel);
+    }
+
+    private String normalizeSpeechProvider(String value) {
+        String normalized = normalizeSpeechProviderOrNull(value);
+        return normalized == null ? DEFAULT_SPEECH_PROVIDER : normalized;
+    }
+
+    private String normalizeSpeechProviderOrNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = value.trim().toLowerCase();
+        if ("openai-compatible".equals(normalized) || "openai".equals(normalized) || "whisper".equals(normalized)) {
+            return DEFAULT_SPEECH_PROVIDER;
+        }
+        if (ALIYUN_SPEECH_PROVIDER.equals(normalized) || "aliyun".equals(normalized) || "dashscope".equals(normalized)) {
+            return ALIYUN_SPEECH_PROVIDER;
+        }
+        return null;
     }
 }

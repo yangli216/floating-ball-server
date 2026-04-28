@@ -10,6 +10,7 @@ public class ResolvedAiConfig {
     private String baseUrl;
     private String apiKey;
     private String model;
+    private String audioApiKey;
     private String audioBaseUrl;
     private String audioModel;
     private String speechProvider;

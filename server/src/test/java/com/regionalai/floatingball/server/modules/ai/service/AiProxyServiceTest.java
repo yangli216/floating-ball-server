@@ -150,4 +150,39 @@ class AiProxyServiceTest {
         assertThat(requestBody).containsEntry("fileName", "speech.webm");
         assertThat(requestBody).containsEntry("sourceAudioSize", 12);
     }
+
+    @Test
+    void resolveAudioApiKeyShouldPreferSpeechKeyAndFallbackToMainKey() {
+        ConfigService configService = mock(ConfigService.class);
+        AuditService auditService = mock(AuditService.class);
+        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+
+        ResolvedAiConfig resolved = new ResolvedAiConfig();
+        resolved.setApiKey("main-key");
+        resolved.setAudioApiKey("speech-key");
+
+        String speechKey = ReflectionTestUtils.invokeMethod(service, "resolveAudioApiKey", resolved);
+        assertThat(speechKey).isEqualTo("speech-key");
+
+        resolved.setAudioApiKey("");
+        String fallbackKey = ReflectionTestUtils.invokeMethod(service, "resolveAudioApiKey", resolved);
+        assertThat(fallbackKey).isEqualTo("main-key");
+    }
+
+    @Test
+    void dashScopeSpeechShouldNormalizeEndpointAndLegacyModel() {
+        ConfigService configService = mock(ConfigService.class);
+        AuditService auditService = mock(AuditService.class);
+        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+
+        ResolvedAiConfig resolved = new ResolvedAiConfig();
+        resolved.setSpeechProvider("aliyun-dashscope");
+        resolved.setAudioModel("paraformer-realtime-v2");
+
+        String model = ReflectionTestUtils.invokeMethod(service, "resolveAudioModel", resolved);
+        String endpoint = ReflectionTestUtils.invokeMethod(service, "buildDashScopeSpeechEndpoint", "https://dashscope.aliyuncs.com");
+
+        assertThat(model).isEqualTo("qwen3-asr-flash");
+        assertThat(endpoint).isEqualTo("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+    }
 }
