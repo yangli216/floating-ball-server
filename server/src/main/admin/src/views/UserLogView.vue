@@ -17,6 +17,14 @@
             :value="item.value"
           />
         </el-select>
+        <el-select v-model="filters.status" clearable placeholder="问诊结果" class="filter-select">
+          <el-option
+            v-for="item in statusOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
         <el-date-picker
           v-model="filters.dateRange"
           type="datetimerange"
@@ -26,10 +34,12 @@
           start-placeholder="开始时间"
           end-placeholder="结束时间"
           value-format="yyyy-MM-dd HH:mm:ss"
+          :picker-options="datePickerOptions"
           class="filter-date"
         />
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
+        <el-button icon="el-icon-download" :loading="exporting" @click="handleExport">导出</el-button>
       </div>
     </div>
 
@@ -65,11 +75,17 @@
           <span v-if="!row.hasAudio && !row.hasSpeechText" class="empty-inline">--</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="问诊结果" width="110">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="row.status === 'completed' ? 'success' : 'info'">
-            {{ row.status === 'completed' ? '已完成' : '已生成' }}
+          <el-tag size="mini" :type="statusMeta(row.status).type">
+            {{ statusMeta(row.status).label }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="修改数" width="80" align="center">
+        <template slot-scope="{ row }">
+          <span v-if="row.totalChanges != null && row.totalChanges > 0">{{ row.totalChanges }}</span>
+          <span v-else class="empty-inline">--</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
@@ -232,6 +248,24 @@
             </div>
           </div>
         </div>
+
+        <div v-if="timelineItems.length" class="timeline-section">
+          <div class="snapshot-panel__title">问诊流程</div>
+          <el-timeline>
+            <el-timeline-item
+              v-for="(item, index) in timelineItems"
+              :key="index"
+              :timestamp="formatDateTime(item.operationTime)"
+              placement="top"
+              :type="item.result === '1' || item.result === 'success' ? 'success' : item.result === '0' ? 'danger' : 'primary'"
+            >
+              <div class="timeline-content">
+                <span class="timeline-module">{{ item.module || item.eventType }}</span>
+                <span class="timeline-action">{{ item.action }}</span>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+        </div>
       </div>
       <span slot="footer">
         <el-button @click="detailDialogVisible = false">关闭</el-button>
@@ -385,8 +419,36 @@ function createDefaultFilters() {
   return {
     keyword: '',
     consultationType: '',
+    status: '',
     dateRange: []
   }
+}
+
+function getDateShortcuts() {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return [
+    { text: '今日', onClick(picker) { picker.$emit('pick', [today, now]) } },
+    { text: '本周', onClick(picker) {
+      const day = today.getDay() || 7
+      const start = new Date(today)
+      start.setDate(start.getDate() - day + 1)
+      picker.$emit('pick', [start, now])
+    }},
+    { text: '本月', onClick(picker) {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      picker.$emit('pick', [start, now])
+    }},
+    { text: '本季度', onClick(picker) {
+      const quarter = Math.floor(now.getMonth() / 3)
+      const start = new Date(now.getFullYear(), quarter * 3, 1)
+      picker.$emit('pick', [start, now])
+    }},
+    { text: '本年', onClick(picker) {
+      const start = new Date(now.getFullYear(), 0, 1)
+      picker.$emit('pick', [start, now])
+    }}
+  ]
 }
 
 export default {
@@ -398,6 +460,7 @@ export default {
     return {
       loading: false,
       detailLoading: false,
+      exporting: false,
       current: 1,
       size: 10,
       total: 0,
@@ -405,13 +468,22 @@ export default {
       filters: createDefaultFilters(),
       detailDialogVisible: false,
       detailRecord: null,
+      timelineItems: [],
       audioObjectUrl: '',
       audioLoading: false,
       audioLoadError: '',
       consultationTypeOptions: [
         { value: 'voice', label: '语音问诊', type: 'success' },
         { value: 'smart', label: '智能问诊', type: 'primary' }
-      ]
+      ],
+      statusOptions: [
+        { value: 'generated', label: '已生成' },
+        { value: 'completed', label: '一键回写' },
+        { value: 'abandoned', label: '放弃' }
+      ],
+      datePickerOptions: {
+        shortcuts: getDateShortcuts()
+      }
     }
   },
   computed: {
@@ -442,6 +514,7 @@ export default {
             size: this.size,
             keyword: this.filters.keyword || undefined,
             consultationType: this.filters.consultationType || undefined,
+            status: this.filters.status || undefined,
             dateFrom: dateRange[0] || undefined,
             dateTo: dateRange[1] || undefined
           }
@@ -468,16 +541,25 @@ export default {
       this.detailLoading = true
       this.clearAudioObjectUrl()
       this.audioLoadError = ''
+      this.timelineItems = []
       this.detailRecord = row
       try {
         this.detailRecord = await http.get(`/admin/api/user-logs/consultations/${row.idLog}`)
         if (this.detailRecord && this.detailRecord.hasAudio) {
           await this.loadAudio(this.detailRecord.idLog)
         }
+        this.loadTimeline(row.idLog)
       } catch (error) {
         this.$message.error(error.message || '加载详情失败')
       } finally {
         this.detailLoading = false
+      }
+    },
+    async loadTimeline(idLog) {
+      try {
+        this.timelineItems = await http.get(`/admin/api/user-logs/consultations/${idLog}/timeline`)
+      } catch (error) {
+        this.timelineItems = []
       }
     },
     async loadAudio(idLog) {
@@ -505,6 +587,7 @@ export default {
       this.clearAudioObjectUrl()
       this.audioLoadError = ''
       this.audioLoading = false
+      this.timelineItems = []
     },
     normalizeText(value) {
       return normalizeTextValue(value)
@@ -529,6 +612,41 @@ export default {
       const matched = this.consultationTypeOptions.find(item => item.value === text)
       if (matched) return matched
       return { label: text || '--', type: 'info' }
+    },
+    statusMeta(value) {
+      const text = this.normalizeText(value)
+      if (text === 'completed') return { label: '一键回写', type: 'success' }
+      if (text === 'abandoned') return { label: '放弃', type: 'danger' }
+      if (text === 'generated') return { label: '已生成', type: 'info' }
+      return { label: text || '--', type: 'info' }
+    },
+    async handleExport() {
+      this.exporting = true
+      try {
+        const dateRange = Array.isArray(this.filters.dateRange) ? this.filters.dateRange : []
+        const blob = await http.get('/admin/api/user-logs/consultations/export', {
+          params: {
+            keyword: this.filters.keyword || undefined,
+            consultationType: this.filters.consultationType || undefined,
+            status: this.filters.status || undefined,
+            dateFrom: dateRange[0] || undefined,
+            dateTo: dateRange[1] || undefined
+          },
+          responseType: 'blob'
+        })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = '用户日志_' + new Date().toISOString().slice(0, 10) + '.xlsx'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      } catch (error) {
+        this.$message.error(error.message || '导出失败')
+      } finally {
+        this.exporting = false
+      }
     },
     shouldShowSpeechSection(record) {
       if (!record) return false
@@ -878,5 +996,33 @@ export default {
   .selection-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.timeline-section {
+  margin-top: 16px;
+  border: 1px solid #E8EEEC;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+}
+
+.timeline-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-module {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #F0F2F5;
+  color: #5B5A55;
+  font-size: 12px;
+}
+
+.timeline-action {
+  color: #2C2C2A;
+  font-size: 13px;
 }
 </style>

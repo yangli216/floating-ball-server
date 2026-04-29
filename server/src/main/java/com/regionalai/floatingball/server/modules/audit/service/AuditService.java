@@ -60,6 +60,7 @@ public class AuditService {
             log.setOperationTime(event.getTimestamp() == null
                 ? LocalDateTime.now()
                 : LocalDateTime.ofInstant(Instant.ofEpochMilli(event.getTimestamp()), ZoneId.systemDefault()));
+            log.setConsultationId(extractText(payload, "consultationId"));
             log.setFgActive("1");
             try {
                 log.setPayloadJson(objectMapper.writeValueAsString(payload));

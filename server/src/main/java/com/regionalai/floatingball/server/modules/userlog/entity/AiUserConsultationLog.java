@@ -86,6 +86,12 @@ public class AiUserConsultationLog extends BaseEntity {
     @TableField("selection_json")
     private String selectionJson;
 
+    @TableField("change_summary_json")
+    private String changeSummaryJson;
+
+    @TableField("total_changes")
+    private Integer totalChanges;
+
     @TableField("status")
     private String status;
 

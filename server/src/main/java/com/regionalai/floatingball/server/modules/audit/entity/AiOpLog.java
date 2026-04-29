@@ -39,6 +39,9 @@ public class AiOpLog extends BaseEntity {
     @TableField("audio_file_path")
     private String audioFilePath;
 
+    @TableField("consultation_id")
+    private String consultationId;
+
     @TableField("op_result")
     private String opResult;
 

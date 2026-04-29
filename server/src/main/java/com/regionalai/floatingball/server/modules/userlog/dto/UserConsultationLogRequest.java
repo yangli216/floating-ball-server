@@ -30,4 +30,6 @@ public class UserConsultationLogRequest {
     private Object firstSnapshot;
     private Object finalSnapshot;
     private Object selectionSnapshot;
+    private Object changeSummary;
+    private Boolean abandoned;
 }

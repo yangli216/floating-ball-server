@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.userlog.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
+import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.userlog.dto.UserConsultationLogRequest;
 import com.regionalai.floatingball.server.modules.userlog.entity.AiUserConsultationLog;
@@ -35,13 +36,16 @@ class UserConsultationLogServiceTest {
     private AiUserConsultationLogMapper mapper;
 
     @Mock
+    private AiOpLogMapper opLogMapper;
+
+    @Mock
     private AudioLogStorageService audioLogStorageService;
 
     private UserConsultationLogService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserConsultationLogService(mapper, new ObjectMapper(), audioLogStorageService);
+        service = new UserConsultationLogService(mapper, opLogMapper, new ObjectMapper(), audioLogStorageService);
     }
 
     @Test
@@ -172,7 +176,7 @@ class UserConsultationLogServiceTest {
     void listShouldRejectInvalidDateFormat() {
         BusinessException ex = assertThrows(
             BusinessException.class,
-            () -> service.list(1, 10, null, null, "bad-date", null)
+            () -> service.list(1, 10, null, null, null, null, null, "bad-date", null)
         );
 
         assertEquals("用户日志查询时间格式非法", ex.getMessage());

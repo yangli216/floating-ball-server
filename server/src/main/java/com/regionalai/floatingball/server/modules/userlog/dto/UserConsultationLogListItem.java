@@ -21,5 +21,6 @@ public class UserConsultationLogListItem {
     private String patientAge;
     private Boolean hasAudio;
     private Boolean hasSpeechText;
+    private Integer totalChanges;
     private String status;
 }

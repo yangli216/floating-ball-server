@@ -7,7 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
+import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
+import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
+import com.regionalai.floatingball.server.modules.userlog.dto.ConsultationTimelineItem;
 import com.regionalai.floatingball.server.modules.userlog.dto.UserConsultationLogListItem;
 import com.regionalai.floatingball.server.modules.userlog.dto.UserConsultationLogRequest;
 import com.regionalai.floatingball.server.modules.userlog.entity.AiUserConsultationLog;
@@ -37,15 +40,19 @@ public class UserConsultationLogService {
     private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final String STATUS_GENERATED = "generated";
     private static final String STATUS_COMPLETED = "completed";
+    private static final String STATUS_ABANDONED = "abandoned";
 
     private final AiUserConsultationLogMapper userConsultationLogMapper;
+    private final AiOpLogMapper aiOpLogMapper;
     private final ObjectMapper objectMapper;
     private final AudioLogStorageService audioLogStorageService;
 
     public UserConsultationLogService(AiUserConsultationLogMapper userConsultationLogMapper,
+                                      AiOpLogMapper aiOpLogMapper,
                                       ObjectMapper objectMapper,
                                       AudioLogStorageService audioLogStorageService) {
         this.userConsultationLogMapper = userConsultationLogMapper;
+        this.aiOpLogMapper = aiOpLogMapper;
         this.objectMapper = objectMapper;
         this.audioLogStorageService = audioLogStorageService;
     }
@@ -80,12 +87,25 @@ public class UserConsultationLogService {
         }
         if (request.getFinalSnapshot() != null) {
             entity.setFinalSnapshotJson(writeJson(request.getFinalSnapshot()));
-            entity.setStatus(STATUS_COMPLETED);
+            if (Boolean.TRUE.equals(request.getAbandoned())) {
+                entity.setStatus(STATUS_ABANDONED);
+            } else {
+                entity.setStatus(STATUS_COMPLETED);
+            }
+        } else if (Boolean.TRUE.equals(request.getAbandoned())) {
+            entity.setStatus(STATUS_ABANDONED);
         } else if (!StringUtils.hasText(entity.getStatus())) {
             entity.setStatus(STATUS_GENERATED);
         }
         if (request.getSelectionSnapshot() != null) {
             entity.setSelectionJson(writeJson(request.getSelectionSnapshot()));
+        }
+        if (request.getChangeSummary() != null) {
+            entity.setChangeSummaryJson(writeJson(request.getChangeSummary()));
+            Integer total = extractTotalChanges(request.getChangeSummary());
+            if (total != null) {
+                entity.setTotalChanges(total);
+            }
         }
 
         String previousAudioPath = entity.getAudioFilePath();
@@ -111,9 +131,83 @@ public class UserConsultationLogService {
                                                           long size,
                                                           String keyword,
                                                           String consultationType,
+                                                          String status,
+                                                          Integer minChanges,
+                                                          Integer maxChanges,
                                                           String dateFrom,
                                                           String dateTo) {
         Page<AiUserConsultationLog> page = new Page<AiUserConsultationLog>(current, size);
+        LambdaQueryWrapper<AiUserConsultationLog> wrapper = buildListWrapper(keyword, consultationType, status, minChanges, maxChanges, dateFrom, dateTo);
+        Page<AiUserConsultationLog> result = userConsultationLogMapper.selectPage(page, wrapper);
+        return new PageResponse<UserConsultationLogListItem>(
+            result.getCurrent(),
+            result.getSize(),
+            result.getTotal(),
+            toListItems(result.getRecords())
+        );
+    }
+
+    private static final int EXPORT_MAX_ROWS = 10000;
+
+    public byte[] exportExcel(String keyword,
+                              String consultationType,
+                              String status,
+                              Integer minChanges,
+                              Integer maxChanges,
+                              String dateFrom,
+                              String dateTo) {
+        LambdaQueryWrapper<AiUserConsultationLog> wrapper = buildListWrapper(keyword, consultationType, status, minChanges, maxChanges, dateFrom, dateTo);
+        wrapper.last("FETCH FIRST " + EXPORT_MAX_ROWS + " ROWS ONLY");
+        List<AiUserConsultationLog> records = userConsultationLogMapper.selectList(wrapper);
+
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            org.apache.poi.xssf.usermodel.XSSFSheet sheet = workbook.createSheet("用户日志");
+            String[] headers = {"机构", "医生", "问诊时间", "患者", "性别", "年龄", "问诊类型", "问诊结果", "修改数", "问诊ID"};
+            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+            org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            for (int i = 0; i < headers.length; i++) {
+                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            for (int i = 0; i < records.size(); i++) {
+                AiUserConsultationLog record = records.get(i);
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(i + 1);
+                row.createCell(0).setCellValue(safe(record.getNaOrg(), record.getIdOrg()));
+                row.createCell(1).setCellValue(safe(record.getNaDoctor(), record.getIdDoctor()));
+                row.createCell(2).setCellValue(record.getConsultationTime() != null ? record.getConsultationTime().format(DATE_TIME_FORMATTER) : "");
+                row.createCell(3).setCellValue(safe(record.getPatientName(), record.getPatientId()));
+                row.createCell(4).setCellValue(safe(record.getPatientGender()));
+                row.createCell(5).setCellValue(safe(record.getPatientAge()));
+                row.createCell(6).setCellValue(resolveConsultationTypeLabel(record.getConsultationType()));
+                row.createCell(7).setCellValue(resolveStatusLabel(record.getStatus()));
+                row.createCell(8).setCellValue(record.getTotalChanges() != null ? record.getTotalChanges() : 0);
+                row.createCell(9).setCellValue(safe(record.getConsultationId()));
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw new BusinessException("导出Excel失败：" + ex.getMessage());
+        }
+    }
+
+    private LambdaQueryWrapper<AiUserConsultationLog> buildListWrapper(String keyword,
+                                                                        String consultationType,
+                                                                        String status,
+                                                                        Integer minChanges,
+                                                                        Integer maxChanges,
+                                                                        String dateFrom,
+                                                                        String dateTo) {
         LocalDateTime startTime = parseDateTime(dateFrom, false);
         LocalDateTime endTime = parseDateTime(dateTo, true);
         LambdaQueryWrapper<AiUserConsultationLog> wrapper = new LambdaQueryWrapper<AiUserConsultationLog>()
@@ -140,20 +234,42 @@ public class UserConsultationLogService {
         if (StringUtils.hasText(consultationType)) {
             wrapper.eq(AiUserConsultationLog::getConsultationType, normalizeConsultationType(consultationType));
         }
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(AiUserConsultationLog::getStatus, status.trim().toLowerCase());
+        }
+        if (minChanges != null) {
+            wrapper.ge(AiUserConsultationLog::getTotalChanges, minChanges);
+        }
+        if (maxChanges != null) {
+            wrapper.le(AiUserConsultationLog::getTotalChanges, maxChanges);
+        }
         if (startTime != null) {
             wrapper.ge(AiUserConsultationLog::getConsultationTime, startTime);
         }
         if (endTime != null) {
             wrapper.le(AiUserConsultationLog::getConsultationTime, endTime);
         }
+        return wrapper;
+    }
 
-        Page<AiUserConsultationLog> result = userConsultationLogMapper.selectPage(page, wrapper);
-        return new PageResponse<UserConsultationLogListItem>(
-            result.getCurrent(),
-            result.getSize(),
-            result.getTotal(),
-            toListItems(result.getRecords())
-        );
+    private String safe(String... candidates) {
+        for (String c : candidates) {
+            if (StringUtils.hasText(c)) return c.trim();
+        }
+        return "";
+    }
+
+    private String resolveConsultationTypeLabel(String type) {
+        if ("voice".equals(type)) return "语音问诊";
+        if ("smart".equals(type)) return "智能问诊";
+        return type != null ? type : "";
+    }
+
+    private String resolveStatusLabel(String status) {
+        if (STATUS_COMPLETED.equals(status)) return "一键回写";
+        if (STATUS_ABANDONED.equals(status)) return "放弃";
+        if (STATUS_GENERATED.equals(status)) return "已生成";
+        return status != null ? status : "";
     }
 
     public AiUserConsultationLog detail(String idLog) {
@@ -180,6 +296,40 @@ public class UserConsultationLogService {
             );
         } catch (IOException ex) {
             throw new BusinessException("录音文件不可用：" + ex.getMessage());
+        }
+    }
+
+    public List<ConsultationTimelineItem> getTimeline(String idLog) {
+        AiUserConsultationLog log = detail(idLog);
+        String consultationId = log.getConsultationId();
+        if (!StringUtils.hasText(consultationId)) {
+            return new ArrayList<>();
+        }
+        LambdaQueryWrapper<AiOpLog> wrapper = new LambdaQueryWrapper<AiOpLog>()
+            .eq(AiOpLog::getFgActive, "1")
+            .eq(AiOpLog::getConsultationId, consultationId)
+            .orderByAsc(AiOpLog::getOperationTime);
+        List<AiOpLog> opLogs = aiOpLogMapper.selectList(wrapper);
+        List<ConsultationTimelineItem> items = new ArrayList<>();
+        for (AiOpLog opLog : opLogs) {
+            ConsultationTimelineItem item = new ConsultationTimelineItem();
+            item.setEventType(opLog.getSdLogType());
+            item.setModule(opLog.getNaModule());
+            item.setAction(opLog.getDesOp());
+            item.setResult(opLog.getOpResult());
+            item.setOperationTime(opLog.getOperationTime());
+            item.setDetails(parseJsonQuietly(opLog.getPayloadJson()));
+            items.add(item);
+        }
+        return items;
+    }
+
+    private Object parseJsonQuietly(String json) {
+        if (!StringUtils.hasText(json)) return null;
+        try {
+            return objectMapper.readValue(json, Object.class);
+        } catch (Exception ex) {
+            return json;
         }
     }
 
@@ -335,6 +485,17 @@ public class UserConsultationLogService {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private Integer extractTotalChanges(Object changeSummary) {
+        if (changeSummary instanceof java.util.Map) {
+            Object total = ((java.util.Map<String, Object>) changeSummary).get("totalChanges");
+            if (total instanceof Number) {
+                return ((Number) total).intValue();
+            }
+        }
+        return null;
+    }
+
     private LocalDateTime parseEpochMillis(Long value) {
         if (value == null || value <= 0) {
             return null;
@@ -363,6 +524,7 @@ public class UserConsultationLogService {
             item.setPatientAge(record.getPatientAge());
             item.setHasAudio(record.getHasAudio());
             item.setHasSpeechText(record.getHasSpeechText());
+            item.setTotalChanges(record.getTotalChanges());
             item.setStatus(record.getStatus());
             items.add(item);
         }
