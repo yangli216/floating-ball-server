@@ -54,13 +54,21 @@ public class AuditService {
             log.setIdDevice(device.getIdDevice());
             log.setIdOrg(device.getIdOrg());
             log.setSdLogType(event.getEventType());
-            log.setNaModule(resolveModule(event.getEventType(), payload));
-            log.setDesOp(resolveAction(event.getEventType(), payload));
+            String module = resolveModule(event.getEventType(), payload);
+            String action = resolveAction(event.getEventType(), payload);
+            String title = resolveTitle(payload, action);
+            log.setNaModule(module);
+            log.setOpAction(action);
+            log.setOpTitle(title);
+            log.setSourceModule(resolveSourceModule(payload));
+            log.setSceneCode(resolveScene(payload));
+            log.setTraceId(resolveTraceId(payload));
+            log.setDesOp(title);
             log.setOpResult(resolveResult(payload));
             log.setOperationTime(event.getTimestamp() == null
                 ? LocalDateTime.now()
                 : LocalDateTime.ofInstant(Instant.ofEpochMilli(event.getTimestamp()), ZoneId.systemDefault()));
-            log.setConsultationId(extractText(payload, "consultationId"));
+            log.setConsultationId(resolveConsultationId(payload));
             log.setFgActive("1");
             try {
                 log.setPayloadJson(objectMapper.writeValueAsString(payload));
@@ -96,6 +104,43 @@ public class AuditService {
         return action != null ? action : trimToNull(eventType);
     }
 
+    private String resolveTitle(Map<String, Object> payload, String fallbackAction) {
+        return firstNonBlank(
+            extractText(payload, "title"),
+            extractText(payload, "operationTitle"),
+            extractText(payload, "description"),
+            fallbackAction
+        );
+    }
+
+    private String resolveSourceModule(Map<String, Object> payload) {
+        return firstNonBlank(
+            extractText(payload, "sourceModule"),
+            extractNestedText(payload, "details", "sourceModule")
+        );
+    }
+
+    private String resolveScene(Map<String, Object> payload) {
+        return firstNonBlank(
+            extractText(payload, "scene"),
+            extractNestedText(payload, "details", "scene")
+        );
+    }
+
+    private String resolveTraceId(Map<String, Object> payload) {
+        return firstNonBlank(
+            extractText(payload, "traceId"),
+            extractNestedText(payload, "details", "traceId")
+        );
+    }
+
+    private String resolveConsultationId(Map<String, Object> payload) {
+        return firstNonBlank(
+            extractText(payload, "consultationId"),
+            extractNestedText(payload, "details", "consultationId")
+        );
+    }
+
     private String resolveResult(Map<String, Object> payload) {
         String explicitResult = normalizeResultValue(payload == null ? null : payload.get("result"));
         if (explicitResult != null) {
@@ -113,6 +158,27 @@ public class AuditService {
             return null;
         }
         return trimToNull(String.valueOf(payload.get(key)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractNestedText(Map<String, Object> payload, String parentKey, String key) {
+        if (payload == null) {
+            return null;
+        }
+        Object parent = payload.get(parentKey);
+        if (!(parent instanceof Map)) {
+            return null;
+        }
+        Object value = ((Map<String, Object>) parent).get(key);
+        return value == null ? null : trimToNull(String.valueOf(value));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asPayloadMap(Object payload) {
+        if (!(payload instanceof Map)) {
+            return null;
+        }
+        return (Map<String, Object>) payload;
     }
 
     private String firstNonBlank(String... candidates) {
@@ -162,6 +228,12 @@ public class AuditService {
                                       String keyword,
                                       String logType,
                                       String module,
+                                      String action,
+                                      String title,
+                                      String sourceModule,
+                                      String scene,
+                                      String traceId,
+                                      String consultationId,
                                       String result,
                                       String dateFrom,
                                       String dateTo) {
@@ -174,6 +246,18 @@ public class AuditService {
         if (StringUtils.hasText(keyword)) {
             wrapper.and(q -> q
                 .like(AiOpLog::getNaModule, keyword)
+                .or()
+                .like(AiOpLog::getOpAction, keyword)
+                .or()
+                .like(AiOpLog::getOpTitle, keyword)
+                .or()
+                .like(AiOpLog::getSourceModule, keyword)
+                .or()
+                .like(AiOpLog::getSceneCode, keyword)
+                .or()
+                .like(AiOpLog::getTraceId, keyword)
+                .or()
+                .like(AiOpLog::getConsultationId, keyword)
                 .or()
                 .like(AiOpLog::getSdLogType, keyword)
                 .or()
@@ -192,6 +276,24 @@ public class AuditService {
         }
         if (StringUtils.hasText(module)) {
             wrapper.like(AiOpLog::getNaModule, module.trim());
+        }
+        if (StringUtils.hasText(action)) {
+            wrapper.like(AiOpLog::getOpAction, action.trim());
+        }
+        if (StringUtils.hasText(title)) {
+            wrapper.like(AiOpLog::getOpTitle, title.trim());
+        }
+        if (StringUtils.hasText(sourceModule)) {
+            wrapper.like(AiOpLog::getSourceModule, sourceModule.trim());
+        }
+        if (StringUtils.hasText(scene)) {
+            wrapper.like(AiOpLog::getSceneCode, scene.trim());
+        }
+        if (StringUtils.hasText(traceId)) {
+            wrapper.eq(AiOpLog::getTraceId, traceId.trim());
+        }
+        if (StringUtils.hasText(consultationId)) {
+            wrapper.eq(AiOpLog::getConsultationId, consultationId.trim());
         }
         if (StringUtils.hasText(result)) {
             applyResultFilter(wrapper, result);
@@ -245,7 +347,14 @@ public class AuditService {
         log.setIdOrg(device == null ? null : device.getIdOrg());
         log.setSdLogType(logType);
         log.setNaModule(module);
-        log.setDesOp(action);
+        Map<String, Object> payloadMap = asPayloadMap(payload);
+        log.setOpAction(action);
+        log.setOpTitle(resolveTitle(payloadMap, action));
+        log.setSourceModule(resolveSourceModule(payloadMap));
+        log.setSceneCode(resolveScene(payloadMap));
+        log.setTraceId(resolveTraceId(payloadMap));
+        log.setConsultationId(resolveConsultationId(payloadMap));
+        log.setDesOp(firstNonBlank(log.getOpTitle(), action));
         log.setOpResult(success ? "1" : "0");
         log.setOperationTime(LocalDateTime.now());
         log.setFgActive("1");

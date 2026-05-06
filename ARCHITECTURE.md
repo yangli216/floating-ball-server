@@ -190,11 +190,11 @@ floating-ball-server/
 
 1. 客户端本地缓存事件
 2. 客户端对区域化操作日志不再依赖本地 SQLite，直接调用 `POST /v1/client/audit/events/batch`；启动时补传遗留队列，新事件入队后异步立即尝试一次，失败或离线时继续保留队列并按固定周期重试
-3. 客户端对 `operation` 事件优先上报 `{ module, action, result, operationType, operationName, details }`；其中 `module/action/result` 是服务端日志列表列，`operationType/operationName/details` 继续保留在原始 payload
+3. 客户端对 `operation` 事件优先上报 `{ module, action, title, sourceModule, scene, result, operationType, operationName, details }`；其中 `module/action/title/sourceModule/scene/result` 会被服务端提取到结构化列，`operationType/operationName/details` 继续保留在原始 payload
 4. 客户端本地只保留轻量失败重试队列，不再把区域化操作日志落本地 SQLite；服务端仍按同一批量接口落库
-5. 服务端兼容旧载荷：若未显式提供 `module/action/result`，则回退从 `operationType/operationName/success` 等字段推导
+5. 服务端兼容旧载荷：若未显式提供 `module/action/title/sourceModule/scene/result`，则回退从 `operationType/operationName/success` 与 `details.traceId / details.consultationId` 等字段推导
 6. 服务端写入 `c_ai_op_log`
-7. 管理端提供分页查询
+7. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选
 
 代理日志补充约束：
 
@@ -311,6 +311,7 @@ floating-ball-server/
 7. `c_ai_symptom_template`
 8. `c_ai_op_log`
    - 代理日志主体仍保存在 `payload_json`
+   - 同步冗余结构化列：`op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`、`consultation_id`
    - 语音代理的录音文件路径保存在 `audio_file_path`
 9. `c_ai_feedback`
    - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）

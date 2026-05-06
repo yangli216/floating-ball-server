@@ -1,11 +1,11 @@
 <template>
   <div>
     <div class="filter-bar">
-      <div class="page-toolbar__filters">
+      <div class="page-toolbar__filters log-filter-grid">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索模块、类型、描述、原始数据、设备或机构"
+          placeholder="搜索模块、标题、动作、原始数据、设备或机构"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
@@ -36,6 +36,48 @@
             :value="item.value"
           />
         </el-select>
+        <el-input
+          v-model.trim="filters.action"
+          clearable
+          placeholder="动作编码"
+          class="filter-input"
+          @keyup.enter.native="handleSearch"
+        />
+        <el-input
+          v-model.trim="filters.title"
+          clearable
+          placeholder="业务标题"
+          class="filter-input"
+          @keyup.enter.native="handleSearch"
+        />
+        <el-input
+          v-model.trim="filters.sourceModule"
+          clearable
+          placeholder="来源模块"
+          class="filter-input"
+          @keyup.enter.native="handleSearch"
+        />
+        <el-input
+          v-model.trim="filters.scene"
+          clearable
+          placeholder="业务场景"
+          class="filter-input"
+          @keyup.enter.native="handleSearch"
+        />
+        <el-input
+          v-model.trim="filters.traceId"
+          clearable
+          placeholder="Trace ID"
+          class="filter-input filter-input--wide"
+          @keyup.enter.native="handleSearch"
+        />
+        <el-input
+          v-model.trim="filters.consultationId"
+          clearable
+          placeholder="问诊ID"
+          class="filter-input"
+          @keyup.enter.native="handleSearch"
+        />
         <el-select
           v-model="filters.result"
           clearable
@@ -79,9 +121,19 @@
           {{ moduleLabel(row.naModule) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作描述" min-width="170" show-overflow-tooltip>
+      <el-table-column label="业务标题" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          {{ displayText(row.desOp) }}
+          {{ displayText(row.opTitle || row.desOp) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="动作编码" min-width="180" show-overflow-tooltip>
+        <template slot-scope="{ row }">
+          <span class="code-tag">{{ displayText(row.opAction) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="来源/场景" min-width="180" show-overflow-tooltip>
+        <template slot-scope="{ row }">
+          {{ formatSourceScene(row.sourceModule, row.sceneCode) }}
         </template>
       </el-table-column>
       <el-table-column label="结果" width="88">
@@ -131,6 +183,30 @@
           <div class="detail-card__value">{{ moduleLabel(payloadRecord.naModule) }}</div>
         </div>
         <div class="detail-card">
+          <div class="detail-card__label">业务标题</div>
+          <div class="detail-card__value">{{ displayText(payloadRecord.opTitle || payloadRecord.desOp) }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">动作编码</div>
+          <div class="detail-card__value">{{ displayText(payloadRecord.opAction) }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">来源模块</div>
+          <div class="detail-card__value">{{ displayText(payloadRecord.sourceModule) }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">业务场景</div>
+          <div class="detail-card__value">{{ displayText(payloadRecord.sceneCode) }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">Trace ID</div>
+          <div class="detail-card__value">{{ displayText(payloadRecord.traceId) }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">问诊ID</div>
+          <div class="detail-card__value">{{ displayText(payloadRecord.consultationId) }}</div>
+        </div>
+        <div class="detail-card">
           <div class="detail-card__label">结果</div>
           <div class="detail-card__value">{{ resultMeta(payloadRecord.opResult).label }}</div>
         </div>
@@ -175,7 +251,18 @@ const MODULE_LABELS = {
   'view:reception-capsule': '接待胶囊',
   'view:analytics': '数据分析页',
   'view:symptom-manage': '症状库维护页',
-  'view:knowledge-base': '知识库页'
+  'view:knowledge-base': '知识库页',
+  chat: '聊天助手',
+  consultation: '智能问诊',
+  voice_consultation: '语音问诊',
+  voice_capture: '语音采集',
+  reception: '接诊风险评估',
+  reviewer: '独立审查AI',
+  his_bridge: 'HIS 桥接',
+  regional_runtime: '区域化运行时',
+  diagnosis_path: '诊断路径',
+  navigation: '页面导航',
+  shell: '应用壳层'
 }
 
 const MODULE_OPTIONS = [
@@ -203,7 +290,18 @@ const MODULE_OPTIONS = [
   { value: 'view:reception-capsule', label: MODULE_LABELS['view:reception-capsule'] },
   { value: 'view:analytics', label: MODULE_LABELS['view:analytics'] },
   { value: 'view:symptom-manage', label: MODULE_LABELS['view:symptom-manage'] },
-  { value: 'view:knowledge-base', label: MODULE_LABELS['view:knowledge-base'] }
+  { value: 'view:knowledge-base', label: MODULE_LABELS['view:knowledge-base'] },
+  { value: 'chat', label: MODULE_LABELS.chat },
+  { value: 'consultation', label: MODULE_LABELS.consultation },
+  { value: 'voice_consultation', label: MODULE_LABELS.voice_consultation },
+  { value: 'voice_capture', label: MODULE_LABELS.voice_capture },
+  { value: 'reception', label: MODULE_LABELS.reception },
+  { value: 'reviewer', label: MODULE_LABELS.reviewer },
+  { value: 'his_bridge', label: MODULE_LABELS.his_bridge },
+  { value: 'regional_runtime', label: MODULE_LABELS.regional_runtime },
+  { value: 'diagnosis_path', label: MODULE_LABELS.diagnosis_path },
+  { value: 'navigation', label: MODULE_LABELS.navigation },
+  { value: 'shell', label: MODULE_LABELS.shell }
 ]
 
 function createDefaultFilters() {
@@ -211,6 +309,12 @@ function createDefaultFilters() {
     keyword: '',
     logType: '',
     module: '',
+    action: '',
+    title: '',
+    sourceModule: '',
+    scene: '',
+    traceId: '',
+    consultationId: '',
     result: '',
     dateRange: []
   }
@@ -258,6 +362,12 @@ export default {
             keyword: this.filters.keyword || undefined,
             logType: this.filters.logType || undefined,
             module: this.filters.module || undefined,
+            action: this.filters.action || undefined,
+            title: this.filters.title || undefined,
+            sourceModule: this.filters.sourceModule || undefined,
+            scene: this.filters.scene || undefined,
+            traceId: this.filters.traceId || undefined,
+            consultationId: this.filters.consultationId || undefined,
             result: this.filters.result || undefined,
             dateFrom: dateRange[0] || undefined,
             dateTo: dateRange[1] || undefined
@@ -345,7 +455,9 @@ export default {
       try {
         const payload = JSON.parse(text)
         const summaryParts = []
-        const moduleName = this.moduleLabel(payload.module || payload.sourceModule)
+        const moduleName = this.moduleLabel(payload.module)
+        const sourceScene = this.formatSourceScene(payload.sourceModule, payload.scene)
+        const title = this.normalizeText(payload.title)
         const action = this.normalizeText(payload.action)
         const operationName = this.normalizeText(payload.operationName)
         const responseText = this.normalizeText(payload.responseText)
@@ -353,10 +465,16 @@ export default {
         if (moduleName) {
           summaryParts.push(moduleName)
         }
+        if (title) {
+          summaryParts.push(title)
+        }
         if (action) {
           summaryParts.push(action)
         } else if (operationName) {
           summaryParts.push(operationName)
+        }
+        if (sourceScene !== '--') {
+          summaryParts.push(sourceScene)
         }
         if (errorMessage) {
           summaryParts.push(`失败: ${this.truncate(errorMessage, 40)}`)
@@ -387,18 +505,40 @@ export default {
         return value
       }
       return `${value.slice(0, maxLength)}...`
+    },
+    formatSourceScene(sourceModule, sceneCode) {
+      const left = this.normalizeText(sourceModule)
+      const right = this.normalizeText(sceneCode)
+      if (left && right) {
+        return `${left} / ${right}`
+      }
+      return left || right || '--'
     }
   }
 }
 </script>
 
 <style scoped>
+.log-filter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .search-input {
-  width: 300px;
+  width: 260px;
 }
 
 .filter-select {
   width: 150px;
+}
+
+.filter-input {
+  width: 160px;
+}
+
+.filter-input--wide {
+  width: 220px;
 }
 
 .filter-date {
@@ -455,6 +595,8 @@ export default {
 
 @media (max-width: 960px) {
   .search-input,
+  .filter-input,
+  .filter-input--wide,
   .filter-select,
   .filter-date {
     width: 100%;

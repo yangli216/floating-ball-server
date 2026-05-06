@@ -28,12 +28,18 @@ public class AdminLogController {
                                                    @RequestParam(required = false) String keyword,
                                                    @RequestParam(required = false) String logType,
                                                    @RequestParam(required = false) String module,
+                                                   @RequestParam(required = false) String action,
+                                                   @RequestParam(required = false) String title,
+                                                   @RequestParam(required = false) String sourceModule,
+                                                   @RequestParam(required = false) String scene,
+                                                   @RequestParam(required = false) String traceId,
+                                                   @RequestParam(required = false) String consultationId,
                                                    @RequestParam(required = false) String result,
                                                    @RequestParam(required = false) String dateFrom,
                                                    @RequestParam(required = false) String dateTo,
                                                    HttpServletRequest request) {
         return ApiResponse.success(
-            auditService.list(current, size, keyword, logType, module, result, dateFrom, dateTo),
+            auditService.list(current, size, keyword, logType, module, action, title, sourceModule, scene, traceId, consultationId, result, dateFrom, dateTo),
             RequestIdUtils.resolve(request)
         );
     }

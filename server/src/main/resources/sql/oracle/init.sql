@@ -308,9 +308,15 @@ CREATE TABLE c_ai_op_log (
     id_org               VARCHAR2(32),
     sd_log_type          VARCHAR2(64),
     na_module            VARCHAR2(128),
+    op_action            VARCHAR2(256),
+    op_title             VARCHAR2(500),
+    source_module        VARCHAR2(128),
+    scene_code           VARCHAR2(256),
+    trace_id             VARCHAR2(64),
     des_op               VARCHAR2(500),
     payload_json         CLOB,
     audio_file_path      VARCHAR2(1000),
+    consultation_id      VARCHAR2(64),
     op_result            VARCHAR2(8),
     operation_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fg_active            CHAR(1) DEFAULT '1' NOT NULL,
@@ -324,9 +330,15 @@ COMMENT ON COLUMN c_ai_op_log.id_device IS '设备ID';
 COMMENT ON COLUMN c_ai_op_log.id_org IS '机构ID';
 COMMENT ON COLUMN c_ai_op_log.sd_log_type IS '日志类型';
 COMMENT ON COLUMN c_ai_op_log.na_module IS '业务模块名称';
+COMMENT ON COLUMN c_ai_op_log.op_action IS '业务动作编码';
+COMMENT ON COLUMN c_ai_op_log.op_title IS '业务标题';
+COMMENT ON COLUMN c_ai_op_log.source_module IS '来源模块';
+COMMENT ON COLUMN c_ai_op_log.scene_code IS '业务场景编码';
+COMMENT ON COLUMN c_ai_op_log.trace_id IS '调用链traceId';
 COMMENT ON COLUMN c_ai_op_log.des_op IS '操作描述';
 COMMENT ON COLUMN c_ai_op_log.payload_json IS '日志负载JSON';
 COMMENT ON COLUMN c_ai_op_log.audio_file_path IS '语音代理录音文件路径';
+COMMENT ON COLUMN c_ai_op_log.consultation_id IS '关联问诊ID（语音问诊场景）';
 COMMENT ON COLUMN c_ai_op_log.op_result IS '操作结果';
 COMMENT ON COLUMN c_ai_op_log.operation_time IS '操作时间';
 COMMENT ON COLUMN c_ai_op_log.fg_active IS '逻辑删除标记';
@@ -334,6 +346,10 @@ COMMENT ON COLUMN c_ai_op_log.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_op_log.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_log_time ON c_ai_op_log (operation_time, fg_active);
+CREATE INDEX idx_c_ai_op_log_trace ON c_ai_op_log (trace_id, operation_time, fg_active);
+CREATE INDEX idx_c_ai_op_log_consultation ON c_ai_op_log (consultation_id, operation_time, fg_active);
+CREATE INDEX idx_c_ai_op_log_scene ON c_ai_op_log (source_module, scene_code, operation_time, fg_active);
+
 
 
 CREATE TABLE c_ai_user_consultation_log (

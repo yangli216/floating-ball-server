@@ -122,6 +122,20 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 2. 升级完成后，语音代理日志不再把原始 base64 音频写入 `payload_json`
 3. 录音内容会单独落为文件，数据库只保存对应文件路径
 
+## 结构化操作日志查询列升级
+
+如果库里已经存在旧版 `c_ai_op_log`，但还没有结构化查询列，请继续使用当前应用账号执行：
+
+```sql
+@upgrade_20260506_op_log_structured_query.sql
+```
+
+说明：
+
+1. 该脚本会为 `c_ai_op_log` 补齐 `op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`
+2. 升级完成后，管理端操作日志页可直接按动作编码、标题、来源模块、场景、traceId 查询
+3. 旧数据不会自动回填这些新列；如需对历史日志做精细查询，可执行额外数据修复脚本或接受仅对新日志生效
+
 ## 运维用户日志语音复盘升级
 
 如果库里已经存在旧版 `c_ai_user_consultation_log`，但还没有语音问诊录音和 ASR 文本字段，请继续使用当前应用账号执行：

@@ -464,13 +464,17 @@ Content-Type: application/json
       "eventId": "uuid",
       "eventType": "operation",
       "payload": {
-        "module": "api_call",
-        "action": "reference_feedback:diagnosis",
+        "module": "consultation",
+        "action": "reference_feedback_diagnosis",
+        "title": "接收 PHIS 引用回执",
+        "sourceModule": "consultation_reference",
+        "scene": "consultation-reference",
         "result": "success",
         "operationType": "api_call",
         "operationName": "reference_feedback:diagnosis",
         "details": {
-          "consultationId": "CONSULT-001"
+          "consultationId": "CONSULT-001",
+          "traceId": "TRACE-001"
         }
       },
       "timestamp": 1770000000000
@@ -1436,6 +1440,12 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - `keyword`
 - `logType`
 - `module`
+- `action`
+- `title`
+- `sourceModule`
+- `scene`
+- `traceId`
+- `consultationId`
 - `result`
 - `dateFrom`
 - `dateTo`
@@ -1453,10 +1463,16 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
       "idDevice": "uuid",
       "idOrg": "ORG001",
       "sdLogType": "operation",
-      "naModule": "api_call",
-      "desOp": "reference_feedback:diagnosis",
+      "naModule": "consultation",
+      "opAction": "reference_feedback_diagnosis",
+      "opTitle": "接收 PHIS 引用回执",
+      "sourceModule": "consultation_reference",
+      "sceneCode": "consultation-reference",
+      "traceId": "TRACE-001",
+      "consultationId": "CONSULT-001",
+      "desOp": "接收 PHIS 引用回执",
       "opResult": "1",
-      "payloadJson": "{\"module\":\"api_call\",\"action\":\"reference_feedback:diagnosis\",\"result\":\"success\",\"operationType\":\"api_call\",\"operationName\":\"reference_feedback:diagnosis\",\"details\":{\"consultationId\":\"CONSULT-001\"}}",
+      "payloadJson": "{\"module\":\"consultation\",\"action\":\"reference_feedback_diagnosis\",\"title\":\"接收 PHIS 引用回执\",\"sourceModule\":\"consultation_reference\",\"scene\":\"consultation-reference\",\"result\":\"success\",\"operationType\":\"api_call\",\"operationName\":\"reference_feedback:diagnosis\",\"details\":{\"consultationId\":\"CONSULT-001\",\"traceId\":\"TRACE-001\"}}",
       "audioFilePath": "/var/lib/floating-ball-server/speech-audit/20260422/chat-input-abc123.wav",
       "operationTime": "2026-04-20T16:00:00"
     }
@@ -1468,6 +1484,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 
 1. `speech_proxy` 日志的 `payloadJson` 只保留录音元数据、请求摘要和上游回文，不再保存原始 base64 音频
 2. 若存在录音文件落盘，返回记录中的 `audioFilePath` 会指向该文件
+3. `desOp` 默认优先展示 `title`，缺失时回退 `action / operationName`
+4. `traceId` 默认从顶层 `traceId` 提取；若顶层缺失则回退 `details.traceId`
 
 ### 5.49 GET `/admin/api/user-logs/consultations`
 

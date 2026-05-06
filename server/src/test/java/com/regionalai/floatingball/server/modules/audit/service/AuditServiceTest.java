@@ -54,7 +54,7 @@ class AuditServiceTest {
     void listShouldRejectInvalidDateFormat() {
         BusinessException ex = assertThrows(
             BusinessException.class,
-            () -> auditService.list(1, 10, null, null, null, null, "bad-date", null)
+            () -> auditService.list(1, 10, null, null, null, null, null, null, null, null, null, null, "bad-date", null)
         );
 
         assertEquals("日志查询时间格式非法", ex.getMessage());
@@ -73,6 +73,9 @@ class AuditServiceTest {
         Map<String, Object> payload = new HashMap<String, Object>();
         payload.put("module", "consultation");
         payload.put("action", "finish");
+        payload.put("title", "完成问诊");
+        payload.put("sourceModule", "consultation_page");
+        payload.put("scene", "consultation");
         payload.put("success", true);
         event.setPayload(payload);
         request.setEvents(Collections.singletonList(event));
@@ -88,11 +91,15 @@ class AuditServiceTest {
         assertEquals("ORG001", log.getIdOrg());
         assertEquals("operation", log.getSdLogType());
         assertEquals("consultation", log.getNaModule());
-        assertEquals("finish", log.getDesOp());
+        assertEquals("finish", log.getOpAction());
+        assertEquals("完成问诊", log.getOpTitle());
+        assertEquals("consultation_page", log.getSourceModule());
+        assertEquals("consultation", log.getSceneCode());
+        assertEquals("完成问诊", log.getDesOp());
         assertEquals("1", log.getOpResult());
         assertNotNull(log.getOperationTime());
         assertEquals(
-            OBJECT_MAPPER.readTree("{\"module\":\"consultation\",\"action\":\"finish\",\"success\":true}"),
+            OBJECT_MAPPER.readTree("{\"module\":\"consultation\",\"action\":\"finish\",\"title\":\"完成问诊\",\"sourceModule\":\"consultation_page\",\"scene\":\"consultation\",\"success\":true}"),
             OBJECT_MAPPER.readTree(log.getPayloadJson())
         );
     }
@@ -111,7 +118,10 @@ class AuditServiceTest {
         payload.put("operationType", "api_call");
         payload.put("operationName", "reference_feedback:diagnosis");
         payload.put("success", false);
-        payload.put("details", Collections.singletonMap("consultationId", "CONSULT-001"));
+        Map<String, Object> details = new HashMap<String, Object>();
+        details.put("consultationId", "CONSULT-001");
+        details.put("traceId", "TRACE-001");
+        payload.put("details", details);
         event.setPayload(payload);
         request.setEvents(Collections.singletonList(event));
 
@@ -123,10 +133,14 @@ class AuditServiceTest {
         verify(aiOpLogMapper, times(1)).insert(captor.capture());
         AiOpLog log = captor.getValue();
         assertEquals("api_call", log.getNaModule());
+        assertEquals("reference_feedback:diagnosis", log.getOpAction());
+        assertEquals("reference_feedback:diagnosis", log.getOpTitle());
+        assertEquals("TRACE-001", log.getTraceId());
+        assertEquals("CONSULT-001", log.getConsultationId());
         assertEquals("reference_feedback:diagnosis", log.getDesOp());
         assertEquals("0", log.getOpResult());
         assertEquals(
-            OBJECT_MAPPER.readTree("{\"operationType\":\"api_call\",\"operationName\":\"reference_feedback:diagnosis\",\"success\":false,\"details\":{\"consultationId\":\"CONSULT-001\"}}"),
+            OBJECT_MAPPER.readTree("{\"operationType\":\"api_call\",\"operationName\":\"reference_feedback:diagnosis\",\"success\":false,\"details\":{\"consultationId\":\"CONSULT-001\",\"traceId\":\"TRACE-001\"}}"),
             OBJECT_MAPPER.readTree(log.getPayloadJson())
         );
     }
@@ -156,6 +170,9 @@ class AuditServiceTest {
         verify(aiOpLogMapper, times(1)).insert(captor.capture());
         AiOpLog log = captor.getValue();
         assertEquals("speech_proxy", log.getSdLogType());
+        assertEquals("transcribe", log.getOpAction());
+        assertEquals("transcribe", log.getOpTitle());
+        assertEquals("chat-input", log.getSceneCode());
         assertNotNull(log.getAudioFilePath());
         assertEquals("hello-audio", new String(Files.readAllBytes(Paths.get(log.getAudioFilePath())), StandardCharsets.UTF_8));
         assertEquals(

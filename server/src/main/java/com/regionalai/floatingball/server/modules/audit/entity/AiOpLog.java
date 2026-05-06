@@ -30,6 +30,21 @@ public class AiOpLog extends BaseEntity {
     @TableField("na_module")
     private String naModule;
 
+    @TableField("op_action")
+    private String opAction;
+
+    @TableField("op_title")
+    private String opTitle;
+
+    @TableField("source_module")
+    private String sourceModule;
+
+    @TableField("scene_code")
+    private String sceneCode;
+
+    @TableField("trace_id")
+    private String traceId;
+
     @TableField("des_op")
     private String desOp;
 
