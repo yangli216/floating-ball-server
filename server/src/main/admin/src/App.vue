@@ -146,7 +146,9 @@ const menuItems = [
   { path: '/releases', label: '版本发布', icon: '版' },
   { path: '/logs', label: '日志', icon: '日' },
   { path: '/user-logs', label: '用户日志', icon: '用' },
-  { path: '/feedbacks', label: '反馈', icon: '反' }
+  { path: '/feedbacks', label: '反馈', icon: '反' },
+  { path: '/analytics', label: '统计分析', icon: '统' },
+  { path: '/function-usage', label: '辅诊功能', icon: '辅' }
 ]
 
 export default {

@@ -19,3 +19,8 @@ export async function fetchOrgs() {
   })
   return data.records || []
 }
+
+export async function refOptions() {
+  const [regions, orgs] = await Promise.all([fetchRegions(), fetchOrgs()])
+  return { regions, orgs }
+}

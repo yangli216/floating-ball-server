@@ -935,7 +935,146 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.5 GET `/admin/api/users`
+### 5.5 GET `/admin/api/analytics/summary`
+
+用途：返回综合概况统计分析核心指标卡片数据。
+
+请求参数：
+
+- `dateFrom` — 开始日期（yyyy-MM-dd）
+- `dateTo` — 结束日期（yyyy-MM-dd）
+- `idRegion` — 区域ID（可选）
+- `idOrg` — 机构ID（可选）
+
+响应 `data`：
+
+```json
+{
+  "aiServiceTotal": 12345,
+  "avgDailyAiService": 412,
+  "aiAdoptionRate": "78.5",
+  "diagnosisMatchRate": "65.2",
+  "activeDoctorCount": 86,
+  "consultationTotal": 2345,
+  "aiServiceGrowth": "12.5",
+  "avgDailyGrowth": "8.3",
+  "adoptionRateGrowth": "-1.2",
+  "matchRateGrowth": "3.7",
+  "activeDoctorGrowth": "5",
+  "consultationGrowth": "15.8"
+}
+```
+
+指标计算口径：
+
+| 指标 | 分子 | 分母 | 说明 |
+|------|------|------|------|
+| `aiServiceTotal` | `COUNT(c_ai_op_log WHERE sd_log_type='ai_proxy')` | — | 仅统计服务端 AI 代理调用，不含客户端操作事件 |
+| `avgDailyAiService` | `aiServiceTotal` | 查询天数 | |
+| `aiAdoptionRate` | `COUNT(status='completed')` | `COUNT(全部问诊)` | 仅"一键回写"计为采纳 |
+| `diagnosisMatchRate` | `COUNT(JSON_VALUE(change_summary_json,'$.diagnosisChanges')=0)` | `COUNT(status IN ('completed','abandoned'))` | 比较 AI 最初诊断与医生最终诊断是否一致 |
+| `activeDoctorCount` | `COUNT(DISTINCT id_doctor)` | — | |
+| `consultationTotal` | `COUNT(全部问诊)` | — | |
+
+### 5.6 GET `/admin/api/analytics/trend`
+
+用途：返回AI服务量与问诊量按日聚合的趋势数据。
+
+请求参数同 5.6。
+
+响应 `data`：
+
+```json
+{
+  "days": ["2026-05-01", "2026-05-02", "..."],
+  "aiServiceValues": [400, 420, 415, "..."],
+  "consultationValues": [75, 82, 78, "..."]
+}
+```
+
+### 5.7 GET `/admin/api/analytics/distribution`
+
+用途：返回机构分布与区域分布数据。
+
+请求参数同 5.6。
+
+响应 `data`：
+
+```json
+{
+  "orgDistribution": [
+    { "orgName": "市第一医院", "value": 600 },
+    { "orgName": "市第二医院", "value": 800 }
+  ],
+  "regionDistribution": [
+    { "regionName": "东城区", "value": 4938, "percentage": "40" },
+    { "regionName": "西城区", "value": 3704, "percentage": "30" }
+  ],
+  "totalService": 12345
+}
+```
+
+### 5.8 GET `/admin/api/analytics/function-modules`
+
+用途：返回所有已记录的功能模块名称列表，供辅诊功能应用统计页的功能模块多选下拉使用。
+
+无请求参数。
+
+响应 `data`：
+
+```json
+["语音录入", "诊断建议", "知识库查询", "模板推荐", "AI问诊"]
+```
+
+### 5.9 GET `/admin/api/analytics/function-usage`
+
+用途：返回辅诊功能应用统计数据，包含汇总指标、功能使用排行、趋势与分页明细。
+
+请求参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `dateFrom` | string | 起始日期 yyyy-MM-dd |
+| `dateTo` | string | 截止日期 yyyy-MM-dd |
+| `idRegion` | string | 区域 ID（可选） |
+| `idOrg` | string | 机构 ID（可选） |
+| `functionModules` | string[] | 功能模块筛选（可选，多选） |
+| `current` | int | 当前页（默认 1） |
+| `size` | int | 每页条数（默认 20） |
+
+响应 `data`：
+
+```json
+{
+  "totalCallCount": 52800,
+  "avgDailyCalls": 1760,
+  "usageRate": "83%",
+  "ranking": [
+    {
+      "moduleName": "语音录入",
+      "callCount": 18500,
+      "doctorCount": 42,
+      "avgPerDoctor": 440,
+      "growthRate": "12.5"
+    }
+  ],
+  "total": 6,
+  "records": [],
+  "trend": {
+    "modules": ["语音录入", "诊断建议", "知识库查询"],
+    "days": ["2026-04-01", "2026-04-02"],
+    "values": [[120, 135], [98, 102], [75, 80]]
+  }
+}
+```
+
+约束：
+
+1. `ranking` 按 `callCount` 倒序排列，已计算增长率（与上一等长周期对比）
+2. `trend` 仅包含排名前 5 的功能模块的逐日调用趋势
+3. `records` 为当前页数据，支持分页
+
+### 5.10 GET `/admin/api/users`
 
 用途：分页查询用户列表。
 
@@ -948,8 +1087,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - `idOrg`
 - `idRole`
 
-### 5.6 POST `/admin/api/users`
-
+### 5.11 POST `/admin/api/users`
 用途：新增用户。
 
 请求：
@@ -965,16 +1103,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.7 PUT `/admin/api/users/{idUser}`
-
+### 5.12 PUT `/admin/api/users/{idUser}`
 用途：修改用户资料、角色和状态；`password` 为空时保留原值。
 
-### 5.8 DELETE `/admin/api/users/{idUser}`
-
+### 5.13 DELETE `/admin/api/users/{idUser}`
 用途：逻辑停用用户。
 
-### 5.9 GET `/admin/api/roles`
-
+### 5.14 GET `/admin/api/roles`
 用途：分页查询角色列表。
 
 请求参数：
@@ -983,8 +1118,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - `size`
 - `keyword`
 
-### 5.10 POST `/admin/api/roles`
-
+### 5.15 POST `/admin/api/roles`
 用途：新增角色。
 
 请求：
@@ -998,16 +1132,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.11 PUT `/admin/api/roles/{idRole}`
-
+### 5.16 PUT `/admin/api/roles/{idRole}`
 用途：修改角色信息。
 
-### 5.12 DELETE `/admin/api/roles/{idRole}`
-
+### 5.17 DELETE `/admin/api/roles/{idRole}`
 用途：逻辑停用角色。
 
-### 5.13 GET `/admin/api/regions`
-
+### 5.18 GET `/admin/api/regions`
 用途：分页查询区域列表。
 
 请求参数：
@@ -1016,8 +1147,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - `size`
 - `keyword`
 
-### 5.14 POST `/admin/api/regions`
-
+### 5.19 POST `/admin/api/regions`
 用途：新增区域。
 
 请求：
@@ -1034,16 +1164,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.15 PUT `/admin/api/regions/{idRegion}`
-
+### 5.20 PUT `/admin/api/regions/{idRegion}`
 用途：修改区域信息。
 
-### 5.16 DELETE `/admin/api/regions/{idRegion}`
-
+### 5.21 DELETE `/admin/api/regions/{idRegion}`
 用途：逻辑停用区域。
 
-### 5.17 GET `/admin/api/orgs`
-
+### 5.22 GET `/admin/api/orgs`
 用途：分页查询机构列表。
 
 请求参数：
@@ -1052,8 +1179,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - `size`
 - `keyword`
 
-### 5.18 POST `/admin/api/orgs`
-
+### 5.23 POST `/admin/api/orgs`
 用途：新增机构。
 
 请求：
@@ -1071,16 +1197,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.19 PUT `/admin/api/orgs/{idOrg}`
-
+### 5.24 PUT `/admin/api/orgs/{idOrg}`
 用途：修改机构信息。
 
-### 5.20 DELETE `/admin/api/orgs/{idOrg}`
-
+### 5.25 DELETE `/admin/api/orgs/{idOrg}`
 用途：逻辑停用机构。
 
-### 5.21 GET `/admin/api/devices`
-
+### 5.26 GET `/admin/api/devices`
 用途：分页查询设备列表。
 
 请求参数：
@@ -1114,8 +1237,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.22 POST `/admin/api/devices`
-
+### 5.27 POST `/admin/api/devices`
 用途：手工创建设备记录。
 
 请求：
@@ -1131,20 +1253,16 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.23 PUT `/admin/api/devices/{idDevice}`
-
+### 5.28 PUT `/admin/api/devices/{idDevice}`
 用途：修改设备名称、机构、状态和客户端信息。
 
-### 5.24 DELETE `/admin/api/devices/{idDevice}`
-
+### 5.29 DELETE `/admin/api/devices/{idDevice}`
 用途：逻辑停用设备。
 
-### 5.25 GET `/admin/api/configs`
-
+### 5.30 GET `/admin/api/configs`
 用途：分页查询 AI 配置列表。
 
-### 5.26 POST `/admin/api/configs`
-
+### 5.31 POST `/admin/api/configs`
 用途：新增 AI 配置。
 
 请求：
@@ -1192,20 +1310,16 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 1. `speechProvider=openai-compatible`：服务端将录音文件转为 multipart，调用 `{audioBaseUrl}/audio/transcriptions`。
 2. `speechProvider=aliyun-dashscope`：服务端将录音转为 Data URL，调用 DashScope 兼容模式 `{audioBaseUrl}/chat/completions`；`audioBaseUrl` 建议配置为 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
 
-### 5.27 PUT `/admin/api/configs/{idConfig}`
-
+### 5.32 PUT `/admin/api/configs/{idConfig}`
 用途：修改 AI 配置；`apiKey`、`audioApiKey`、`reviewerApiKey`、`pmphaiAppKey`、`pmphaiAppSecret` 为空时保留原值。
 
-### 5.28 DELETE `/admin/api/configs/{idConfig}`
-
+### 5.33 DELETE `/admin/api/configs/{idConfig}`
 用途：逻辑停用配置。
 
-### 5.29 GET `/admin/api/prompts`
-
+### 5.34 GET `/admin/api/prompts`
 用途：分页查询 Prompt 列表。
 
-### 5.30 POST `/admin/api/prompts`
-
+### 5.35 POST `/admin/api/prompts`
 用途：新增 Prompt。
 
 请求：
@@ -1224,24 +1338,19 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.31 PUT `/admin/api/prompts/{idPrompt}`
-
+### 5.36 PUT `/admin/api/prompts/{idPrompt}`
 用途：修改 Prompt 内容与可见范围。
 
-### 5.32 POST `/admin/api/prompts/{idPrompt}/publish`
-
+### 5.37 POST `/admin/api/prompts/{idPrompt}/publish`
 用途：发布 Prompt；同场景下其他已发布版本自动转归归档态。
 
-### 5.33 POST `/admin/api/prompts/{idPrompt}/archive`
-
+### 5.38 POST `/admin/api/prompts/{idPrompt}/archive`
 用途：归档 Prompt。
 
-### 5.34 DELETE `/admin/api/prompts/{idPrompt}`
-
+### 5.39 DELETE `/admin/api/prompts/{idPrompt}`
 用途：逻辑删除 Prompt。
 
-### 5.35 GET `/admin/api/data-packages`
-
+### 5.40 GET `/admin/api/data-packages`
 用途：分页查询数据包列表。
 
 请求参数：
@@ -1254,8 +1363,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - `idRegion`
 - `idOrg`
 
-### 5.36 POST `/admin/api/data-packages`
-
+### 5.41 POST `/admin/api/data-packages`
 用途：新增数据包。
 
 请求：
@@ -1273,28 +1381,23 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.37 PUT `/admin/api/data-packages/{idPackage}`
-
+### 5.42 PUT `/admin/api/data-packages/{idPackage}`
 用途：修改数据包内容、版本和可见范围。
 
-### 5.38 POST `/admin/api/data-packages/{idPackage}/publish`
-
+### 5.43 POST `/admin/api/data-packages/{idPackage}/publish`
 用途：发布数据包。
 
 约束：
 
 - 同类型、同作用域的其他已发布版本需自动转归归档态
 
-### 5.39 POST `/admin/api/data-packages/{idPackage}/archive`
-
+### 5.44 POST `/admin/api/data-packages/{idPackage}/archive`
 用途：归档数据包。
 
-### 5.40 DELETE `/admin/api/data-packages/{idPackage}`
-
+### 5.45 DELETE `/admin/api/data-packages/{idPackage}`
 用途：逻辑删除数据包。
 
-### 5.41 GET `/admin/api/data-packages/template-default`
-
+### 5.46 GET `/admin/api/data-packages/template-default`
 用途：获取服务端内置症状模板基线，供 legacy `template` 数据包编辑或症状模板初始化导入时参考。
 
 响应 `data`：
@@ -1307,8 +1410,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.42 GET `/admin/api/symptom-templates`
-
+### 5.47 GET `/admin/api/symptom-templates`
 用途：分页查询症状模板列表，返回完整模板结构，供后台 disease editor 直接编辑。
 
 请求参数：
@@ -1355,8 +1457,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.43 POST `/admin/api/symptom-templates`
-
+### 5.48 POST `/admin/api/symptom-templates`
 用途：新增症状模板。
 
 说明：
@@ -1364,16 +1465,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 - 请求体使用与桌面端 disease editor 基本一致的模板结构
 - `medicalMode` 仅支持 `western`、`tcm`
 
-### 5.44 PUT `/admin/api/symptom-templates/{id}`
-
+### 5.49 PUT `/admin/api/symptom-templates/{id}`
 用途：修改症状模板。
 
-### 5.45 DELETE `/admin/api/symptom-templates/{id}`
-
+### 5.50 DELETE `/admin/api/symptom-templates/{id}`
 用途：逻辑删除症状模板。
 
-### 5.46 POST `/admin/api/symptom-templates/import-builtin`
-
+### 5.51 POST `/admin/api/symptom-templates/import-builtin`
 用途：将服务端内置 `template-seeds` 症状模板按指定作用域导入 `c_ai_symptom_template`。
 
 请求：
@@ -1397,8 +1495,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.47 POST `/admin/api/symptom-templates/import-json`
-
+### 5.52 POST `/admin/api/symptom-templates/import-json`
 用途：将桌面端已有症状模板 JSON 文件写入 `c_ai_symptom_template`，支持 `templates.json`、`tcm-templates.json` 以及后台导出的当前模式症状数组。
 
 请求：
@@ -1429,8 +1526,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.48 GET `/admin/api/logs`
-
+### 5.53 GET `/admin/api/logs`
 用途：分页查询操作日志。
 
 请求参数：
@@ -1487,8 +1583,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 3. `desOp` 默认优先展示 `title`，缺失时回退 `action / operationName`
 4. `traceId` 默认从顶层 `traceId` 提取；若顶层缺失则回退 `details.traceId`
 
-### 5.49 GET `/admin/api/user-logs/consultations`
-
+### 5.54 GET `/admin/api/user-logs/consultations`
 用途：分页查询运维用户日志列表。该模块是专门给运维人员使用的问诊聚合日志，不替代原有操作日志页面。
 
 请求参数：
@@ -1524,8 +1619,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.50 GET `/admin/api/user-logs/consultations/{idLog}`
-
+### 5.55 GET `/admin/api/user-logs/consultations/{idLog}`
 用途：查看一次问诊的运维用户日志详情。
 
 响应 `data`：
@@ -1554,8 +1648,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.50.1 GET `/admin/api/user-logs/consultations/{idLog}/audio`
-
+### 5.53.1 GET `/admin/api/user-logs/consultations/{idLog}/audio`
 用途：后台用户日志详情播放语音问诊原始录音。
 
 响应：
@@ -1569,8 +1662,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 1. 仅管理端鉴权后可访问。
 2. 接口只根据 `idLog` 查表后读取服务端保存的音频文件，不接受任意文件路径参数。
 
-### 5.51 GET `/admin/api/feedbacks`
-
+### 5.56 GET `/admin/api/feedbacks`
 用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。
 
 请求参数：
@@ -1611,8 +1703,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
-### 5.52 GET `/admin/api/feedbacks/{feedbackId}`
-
+### 5.57 GET `/admin/api/feedbacks/{feedbackId}`
 用途：查看反馈详情。管理端将其拆分为「摘要」与「技术详情」两个 Tab，前者展示评分/说明/医生身份/标签/截图，后者展示 traceId/chainContext/sessionId 等技术字段，便于工程师排查。
 
 响应 `data`：

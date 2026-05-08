@@ -37,6 +37,14 @@
           :picker-options="datePickerOptions"
           class="filter-date"
         />
+        <el-select v-model="filters.changesRange" clearable placeholder="修改次数" class="filter-select">
+          <el-option
+            v-for="item in changesRangeOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
         <el-button icon="el-icon-download" :loading="exporting" @click="handleExport">导出</el-button>
@@ -420,7 +428,8 @@ function createDefaultFilters() {
     keyword: '',
     consultationType: '',
     status: '',
-    dateRange: []
+    dateRange: [],
+    changesRange: ''
   }
 }
 
@@ -483,7 +492,12 @@ export default {
       ],
       datePickerOptions: {
         shortcuts: getDateShortcuts()
-      }
+      },
+      changesRangeOptions: [
+        { value: '1-3', label: '1～3次' },
+        { value: '3-5', label: '3～5次' },
+        { value: '5+', label: '5次以上' }
+      ]
     }
   },
   computed: {
@@ -508,6 +522,7 @@ export default {
       this.loading = true
       try {
         const dateRange = Array.isArray(this.filters.dateRange) ? this.filters.dateRange : []
+        const changes = this.resolveChangesRange()
         const data = await http.get('/admin/api/user-logs/consultations', {
           params: {
             current: this.current,
@@ -515,6 +530,8 @@ export default {
             keyword: this.filters.keyword || undefined,
             consultationType: this.filters.consultationType || undefined,
             status: this.filters.status || undefined,
+            minChanges: changes.minChanges,
+            maxChanges: changes.maxChanges,
             dateFrom: dateRange[0] || undefined,
             dateTo: dateRange[1] || undefined
           }
@@ -535,6 +552,14 @@ export default {
       this.filters = createDefaultFilters()
       this.current = 1
       this.loadData()
+    },
+    resolveChangesRange() {
+      const range = this.filters.changesRange
+      if (!range) return { minChanges: undefined, maxChanges: undefined }
+      if (range === '1-3') return { minChanges: 1, maxChanges: 3 }
+      if (range === '3-5') return { minChanges: 3, maxChanges: 5 }
+      if (range === '5+') return { minChanges: 5, maxChanges: undefined }
+      return { minChanges: undefined, maxChanges: undefined }
     },
     async openDetail(row) {
       this.detailDialogVisible = true
@@ -624,11 +649,14 @@ export default {
       this.exporting = true
       try {
         const dateRange = Array.isArray(this.filters.dateRange) ? this.filters.dateRange : []
+        const changes = this.resolveChangesRange()
         const blob = await http.get('/admin/api/user-logs/consultations/export', {
           params: {
             keyword: this.filters.keyword || undefined,
             consultationType: this.filters.consultationType || undefined,
             status: this.filters.status || undefined,
+            minChanges: changes.minChanges,
+            maxChanges: changes.maxChanges,
             dateFrom: dateRange[0] || undefined,
             dateTo: dateRange[1] || undefined
           },

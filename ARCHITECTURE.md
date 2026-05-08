@@ -64,7 +64,8 @@ floating-ball-server/
         │   ├── modules/userlog/    # 运维用户日志，按一次问诊聚合首版与最终内容
         │   ├── modules/knowledge/  # PMPHAI/知识库代理
         │   ├── modules/adminui/    # 管理端静态页面入口控制
-        │   └── modules/ai/         # chat / transcribe / realtime 代理
+        │   ├── modules/ai/         # chat / transcribe / realtime 代理
+        │   └── modules/analytics/  # 综合概况统计分析：趋势、分布、核心指标
         └── main/
             ├── admin/              # 管理端 Vue 2 + Element UI 源码
             │   ├── package.json
@@ -279,6 +280,14 @@ floating-ball-server/
    - 角色分页查询、新增、修改、停用
 4. 概览统计：
    - 首页汇总区域、机构、设备、配置、Prompt、数据包、日志、用户、角色数量
+5. 综合概况统计分析（`modules/analytics`）：
+   - 核心指标卡片：AI服务总量、日均AI服务量、AI诊断建议采纳率、诊断符合率、活跃医生数、问诊总数
+   - 服务趋势折线图：按日聚合AI服务量与问诊量趋势
+   - 机构分布柱状图：Top 10 机构AI服务量
+   - 区域分布饼图：各区县AI服务量占比
+   - 支持时间范围快捷切换（今日/本周/本月/本季度/本年/自定义）
+   - 支持区域、机构下拉筛选
+   - 支持数据导出
 
 约束：
 
