@@ -44,8 +44,8 @@
 
 ## 最小质量门禁
 
-1. `server` 至少执行 `mvn -f server/pom.xml test` 或 `mvn -f server/pom.xml package`
-2. 管理端至少执行 `npm --prefix server/src/main/admin run build`
+1. `server` 至少执行 `mvn -f server/pom.xml test` 或 `mvn -f server/pom.xml package`，该流程会自动执行管理端 `npm ci` 与 `npm run build`
+2. 若只做管理端单独联调或需要定位前端构建问题，可额外执行 `npm --prefix server/src/main/admin run build`
 3. 若无法完成构建，必须说明阻塞原因，并补充静态审查结论
 
 ## 关键联调清单

@@ -99,7 +99,7 @@ floating-ball-server/
 
 - 负责业务校验、配置分层查找、版本比较、上游代理转发
 - 封装“机构级 > 区域级 > 全局级”的配置查找优先级
-- `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管独立审查 AI 与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
+- `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管 `chatFast` 独立模型、`enableThinking` 开关、独立审查 AI、`check_examination` 审查开关与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
 - `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并与客户端 `templates/delta` 聚合，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
@@ -129,6 +129,7 @@ floating-ball-server/
 
 - 管理端页面由 Spring Boot 统一托管，默认访问入口为 `/admin/`
 - 管理端构建产物输出到 `server/src/main/resources/static/admin`
+- `mvn -f server/pom.xml process-resources/test/package` 会在资源阶段自动执行管理端 `npm ci` 与 `npm run build`，确保 `/admin/index.html` 与静态资源进入后端类路径
 - 管理端接口继续使用 `/admin/api/*`，但页面与接口默认同源，不再依赖独立部署
 - 如需单独前端调试，仍可在 `server/src/main/admin` 内运行 Vite dev server；此时后端 CORS 仅作为本地开发补充能力
 - 管理端 UI 采用 vue-admin 类后台骨架：深色固定侧栏、顶部导航栏、tags-view、浅灰内容区；仍避免页面副标题、说明型提示文案、列表页默认统计卡片或 Element UI 默认蓝色主题
@@ -173,9 +174,12 @@ floating-ball-server/
 
 审查模型补充约束：
 
-1. 当 `configProfile=reviewer` 时，服务端优先使用 AI 配置中的独立审查模型地址 / 密钥 / 模型；缺失时回退主模型配置
-2. `bootstrap` 仅向桌面端暴露 `reviewer.enabled` 与 `reviewer.model` 等非敏感字段，不返回密钥
-3. 区域化模式下，`/v1/ai/chat` 的实际生效模型以服务端当前解析到的配置为准；桌面端不应再依赖本地缓存的 `model` 回传覆盖服务端配置，确保后台修改后下一次请求立即生效
+1. 当 `configProfile=fast` 时，服务端优先使用 AI 配置中的独立快速模型；缺失时回退主模型配置
+2. 当 `configProfile=reviewer` 时，服务端优先使用 AI 配置中的独立审查模型地址 / 密钥 / 模型；缺失时回退主模型配置
+3. `enableThinking` 作为当前 AI 配置的一部分统一作用于主模型 / fast / reviewer 代理请求，最终映射为上游 OpenAI 兼容载荷中的 `enable_thinking`
+4. `bootstrap` 仅向桌面端暴露 `llm.model`、`llm.fastModel`、`llm.enableThinking`、`reviewer.enabled`、`reviewer.model`、`reviewer.checkExaminationEnabled` 等非敏感字段，不返回密钥
+5. `reviewer.checkExaminationEnabled` 只控制桌面端是否触发 `check_examination` 场景的独立审查，不影响诊断、用药、病历一致性等其他 reviewer 场景；默认开启以兼容旧配置
+6. 区域化模式下，`/v1/ai/chat` 与 `/v1/client/bootstrap` 的实际生效模型、thinking 开关和检查项目独立审查开关以服务端当前解析到的配置为准；桌面端不应再依赖本地缓存的 `model` 回传覆盖服务端配置，确保后台修改后下一次请求立即生效
 
 语音代理补充约束：
 

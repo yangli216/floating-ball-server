@@ -10,6 +10,8 @@ public class ResolvedAiConfig {
     private String baseUrl;
     private String apiKey;
     private String model;
+    private String fastModel;
+    private Boolean enableThinking;
     private String audioApiKey;
     private String audioBaseUrl;
     private String audioModel;
@@ -25,5 +27,6 @@ public class ResolvedAiConfig {
     private String reviewerBaseUrl;
     private String reviewerApiKey;
     private String reviewerModel;
+    private Boolean reviewerCheckExaminationEnabled;
     private Map<String, Boolean> features;
 }

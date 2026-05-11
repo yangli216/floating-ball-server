@@ -32,7 +32,7 @@ public class ConfigConnectionTestService {
         String baseUrl = request.getApiBaseUrl();
         String modelName = request.getModelName();
         String apiKey = resolveApiKey(request);
-        String message = aiProxyService.testChatConnection(baseUrl, apiKey, modelName);
+        String message = aiProxyService.testChatConnection(baseUrl, apiKey, modelName, Boolean.TRUE.equals(request.getEnableThinking()));
         return new AiConfigTestResult(true, message, baseUrl, modelName);
     }
 

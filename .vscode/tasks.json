@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Floating Ball Server",
+			"type": "shell",
+			"command": "mvn",
+			"args": [
+				"-f",
+				"server/pom.xml",
+				"-DskipTests",
+				"spring-boot:run"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

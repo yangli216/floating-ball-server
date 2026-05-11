@@ -1,6 +1,6 @@
 # floating-ball-server API 说明
 
-> 更新日期：2026-04-28
+> 更新日期：2026-05-11
 > 范围：`floating-ball` 区域化模式下调用的远端 `/v1/*` 接口
 
 ## 1. 约束说明
@@ -354,6 +354,8 @@ Content-Type: application/json
   "llm": {
     "baseUrl": "https://example.com/v1",
     "model": "deepseek-chat",
+    "fastModel": "deepseek-chat-lite",
+    "enableThinking": true,
     "audioBaseUrl": "https://example.com/v1",
     "audioModel": "whisper-1"
   },
@@ -370,7 +372,8 @@ Content-Type: application/json
   },
   "reviewer": {
     "enabled": false,
-    "model": "gpt-4o-mini"
+    "model": "gpt-4o-mini",
+    "checkExaminationEnabled": true
   },
   "features": {
     "regionalMode": true,
@@ -385,6 +388,9 @@ Content-Type: application/json
 
 语音配置字段说明：
 
+- `llm.fastModel`：区域化模式下供 `floating-ball/src/services/llm.ts` 的 `chatFast()` 使用的独立快速模型；未单独配置时回退 `llm.model`
+- `llm.enableThinking`：区域化模式下由服务端统一托管的思考模式开关；`floating-ball` 本地只读消费该值，`/v1/ai/chat` 代理转发时会据此决定是否向上游传 `enable_thinking`
+- `reviewer.checkExaminationEnabled`：区域化模式下控制是否启用 `check_examination` 独立审查；未显式配置时默认开启，保证旧配置行为不变
 - `llm.audioBaseUrl`：服务端实际转发 `/v1/ai/speech/*` 时使用的上游语音转写地址；未单独配置时回退 `llm.baseUrl`
 - `llm.audioModel`：服务端实际提交给上游的语音模型；`openai-compatible` 默认 `whisper-1`，`aliyun-dashscope` 默认 `qwen3-asr-flash`
 - `speech.provider`：下发给 `floating-ball` 的语音提供方标识，当前兼容 `openai-compatible`、`aliyun-dashscope`
@@ -392,6 +398,8 @@ Content-Type: application/json
 - `apiKey`、`audioApiKey` 均不下发给桌面端；区域化模式下主模型和语音上游密钥由 `floating-ball-server` 统一托管
 
 配置优先级：机构级 > 区域级 > 全局级。
+
+生效方式：`/v1/client/bootstrap` 与 `/v1/ai/chat` 每次请求都会按设备当前作用域实时解析 AI 配置；管理端修改配置后，无需重启服务，客户端下一次 `bootstrap` 或 AI 请求即可看到最新结果。
 
 ### 3.4 GET `/v1/client/prompts/delta`
 
@@ -645,7 +653,7 @@ Content-Type: application/json
 
 1. 服务端按设备所属机构 / 区域解析当前生效 AI 配置
 2. 当 `stream=true` 时，先完成配置校验，再按 OpenAI 风格 `data: ...` SSE 帧逐段转发上游模型输出，而不是把完整结果一次性封装后再返回
-3. 区域化模式下，实际生效的主模型 / 审查模型以服务端当前配置解析结果为准；客户端不应依赖缓存的 `model` 值覆盖服务端配置
+3. 区域化模式下，实际生效的主模型 / 快速模型 / 审查模型与 `enableThinking` 开关以服务端当前配置解析结果为准；客户端不应依赖缓存的 `model` 值覆盖服务端配置
 4. 若上游模型服务返回 4xx / 5xx，服务端应尽量提取上游响应体中的可读错误消息，并作为当前接口错误消息返回，避免只暴露 WebClient 堆栈
 
 请求：
@@ -666,7 +674,9 @@ Content-Type: application/json
 字段说明：
 
 - `configProfile`：可选，默认 `default`
+- 当值为 `fast` 时，服务端优先使用当前设备可见 AI 配置中的 `fastModelName`；未配置时回退主模型配置
 - 当值为 `reviewer` 时，服务端优先使用当前设备可见 AI 配置中的独立审查模型地址 / 密钥 / 模型；缺失项回退主模型配置
+- `enable_thinking` 是否开启由服务端当前 AI 配置统一决定；区域化桌面端不单独透传该开关覆盖服务端配置
 
 非流式响应 `data`：
 
@@ -1287,6 +1297,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
   "apiBaseUrl": "https://example.com/v1",
   "apiKey": "sk-xxx",
   "modelName": "deepseek-chat",
+  "fastModelName": "deepseek-chat-lite",
+  "enableThinking": true,
   "audioBaseUrl": "https://example.com/v1",
   "audioApiKey": "sk-audio",
   "audioModel": "whisper-1",
@@ -1302,6 +1314,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
   "reviewerBaseUrl": "https://reviewer.example.com/v1",
   "reviewerApiKey": "sk-reviewer",
   "reviewerModel": "gpt-4o-mini",
+  "reviewerCheckExaminationEnabled": true,
   "featuresJson": "{\"regionalMode\":true,\"aiProxyEnabled\":true}",
   "idOrg": "ORG001",
   "idRegion": "REGION001",
@@ -1311,11 +1324,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 
 语音配置最小要求：
 
-1. `apiKey` 为主模型密钥，也是 `audioApiKey` 留空时的语音密钥回退值。
-2. `audioApiKey` 为语音上游独立密钥；可留空，留空时复用 `apiKey`，当语音和主模型供应商不一致时必须填写。
-3. `audioBaseUrl` 为服务端实际语音转写地址；可留空，留空时复用 `apiBaseUrl`。
-4. `audioModel` 为服务端实际转写模型；可留空，`openai-compatible` 默认 `whisper-1`，`aliyun-dashscope` 默认 `qwen3-asr-flash`。
-5. `speechProvider` / `speechModel` 用于 `/v1/client/bootstrap` 下发给桌面端；`speechProvider=aliyun-dashscope` 时，`speechModel` 同时作为服务端实时 WebSocket 代理连接 DashScope `/api-ws/v1/inference` 的模型名，默认 `paraformer-realtime-v2`，也可填同协议 Fun-ASR / Gummy / Paraformer realtime 模型名。
+0. `fastModelName` 为区域化 `chatFast` 独立模型；可留空，留空时回退 `modelName`。
+1. `enableThinking` 用于控制服务端代理主模型 / `chatFast` / 审查模型时是否附带上游 `enable_thinking`；默认关闭。
+2. `apiKey` 为主模型密钥，也是 `audioApiKey` 留空时的语音密钥回退值。
+3. `audioApiKey` 为语音上游独立密钥；可留空，留空时复用 `apiKey`，当语音和主模型供应商不一致时必须填写。
+4. `audioBaseUrl` 为服务端实际语音转写地址；可留空，留空时复用 `apiBaseUrl`。
+5. `audioModel` 为服务端实际转写模型；可留空，`openai-compatible` 默认 `whisper-1`，`aliyun-dashscope` 默认 `qwen3-asr-flash`。
+6. `speechProvider` / `speechModel` 用于 `/v1/client/bootstrap` 下发给桌面端；`speechProvider=aliyun-dashscope` 时，`speechModel` 同时作为服务端实时 WebSocket 代理连接 DashScope `/api-ws/v1/inference` 的模型名，默认 `paraformer-realtime-v2`，也可填同协议 Fun-ASR / Gummy / Paraformer realtime 模型名。
 
 语音上游路径：
 

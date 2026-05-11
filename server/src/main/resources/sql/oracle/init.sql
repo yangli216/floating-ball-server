@@ -126,6 +126,8 @@ CREATE TABLE c_ai_config (
     api_base_url             VARCHAR2(500),
     api_key_encrypted        VARCHAR2(1000),
     model_name               VARCHAR2(128),
+    fast_model_name          VARCHAR2(128),
+    enable_thinking          CHAR(1) DEFAULT '0' NOT NULL,
     audio_api_key_encrypted  VARCHAR2(1000),
     audio_base_url           VARCHAR2(500),
     audio_model              VARCHAR2(128),
@@ -141,6 +143,7 @@ CREATE TABLE c_ai_config (
     reviewer_base_url        VARCHAR2(500),
     reviewer_api_key_encrypted VARCHAR2(1000),
     reviewer_model           VARCHAR2(128),
+    reviewer_check_examination_enabled CHAR(1) DEFAULT '1' NOT NULL,
     features_json            CLOB,
     id_org                   VARCHAR2(32),
     id_region                VARCHAR2(32),
@@ -158,6 +161,8 @@ COMMENT ON COLUMN c_ai_config.provider IS '服务提供商';
 COMMENT ON COLUMN c_ai_config.api_base_url IS '模型接口基础地址';
 COMMENT ON COLUMN c_ai_config.api_key_encrypted IS '加密后的接口密钥';
 COMMENT ON COLUMN c_ai_config.model_name IS '模型名称';
+COMMENT ON COLUMN c_ai_config.fast_model_name IS 'chatFast 独立模型名称';
+COMMENT ON COLUMN c_ai_config.enable_thinking IS '是否启用思考模式';
 COMMENT ON COLUMN c_ai_config.audio_api_key_encrypted IS '加密后的语音接口密钥，为空时复用主模型密钥';
 COMMENT ON COLUMN c_ai_config.audio_base_url IS '语音接口基础地址';
 COMMENT ON COLUMN c_ai_config.audio_model IS '语音模型名称';
@@ -173,6 +178,7 @@ COMMENT ON COLUMN c_ai_config.reviewer_enabled IS '审查模型开关';
 COMMENT ON COLUMN c_ai_config.reviewer_base_url IS '审查模型服务地址';
 COMMENT ON COLUMN c_ai_config.reviewer_api_key_encrypted IS '加密后的审查模型密钥';
 COMMENT ON COLUMN c_ai_config.reviewer_model IS '审查模型名称';
+COMMENT ON COLUMN c_ai_config.reviewer_check_examination_enabled IS '是否启用检查项目独立审查';
 COMMENT ON COLUMN c_ai_config.features_json IS '功能开关配置JSON';
 COMMENT ON COLUMN c_ai_config.id_org IS '机构级配置范围ID';
 COMMENT ON COLUMN c_ai_config.id_region IS '区域级配置范围ID';
@@ -578,6 +584,8 @@ INSERT INTO c_ai_config (
     provider,
     api_base_url,
     model_name,
+    fast_model_name,
+    enable_thinking,
     audio_model,
     speech_provider,
     speech_model,
@@ -585,6 +593,7 @@ INSERT INTO c_ai_config (
     pmphai_enabled,
     reviewer_enabled,
     reviewer_model,
+    reviewer_check_examination_enabled,
     features_json,
     id_org,
     sd_status,
@@ -596,6 +605,8 @@ INSERT INTO c_ai_config (
     'openai-compatible',
     'http://127.0.0.1:65535/v1',
     'gpt-4o-mini',
+    'gpt-4o-mini',
+    '0',
     'whisper-1',
     'openai-compatible',
     'whisper-1',
@@ -603,6 +614,7 @@ INSERT INTO c_ai_config (
     '0',
     '0',
     'gpt-4o-mini',
+    '1',
     '{"regionalMode":true,"aiProxyEnabled":true,"auditEnabled":true}',
     'ORG001',
     '1',

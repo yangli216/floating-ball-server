@@ -14,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +39,7 @@ class AiProxyServiceTest {
         resolved.setReviewerBaseUrl("https://reviewer.example/v1");
         resolved.setReviewerApiKey("reviewer-key");
         resolved.setReviewerModel("reviewer-model");
+        resolved.setEnableThinking(Boolean.TRUE);
         when(configService.resolveByDevice(any(AiDevice.class))).thenReturn(resolved);
 
         ChatRequest request = new ChatRequest();
@@ -48,6 +50,76 @@ class AiProxyServiceTest {
         assertThat(ReflectionTestUtils.getField(upstream, "baseUrl")).isEqualTo("https://reviewer.example/v1");
         assertThat(ReflectionTestUtils.getField(upstream, "apiKey")).isEqualTo("reviewer-key");
         assertThat(ReflectionTestUtils.getField(upstream, "model")).isEqualTo("reviewer-model");
+        assertThat(ReflectionTestUtils.getField(upstream, "enableThinking")).isEqualTo(true);
+    }
+
+    @Test
+    void resolveChatConfigUsesFastModelWhenRequested() {
+        ConfigService configService = mock(ConfigService.class);
+        AuditService auditService = mock(AuditService.class);
+        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+
+        ResolvedAiConfig resolved = new ResolvedAiConfig();
+        resolved.setBaseUrl("https://main.example/v1");
+        resolved.setApiKey("main-key");
+        resolved.setModel("main-model");
+        resolved.setFastModel("fast-model");
+        resolved.setEnableThinking(Boolean.TRUE);
+        when(configService.resolveByDevice(any(AiDevice.class))).thenReturn(resolved);
+
+        ChatRequest request = new ChatRequest();
+        request.setConfigProfile("fast");
+
+        Object upstream = ReflectionTestUtils.invokeMethod(service, "resolveChatConfig", new AiDevice(), request);
+
+        assertThat(ReflectionTestUtils.getField(upstream, "baseUrl")).isEqualTo("https://main.example/v1");
+        assertThat(ReflectionTestUtils.getField(upstream, "apiKey")).isEqualTo("main-key");
+        assertThat(ReflectionTestUtils.getField(upstream, "model")).isEqualTo("fast-model");
+        assertThat(ReflectionTestUtils.getField(upstream, "enableThinking")).isEqualTo(true);
+    }
+
+    @Test
+    void resolveChatConfigFastProfileFallsBackToMainModel() {
+        ConfigService configService = mock(ConfigService.class);
+        AuditService auditService = mock(AuditService.class);
+        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+
+        ResolvedAiConfig resolved = new ResolvedAiConfig();
+        resolved.setBaseUrl("https://main.example/v1");
+        resolved.setApiKey("main-key");
+        resolved.setModel("main-model");
+        resolved.setEnableThinking(Boolean.TRUE);
+        when(configService.resolveByDevice(any(AiDevice.class))).thenReturn(resolved);
+
+        ChatRequest request = new ChatRequest();
+        request.setConfigProfile("fast");
+
+        Object upstream = ReflectionTestUtils.invokeMethod(service, "resolveChatConfig", new AiDevice(), request);
+
+        assertThat(ReflectionTestUtils.getField(upstream, "model")).isEqualTo("main-model");
+        assertThat(ReflectionTestUtils.getField(upstream, "enableThinking")).isEqualTo(true);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void buildChatPayloadShouldCarryEnableThinkingFlag() {
+        ConfigService configService = mock(ConfigService.class);
+        AuditService auditService = mock(AuditService.class);
+        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+
+        Map<String, Object> payload = (Map<String, Object>) ReflectionTestUtils.invokeMethod(
+            service,
+            "buildChatPayload",
+            "main-model",
+            Collections.<Map<String, Object>>emptyList(),
+            Boolean.FALSE,
+            null,
+            true
+        );
+
+        assertThat(payload).containsEntry("enable_thinking", true);
+        assertThat(payload).containsEntry("stream", false);
+        assertThat(payload).containsEntry("model", "main-model");
     }
 
     @Test

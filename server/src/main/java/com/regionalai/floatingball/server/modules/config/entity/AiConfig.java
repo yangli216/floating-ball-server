@@ -34,6 +34,12 @@ public class AiConfig extends BaseEntity {
     @TableField("model_name")
     private String modelName;
 
+    @TableField("fast_model_name")
+    private String fastModelName;
+
+    @TableField("enable_thinking")
+    private String enableThinking;
+
     @TableField("audio_api_key_encrypted")
     private String audioApiKeyEncrypted;
 
@@ -78,6 +84,9 @@ public class AiConfig extends BaseEntity {
 
     @TableField("reviewer_model")
     private String reviewerModel;
+
+    @TableField("reviewer_check_examination_enabled")
+    private String reviewerCheckExaminationEnabled;
 
     @TableField("features_json")
     private String featuresJson;

@@ -82,17 +82,22 @@ class ConfigServiceTest {
         assertEquals("https://org.example.com", resolved.getBaseUrl());
         assertEquals("org-key", resolved.getApiKey());
         assertEquals("org-model", resolved.getModel());
+        assertEquals("org-model", resolved.getFastModel());
+        assertFalse(Boolean.TRUE.equals(resolved.getEnableThinking()));
         assertEquals("org-key", resolved.getAudioApiKey());
         assertEquals("https://org.example.com", resolved.getAudioBaseUrl());
         assertEquals("whisper-1", resolved.getAudioModel());
         assertEquals("openai-compatible", resolved.getSpeechProvider());
         assertEquals("whisper-1", resolved.getSpeechModel());
+        assertTrue(Boolean.TRUE.equals(resolved.getReviewerCheckExaminationEnabled()));
         assertTrue(resolved.getFeatures().get("voice"));
     }
 
     @Test
     void buildBootstrapShouldUseResolvedConfigAndVisibleVersions() {
         AiConfig config = buildConfig("ORG001", "REG001", "https://llm.example.com/", "secret-key", "deepseek-chat");
+        config.setFastModelName("deepseek-chat-lite");
+        config.setEnableThinking("1");
         config.setAudioBaseUrl(null);
         config.setAudioModel("whisper-1");
         config.setSpeechProvider("aliyun");
@@ -102,6 +107,7 @@ class ConfigServiceTest {
         config.setPmphaiEnabled("0");
         config.setReviewerEnabled("1");
         config.setReviewerModel("reviewer-v1");
+        config.setReviewerCheckExaminationEnabled("0");
         config.setFeaturesJson("{\"voice\":true,\"knowledge\":false}");
 
         when(aiConfigMapper.selectList(any())).thenReturn(Arrays.asList(config));
@@ -116,6 +122,8 @@ class ConfigServiceTest {
         BootstrapVO bootstrap = configService.buildBootstrap(device);
 
         assertEquals("https://llm.example.com", bootstrap.getLlm().getBaseUrl());
+        assertEquals("deepseek-chat-lite", bootstrap.getLlm().getFastModel());
+        assertTrue(Boolean.TRUE.equals(bootstrap.getLlm().getEnableThinking()));
         assertEquals("https://llm.example.com", bootstrap.getLlm().getAudioBaseUrl());
         assertEquals("qwen3-asr-flash", bootstrap.getLlm().getAudioModel());
         assertEquals("aliyun-dashscope", bootstrap.getSpeech().getProvider());
@@ -124,6 +132,7 @@ class ConfigServiceTest {
         assertFalse(bootstrap.getPmphai().getEnabled());
         assertTrue(bootstrap.getReviewer().getEnabled());
         assertEquals("reviewer-v1", bootstrap.getReviewer().getModel());
+        assertFalse(Boolean.TRUE.equals(bootstrap.getReviewer().getCheckExaminationEnabled()));
         assertTrue(bootstrap.getFeatures().get("voice"));
         assertEquals("2026.04.20.1", bootstrap.getPromptVersion());
         assertEquals("tpl-2", bootstrap.getTemplateVersion());
@@ -228,9 +237,11 @@ class ConfigServiceTest {
         config.setApiBaseUrl(apiBaseUrl);
         config.setApiKeyEncrypted(aesUtils.encrypt(apiKey));
         config.setModelName(modelName);
+        config.setEnableThinking("0");
         config.setKnowledgeBaseEnabled("0");
         config.setPmphaiEnabled("0");
         config.setReviewerEnabled("0");
+        config.setReviewerCheckExaminationEnabled("1");
         return config;
     }
 }

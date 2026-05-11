@@ -21,6 +21,8 @@ public class BootstrapVO {
     public static class LlmConfig {
         private String baseUrl;
         private String model;
+        private String fastModel;
+        private Boolean enableThinking;
         private String audioBaseUrl;
         private String audioModel;
     }
@@ -46,5 +48,6 @@ public class BootstrapVO {
     public static class ReviewerConfig {
         private Boolean enabled;
         private String model;
+        private Boolean checkExaminationEnabled;
     }
 }

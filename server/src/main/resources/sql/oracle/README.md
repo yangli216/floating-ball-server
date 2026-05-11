@@ -79,6 +79,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 ```sql
 @upgrade_20260421_ai_config_server_managed.sql
 @upgrade_20260428_ai_config_audio_key.sql
+@upgrade_20260511_ai_config_reviewer_check_examination.sql
 ```
 
 这些脚本会为旧表补齐以下服务端托管字段：
@@ -92,6 +93,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 7. `reviewer_api_key_encrypted`
 8. `reviewer_model`
 9. `audio_api_key_encrypted`
+10. `reviewer_check_examination_enabled`
 
 ## 症状模板表升级
 

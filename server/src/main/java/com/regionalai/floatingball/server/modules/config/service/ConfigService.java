@@ -64,6 +64,8 @@ public class ConfigService {
         BootstrapVO.LlmConfig llm = new BootstrapVO.LlmConfig();
         llm.setBaseUrl(resolved.getBaseUrl());
         llm.setModel(resolved.getModel());
+        llm.setFastModel(resolved.getFastModel());
+        llm.setEnableThinking(Boolean.TRUE.equals(resolved.getEnableThinking()));
         llm.setAudioBaseUrl(resolved.getAudioBaseUrl());
         llm.setAudioModel(resolved.getAudioModel());
         vo.setLlm(llm);
@@ -85,6 +87,7 @@ public class ConfigService {
         BootstrapVO.ReviewerConfig reviewer = new BootstrapVO.ReviewerConfig();
         reviewer.setEnabled(Boolean.TRUE.equals(resolved.getReviewerEnabled()));
         reviewer.setModel(resolved.getReviewerModel());
+        reviewer.setCheckExaminationEnabled(!Boolean.FALSE.equals(resolved.getReviewerCheckExaminationEnabled()));
         vo.setReviewer(reviewer);
 
         vo.setFeatures(resolved.getFeatures() == null ? Collections.<String, Boolean>emptyMap() : resolved.getFeatures());
@@ -153,6 +156,8 @@ public class ConfigService {
         target.setProvider(request.getProvider());
         target.setApiBaseUrl(request.getApiBaseUrl());
         target.setModelName(request.getModelName());
+        target.setFastModelName(request.getFastModelName());
+        target.setEnableThinking(Boolean.TRUE.equals(request.getEnableThinking()) ? "1" : "0");
         target.setAudioBaseUrl(request.getAudioBaseUrl());
         String speechProvider = normalizeSpeechProvider(request.getSpeechProvider());
         String audioModel = resolveAudioModel(speechProvider, request.getAudioModel());
@@ -166,6 +171,7 @@ public class ConfigService {
         target.setReviewerEnabled(Boolean.TRUE.equals(request.getReviewerEnabled()) ? "1" : "0");
         target.setReviewerBaseUrl(request.getReviewerBaseUrl());
         target.setReviewerModel(request.getReviewerModel());
+        target.setReviewerCheckExaminationEnabled(Boolean.FALSE.equals(request.getReviewerCheckExaminationEnabled()) ? "0" : "1");
         target.setFeaturesJson(request.getFeaturesJson());
         target.setIdOrg(request.getIdOrg());
         target.setIdRegion(request.getIdRegion());
@@ -257,6 +263,8 @@ public class ConfigService {
         resolved.setApiKey(apiKey);
         resolved.setAudioApiKey(StringUtils.hasText(audioApiKey) ? audioApiKey : apiKey);
         resolved.setModel(config.getModelName());
+        resolved.setFastModel(StringUtils.hasText(config.getFastModelName()) ? config.getFastModelName() : config.getModelName());
+        resolved.setEnableThinking("1".equals(config.getEnableThinking()));
         resolved.setAudioBaseUrl(StringUtils.hasText(config.getAudioBaseUrl()) ? trimRightSlash(config.getAudioBaseUrl()) : trimRightSlash(config.getApiBaseUrl()));
         String speechProvider = normalizeSpeechProvider(config.getSpeechProvider());
         String audioModel = resolveAudioModel(speechProvider, config.getAudioModel());
@@ -273,6 +281,7 @@ public class ConfigService {
         resolved.setReviewerBaseUrl(StringUtils.hasText(config.getReviewerBaseUrl()) ? trimRightSlash(config.getReviewerBaseUrl()) : null);
         resolved.setReviewerApiKey(aesUtils.decrypt(config.getReviewerApiKeyEncrypted()));
         resolved.setReviewerModel(config.getReviewerModel());
+        resolved.setReviewerCheckExaminationEnabled(!"0".equals(config.getReviewerCheckExaminationEnabled()));
         resolved.setFeatures(parseFeatures(config.getFeaturesJson()));
         return resolved;
     }
@@ -297,6 +306,8 @@ public class ConfigService {
         view.setApiBaseUrl(config.getApiBaseUrl());
         view.setApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getApiKeyEncrypted())));
         view.setModelName(config.getModelName());
+        view.setFastModelName(config.getFastModelName());
+        view.setEnableThinking("1".equals(config.getEnableThinking()));
         view.setAudioApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getAudioApiKeyEncrypted())));
         view.setAudioBaseUrl(config.getAudioBaseUrl());
         String speechProvider = normalizeSpeechProvider(config.getSpeechProvider());
@@ -314,6 +325,7 @@ public class ConfigService {
         view.setReviewerBaseUrl(config.getReviewerBaseUrl());
         view.setReviewerApiKeyMasked(MaskingUtils.maskSecret(aesUtils.decrypt(config.getReviewerApiKeyEncrypted())));
         view.setReviewerModel(config.getReviewerModel());
+        view.setReviewerCheckExaminationEnabled(!"0".equals(config.getReviewerCheckExaminationEnabled()));
         view.setFeaturesJson(config.getFeaturesJson());
         view.setIdOrg(config.getIdOrg());
         view.setIdRegion(config.getIdRegion());

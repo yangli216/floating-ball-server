@@ -69,8 +69,8 @@ public class AiProxyService {
         resolveChatConfig(device, request);
     }
 
-    public String testChatConnection(String baseUrl, String apiKey, String model) {
-        UpstreamChatConfig upstreamConfig = new UpstreamChatConfig(trimRightSlash(baseUrl), apiKey, model);
+    public String testChatConnection(String baseUrl, String apiKey, String model, boolean enableThinking) {
+        UpstreamChatConfig upstreamConfig = new UpstreamChatConfig(trimRightSlash(baseUrl), apiKey, model, enableThinking);
         Map<String, Object> userMessage = new LinkedHashMap<String, Object>();
         userMessage.put("role", "user");
         userMessage.put("content", "您好，这是一条连通性测试消息，请只回复“测试成功”。");
@@ -97,13 +97,7 @@ public class AiProxyService {
                             UpstreamChatConfig upstreamConfig,
                             List<Map<String, Object>> messages,
                             Double temperature) {
-        Map<String, Object> payload = new HashMap<String, Object>();
-        payload.put("model", upstreamConfig.getModel());
-        payload.put("messages", messages);
-        payload.put("stream", Boolean.FALSE);
-        if (temperature != null) {
-            payload.put("temperature", temperature);
-        }
+        Map<String, Object> payload = buildChatPayload(upstreamConfig.getModel(), messages, Boolean.FALSE, temperature, upstreamConfig.isEnableThinking());
 
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -171,13 +165,13 @@ public class AiProxyService {
     }
 
     private void streamChat(AiDevice device, ChatRequest request, UpstreamChatConfig upstreamConfig, SseEmitter emitter) {
-        Map<String, Object> payload = new HashMap<String, Object>();
-        payload.put("model", upstreamConfig.getModel());
-        payload.put("messages", request.getMessages());
-        payload.put("stream", Boolean.TRUE);
-        if (request.getTemperature() != null) {
-            payload.put("temperature", request.getTemperature());
-        }
+        Map<String, Object> payload = buildChatPayload(
+            upstreamConfig.getModel(),
+            request.getMessages(),
+            Boolean.TRUE,
+            request.getTemperature(),
+            upstreamConfig.isEnableThinking()
+        );
 
         StringBuilder responseTextBuilder = new StringBuilder();
         try {
@@ -522,6 +516,22 @@ public class AiProxyService {
         }
     }
 
+    private Map<String, Object> buildChatPayload(String model,
+                                                 List<Map<String, Object>> messages,
+                                                 Boolean stream,
+                                                 Double temperature,
+                                                 boolean enableThinking) {
+        Map<String, Object> payload = new HashMap<String, Object>();
+        payload.put("model", model);
+        payload.put("messages", messages);
+        payload.put("stream", stream);
+        payload.put("enable_thinking", enableThinking);
+        if (temperature != null) {
+            payload.put("temperature", temperature);
+        }
+        return payload;
+    }
+
     private String trimRightSlash(String value) {
         return value == null ? null : value.replaceAll("/+$", "");
     }
@@ -832,6 +842,14 @@ public class AiProxyService {
     private UpstreamChatConfig resolveChatConfig(AiDevice device, ChatRequest request) {
         ResolvedAiConfig resolved = configService.resolveByDevice(device);
         String profile = request == null ? null : request.getConfigProfile();
+        if ("fast".equalsIgnoreCase(profile)) {
+            return new UpstreamChatConfig(
+                resolved.getBaseUrl(),
+                resolved.getApiKey(),
+                StringUtils.hasText(resolved.getFastModel()) ? resolved.getFastModel() : resolved.getModel(),
+                Boolean.TRUE.equals(resolved.getEnableThinking())
+            );
+        }
         if ("reviewer".equalsIgnoreCase(profile)) {
             if (!Boolean.TRUE.equals(resolved.getReviewerEnabled())) {
                 throw new BusinessException("当前设备未开启独立审查 AI");
@@ -839,13 +857,15 @@ public class AiProxyService {
             return new UpstreamChatConfig(
                 StringUtils.hasText(resolved.getReviewerBaseUrl()) ? resolved.getReviewerBaseUrl() : resolved.getBaseUrl(),
                 StringUtils.hasText(resolved.getReviewerApiKey()) ? resolved.getReviewerApiKey() : resolved.getApiKey(),
-                StringUtils.hasText(resolved.getReviewerModel()) ? resolved.getReviewerModel() : resolved.getModel()
+                StringUtils.hasText(resolved.getReviewerModel()) ? resolved.getReviewerModel() : resolved.getModel(),
+                Boolean.TRUE.equals(resolved.getEnableThinking())
             );
         }
         return new UpstreamChatConfig(
             resolved.getBaseUrl(),
             resolved.getApiKey(),
-            resolved.getModel()
+            resolved.getModel(),
+            Boolean.TRUE.equals(resolved.getEnableThinking())
         );
     }
 
@@ -854,8 +874,9 @@ public class AiProxyService {
         private final String baseUrl;
         private final String apiKey;
         private final String model;
+        private final boolean enableThinking;
 
-        private UpstreamChatConfig(String baseUrl, String apiKey, String model) {
+        private UpstreamChatConfig(String baseUrl, String apiKey, String model, boolean enableThinking) {
             if (!StringUtils.hasText(baseUrl)) {
                 throw new BusinessException("未配置 AI 服务地址");
             }
@@ -868,6 +889,7 @@ public class AiProxyService {
             this.baseUrl = baseUrl;
             this.apiKey = apiKey;
             this.model = model;
+            this.enableThinking = enableThinking;
         }
 
         public String getBaseUrl() {
@@ -876,6 +898,10 @@ public class AiProxyService {
 
         public String getApiKey() {
             return apiKey;
+        }
+
+        public boolean isEnableThinking() {
+            return enableThinking;
         }
 
         public String getModel() {

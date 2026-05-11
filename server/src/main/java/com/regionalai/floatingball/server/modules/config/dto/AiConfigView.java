@@ -12,6 +12,8 @@ public class AiConfigView {
     private String apiBaseUrl;
     private String apiKeyMasked;
     private String modelName;
+    private String fastModelName;
+    private Boolean enableThinking;
     private String audioApiKeyMasked;
     private String audioBaseUrl;
     private String audioModel;
@@ -27,6 +29,7 @@ public class AiConfigView {
     private String reviewerBaseUrl;
     private String reviewerApiKeyMasked;
     private String reviewerModel;
+    private Boolean reviewerCheckExaminationEnabled;
     private String featuresJson;
     private String idOrg;
     private String idRegion;

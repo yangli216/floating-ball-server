@@ -12,6 +12,8 @@ public class AiConfigSaveRequest {
     private String apiBaseUrl;
     private String apiKey;
     private String modelName;
+    private String fastModelName;
+    private Boolean enableThinking;
     private String audioApiKey;
     private String audioBaseUrl;
     private String audioModel;
@@ -27,6 +29,7 @@ public class AiConfigSaveRequest {
     private String reviewerBaseUrl;
     private String reviewerApiKey;
     private String reviewerModel;
+    private Boolean reviewerCheckExaminationEnabled;
     private String featuresJson;
     private String idOrg;
     private String idRegion;

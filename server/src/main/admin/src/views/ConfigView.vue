@@ -93,6 +93,14 @@
               <el-form-item label="模型名称" prop="modelName">
                 <el-input v-model.trim="form.modelName" maxlength="128" placeholder="例如 gpt-4o-mini" />
               </el-form-item>
+              <el-form-item label="chatFast 模型名称">
+                <el-input v-model.trim="form.fastModelName" maxlength="128" placeholder="留空则回退主模型" />
+                <p class="form-hint">仅区域化 `chatFast()` 使用；留空时服务端自动回退 `modelName`。</p>
+              </el-form-item>
+              <el-form-item label="思考模式">
+                <el-switch v-model="form.enableThinking" />
+                <p class="form-hint">控制服务端代理主模型 / `chatFast` / 审查模型时是否向上游传 `enable_thinking`。</p>
+              </el-form-item>
             </div>
             <div class="test-connection-row">
               <el-button type="primary" plain :loading="testingConnection" @click="testConnection">
@@ -183,6 +191,10 @@
                 </el-form-item>
                 <el-form-item label="审查模型名称">
                   <el-input v-model.trim="form.reviewerModel" maxlength="128" :disabled="!form.reviewerEnabled" />
+                </el-form-item>
+                <el-form-item label="检查项目审查开关">
+                  <el-switch v-model="form.reviewerCheckExaminationEnabled" :disabled="!form.reviewerEnabled" />
+                  <p class="form-hint">关闭后桌面端不再触发 check_examination 独立审查，其他审查类型不受影响。</p>
                 </el-form-item>
                 <el-form-item label="审查接口密钥" class="form-span-2">
                   <el-input v-model.trim="form.reviewerApiKey" show-password maxlength="1000" :disabled="!form.reviewerEnabled" />
@@ -294,6 +306,8 @@ function createDefaultForm() {
     apiBaseUrl: '',
     apiKey: '',
     modelName: '',
+    fastModelName: '',
+    enableThinking: false,
     audioBaseUrl: '',
     audioApiKey: '',
     audioModel: DEFAULT_AUDIO_MODEL,
@@ -309,6 +323,7 @@ function createDefaultForm() {
     reviewerBaseUrl: '',
     reviewerApiKey: '',
     reviewerModel: '',
+    reviewerCheckExaminationEnabled: true,
     featuresJson: '',
     idOrg: '',
     idRegion: '',
@@ -425,6 +440,8 @@ export default {
         apiBaseUrl: row.apiBaseUrl || '',
         apiKey: '',
         modelName: row.modelName || '',
+        fastModelName: row.fastModelName || '',
+        enableThinking: Boolean(row.enableThinking),
         audioBaseUrl: row.audioBaseUrl || '',
         audioApiKey: '',
         audioModel,
@@ -440,6 +457,7 @@ export default {
         reviewerBaseUrl: row.reviewerBaseUrl || '',
         reviewerApiKey: '',
         reviewerModel: row.reviewerModel || '',
+        reviewerCheckExaminationEnabled: row.reviewerCheckExaminationEnabled !== false,
         featuresJson: row.featuresJson || '',
         idOrg: row.idOrg || '',
         idRegion: row.idRegion || '',
@@ -519,6 +537,8 @@ export default {
             apiBaseUrl: this.form.apiBaseUrl,
             apiKey: this.form.apiKey,
             modelName: this.form.modelName,
+            fastModelName: this.form.fastModelName,
+            enableThinking: this.form.enableThinking,
             audioBaseUrl: this.form.audioBaseUrl,
             audioApiKey: this.form.audioApiKey,
             audioModel,
@@ -534,6 +554,7 @@ export default {
             reviewerBaseUrl: this.form.reviewerBaseUrl,
             reviewerApiKey: this.form.reviewerApiKey,
             reviewerModel: this.form.reviewerModel,
+            reviewerCheckExaminationEnabled: this.form.reviewerCheckExaminationEnabled,
             featuresJson: this.form.featuresJson,
             idOrg: this.form.idOrg || null,
             idRegion: this.form.idRegion || null,
