@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.feedback.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,6 +55,14 @@ public class FeedbackService {
     public ClientFeedbackSubmitResponse submit(AiDevice device, ClientFeedbackSubmitRequest request) {
         validateRequest(request);
 
+        Map<String, Object> chainContext = request.getChainContext() == null
+            ? Collections.<String, Object>emptyMap()
+            : request.getChainContext();
+        String scopeKey = trimToNull(asString(chainContext.get("feedbackScopeKey")));
+        String previousFeedbackId = trimToNull(asString(chainContext.get("previousFeedbackId")));
+        AiFeedback latestFeedback = findLatestFeedback(device == null ? null : device.getIdDevice(), scopeKey);
+        FeedbackVersionInfo versionInfo = resolveVersionInfo(latestFeedback, previousFeedbackId);
+
         AiFeedback feedback = new AiFeedback();
         feedback.setIdDevice(device == null ? null : device.getIdDevice());
         feedback.setIdOrg(device == null ? null : device.getIdOrg());
@@ -99,15 +108,26 @@ public class FeedbackService {
             feedback.setScreenshotDataUrl(trimToNull(screenshot.getDataUrl()));
         }
 
+        feedback.setFeedbackScopeKey(scopeKey);
+        feedback.setIdFeedbackRoot(versionInfo.rootFeedbackId);
+        feedback.setPreviousFeedbackId(versionInfo.previousFeedbackId);
+        feedback.setRevisionNo(versionInfo.revisionNo);
+        feedback.setFgLatest("1");
+
         try {
             feedback.setChainContextJson(objectMapper.writeValueAsString(
-                request.getChainContext() == null ? Collections.emptyMap() : request.getChainContext()
+                chainContext
             ));
         } catch (Exception ex) {
             throw new BusinessException("反馈链路上下文序列化失败");
         }
 
+        downgradePreviousLatest(device == null ? null : device.getIdDevice(), scopeKey, feedback.getPreviousFeedbackId());
         aiFeedbackMapper.insert(feedback);
+        if (!StringUtils.hasText(feedback.getIdFeedbackRoot())) {
+            feedback.setIdFeedbackRoot(feedback.getIdFeedback());
+            aiFeedbackMapper.updateById(feedback);
+        }
         return new ClientFeedbackSubmitResponse(feedback.getIdFeedback(), "accepted");
     }
 
@@ -116,6 +136,9 @@ public class FeedbackService {
         QueryWrapper<AiFeedback> wrapper = new QueryWrapper<AiFeedback>()
             .eq("fg_active", "1")
             .orderByDesc("feedback_time");
+        if (!Boolean.TRUE.equals(query.getIncludeHistory())) {
+            wrapper.eq("fg_latest", "1");
+        }
 
         if (StringUtils.hasText(query.getKeyword())) {
             String trimmed = query.getKeyword().trim();
@@ -236,6 +259,8 @@ public class FeedbackService {
         item.setTraceId(feedback.getTraceId());
         item.setSessionId(feedback.getSessionId());
         item.setIdDevice(feedback.getIdDevice());
+        item.setRevisionNo(feedback.getRevisionNo());
+        item.setLatest("1".equals(feedback.getFgLatest()));
         item.setCreatedAt(feedback.getFeedbackTime());
         return item;
     }
@@ -253,6 +278,10 @@ public class FeedbackService {
         detail.setHasTrace("1".equals(feedback.getHasTrace()) || StringUtils.hasText(feedback.getTraceId()));
         detail.setTraceId(feedback.getTraceId());
         detail.setSessionId(feedback.getSessionId());
+        detail.setRevisionNo(feedback.getRevisionNo());
+        detail.setLatest("1".equals(feedback.getFgLatest()));
+        detail.setRootFeedbackId(feedback.getIdFeedbackRoot());
+        detail.setPreviousFeedbackId(feedback.getPreviousFeedbackId());
         Map<String, Object> chainCtx = parseJsonMap(feedback.getChainContextJson());
         detail.setTargetSummary(extractTargetSummary(detail.getKind(), chainCtx));
         detail.setTargetType(extractTargetType(detail.getKind(), chainCtx));
@@ -332,6 +361,63 @@ public class FeedbackService {
 
     private String asString(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    private AiFeedback findLatestFeedback(String deviceId, String scopeKey) {
+        if (!StringUtils.hasText(deviceId) || !StringUtils.hasText(scopeKey)) {
+            return null;
+        }
+        return aiFeedbackMapper.selectOne(new QueryWrapper<AiFeedback>()
+            .eq("fg_active", "1")
+            .eq("fg_latest", "1")
+            .eq("id_device", deviceId)
+            .eq("feedback_scope_key", scopeKey)
+            .orderByDesc("revision_no")
+            .orderByDesc("feedback_time")
+            .last("FETCH FIRST 1 ROWS ONLY"));
+    }
+
+    private FeedbackVersionInfo resolveVersionInfo(AiFeedback latestFeedback, String requestedPreviousFeedbackId) {
+        FeedbackVersionInfo info = new FeedbackVersionInfo();
+        if (latestFeedback == null) {
+            info.rootFeedbackId = null;
+            info.previousFeedbackId = trimToNull(requestedPreviousFeedbackId);
+            info.revisionNo = 1;
+            return info;
+        }
+        info.rootFeedbackId = firstNonBlank(latestFeedback.getIdFeedbackRoot(), latestFeedback.getIdFeedback());
+        info.previousFeedbackId = firstNonBlank(latestFeedback.getIdFeedback(), requestedPreviousFeedbackId);
+        info.revisionNo = Math.max(1, latestFeedback.getRevisionNo() == null ? 1 : latestFeedback.getRevisionNo() + 1);
+        return info;
+    }
+
+    private void downgradePreviousLatest(String deviceId, String scopeKey, String previousFeedbackId) {
+        if (!StringUtils.hasText(deviceId) || !StringUtils.hasText(scopeKey)) {
+            return;
+        }
+        UpdateWrapper<AiFeedback> wrapper = new UpdateWrapper<AiFeedback>()
+            .eq("fg_active", "1")
+            .eq("fg_latest", "1")
+            .eq("id_device", deviceId)
+            .eq("feedback_scope_key", scopeKey)
+            .set("fg_latest", "0");
+        if (StringUtils.hasText(previousFeedbackId)) {
+            wrapper.ne("id_feedback", previousFeedbackId.trim());
+        }
+        aiFeedbackMapper.update(null, wrapper);
+
+        if (StringUtils.hasText(previousFeedbackId)) {
+            aiFeedbackMapper.update(null, new UpdateWrapper<AiFeedback>()
+                .eq("fg_active", "1")
+                .eq("id_feedback", previousFeedbackId.trim())
+                .set("fg_latest", "0"));
+        }
+    }
+
+    private static final class FeedbackVersionInfo {
+        private String rootFeedbackId;
+        private String previousFeedbackId;
+        private Integer revisionNo;
     }
 
     private String labelOfTargetType(String type) {

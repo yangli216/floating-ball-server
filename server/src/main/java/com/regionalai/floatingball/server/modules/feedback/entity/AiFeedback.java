@@ -78,6 +78,21 @@ public class AiFeedback extends BaseEntity {
     @TableField("screenshot_data_url")
     private String screenshotDataUrl;
 
+    @TableField("feedback_scope_key")
+    private String feedbackScopeKey;
+
+    @TableField("id_feedback_root")
+    private String idFeedbackRoot;
+
+    @TableField("previous_feedback_id")
+    private String previousFeedbackId;
+
+    @TableField("revision_no")
+    private Integer revisionNo;
+
+    @TableField("fg_latest")
+    private String fgLatest;
+
     @TableField("chain_context_json")
     private String chainContextJson;
 

@@ -545,6 +545,8 @@ Content-Type: application/json
 
 用途：桌面端提交问题反馈，统一覆盖**通用反馈（设置入口）**、**语音推荐反馈**、**语音病例字段反馈**、**语音整页评分反馈**四种场景。支持评分、说明、内置截图、问题标签、医生/机构/科室身份回填，以及最近一次 AI 调用链路上下文。
 
+版本语义：当 `chainContext.feedbackScopeKey` 存在时，服务端按“同一设备 + 同一反馈槽位”保留修订历史。新提交会生成一条新记录，并把上一条最新记录标记为历史版本；默认列表与统计仅看最新版本。
+
 请求：
 
 ```json
@@ -589,6 +591,10 @@ Content-Type: application/json
 | `orgName` | string | 机构名称；`orgCode` 已经由设备鉴权携带，此处仅补名称 |
 | `deptId` / `deptName` | string | 科室身份；从 `urt.userRoleDepts[0]` 解析 |
 | `sourceModule` | string | 反馈入口标识。常见取值：`settings_feedback`、`voice_session`、`voice_recommendation`、`voice_record_field` |
+| `chainContext.consultationId` | string | 可选，当前问诊锚点；用于把同一问诊的多次反馈修订归到同一槽位 |
+| `chainContext.feedbackScopeKey` | string | 可选，反馈槽位唯一键，建议由客户端按“问诊锚点 + 模块”生成 |
+| `chainContext.feedbackRevision` | number | 可选，客户端感知到的修订号；服务端会以库内最新版本为准继续递增 |
+| `chainContext.previousFeedbackId` | string | 可选，客户端上次提交成功返回的反馈 ID；用于辅助串联修订历史 |
 
 约束：
 
@@ -614,6 +620,12 @@ Content-Type: application/json
 - `desOp` ← `payload.action`，若缺失则回退 `operationName / feedbackType / recType`
 - `opResult` ← `payload.result`，若缺失则回退 `success`
 - `payloadJson` 保留完整原始 payload，供详情查看和兼容后续扩展
+
+版本持久化约定：
+
+- 若 `feedbackScopeKey` 缺失，则按普通单条反馈处理，`fg_latest=1`、`revision_no=1`
+- 若 `feedbackScopeKey` 存在，则同一 `id_device + feedback_scope_key` 下仅一条记录 `fg_latest=1`
+- 新版本会保留历史记录，并写入 `id_feedback_root`、`previous_feedback_id`、`revision_no`
 
 响应 `data`：
 
@@ -1662,12 +1674,14 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 1. 仅管理端鉴权后可访问。
 2. 接口只根据 `idLog` 查表后读取服务端保存的音频文件，不接受任意文件路径参数。
 
-### 5.56 GET `/admin/api/feedbacks`
-用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。
+### 5.51 GET `/admin/api/feedbacks`
+
+用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。默认只返回每个反馈槽位的最新版本；如需查看历史修订，可显式传 `includeHistory=true`。
 
 请求参数：
 
 - `current`、`size`
+- `includeHistory`：是否包含历史修订，默认 `false`
 - `keyword`：跨 `comment / sourceModule / traceId / sessionId / na_org / na_doctor / na_dept` 模糊搜索
 - `score`、`sourceModule`、`kind`（`general | recommendation | record_field | session`）、`severity`（`low | medium | high`）
 - `doctor`：医生模糊（先按 `id_doctor` 精确，再 `na_doctor` 模糊）
@@ -1699,6 +1713,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
   "traceId": "trace-123",
   "sessionId": "session-123",
   "idDevice": "device-uuid",
+  "revisionNo": 2,
+  "latest": true,
   "createdAt": "2026-04-22T10:11:12"
 }
 ```
@@ -1729,6 +1745,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
     "naOrg": "示例社区卫生服务中心",
     "traceId": "trace-123",
     "sessionId": "session-123",
+    "revisionNo": 2,
+    "latest": true,
+    "rootFeedbackId": "uuid-root",
+    "previousFeedbackId": "uuid-prev",
     "screenshotDataUrl": null,
     "chainContext": {
       "kind": "record_field",

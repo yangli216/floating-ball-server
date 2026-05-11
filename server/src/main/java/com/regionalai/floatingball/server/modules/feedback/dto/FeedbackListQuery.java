@@ -6,6 +6,7 @@ import lombok.Data;
 public class FeedbackListQuery {
     private long current = 1;
     private long size = 10;
+    private Boolean includeHistory;
     private String keyword;
     private Integer score;
     private String sourceModule;

@@ -25,6 +25,10 @@ public class AdminFeedbackDetailResponse {
         private Boolean hasTrace;
         private String traceId;
         private String sessionId;
+        private Integer revisionNo;
+        private Boolean latest;
+        private String rootFeedbackId;
+        private String previousFeedbackId;
 
         /** 反馈目标摘要（如"推荐诊断：高血压"、"病例字段：主诉"），由 chainContext 解析得出 */
         private String targetSummary;

@@ -53,6 +53,7 @@
           <el-option label="有 traceId" :value="true" />
           <el-option label="无 traceId" :value="false" />
         </el-select>
+        <el-checkbox v-model="filters.includeHistory">包含历史修订</el-checkbox>
       </div>
     </div>
 
@@ -75,6 +76,11 @@
       </el-table-column>
       <el-table-column label="反馈说明" min-width="220" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ displayText(row.comment) }}</template>
+      </el-table-column>
+      <el-table-column label="版本" width="100">
+        <template slot-scope="{ row }">
+          <el-tag size="mini" :type="row.latest ? 'success' : 'info'">v{{ row.revisionNo || 1 }}</el-tag>
+        </template>
       </el-table-column>
       <el-table-column label="标签" min-width="160">
         <template slot-scope="{ row }">
@@ -359,6 +365,7 @@ function createDefaultFilters() {
     sourceModule: '',
     hasCorrection: '',
     hasTrace: '',
+    includeHistory: false,
     dateRange: []
   }
 }
@@ -418,6 +425,7 @@ export default {
           dept: this.filters.dept || undefined,
           org: this.filters.org || undefined,
           sourceModule: this.filters.sourceModule || undefined,
+          includeHistory: this.filters.includeHistory || undefined,
           dateFrom: dateRange[0] || undefined,
           dateTo: dateRange[1] || undefined
         }

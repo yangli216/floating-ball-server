@@ -33,5 +33,7 @@ public class AdminFeedbackListItem {
     private String traceId;
     private String sessionId;
     private String idDevice;
+    private Integer revisionNo;
+    private Boolean latest;
     private LocalDateTime createdAt;
 }

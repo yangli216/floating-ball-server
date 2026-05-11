@@ -439,6 +439,11 @@ CREATE TABLE c_ai_feedback (
     screenshot_file_name  VARCHAR2(255),
     screenshot_mime_type  VARCHAR2(128),
     screenshot_data_url   CLOB,
+    feedback_scope_key    VARCHAR2(255),
+    id_feedback_root      VARCHAR2(32),
+    previous_feedback_id  VARCHAR2(32),
+    revision_no           NUMBER(10) DEFAULT 1,
+    fg_latest             CHAR(1) DEFAULT '1' NOT NULL,
     chain_context_json    CLOB,
     feedback_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fg_active             CHAR(1) DEFAULT '1' NOT NULL,
@@ -468,6 +473,11 @@ COMMENT ON COLUMN c_ai_feedback.comment_text IS '反馈说明';
 COMMENT ON COLUMN c_ai_feedback.screenshot_file_name IS '截图文件名';
 COMMENT ON COLUMN c_ai_feedback.screenshot_mime_type IS '截图 MIME 类型';
 COMMENT ON COLUMN c_ai_feedback.screenshot_data_url IS '截图 Data URL';
+COMMENT ON COLUMN c_ai_feedback.feedback_scope_key IS '反馈槽位唯一键（同问诊+模块）';
+COMMENT ON COLUMN c_ai_feedback.id_feedback_root IS '反馈修订链根记录 ID';
+COMMENT ON COLUMN c_ai_feedback.previous_feedback_id IS '上一版反馈 ID';
+COMMENT ON COLUMN c_ai_feedback.revision_no IS '反馈修订版本号';
+COMMENT ON COLUMN c_ai_feedback.fg_latest IS '是否最新版本';
 COMMENT ON COLUMN c_ai_feedback.chain_context_json IS '前端上传的链路上下文快照';
 COMMENT ON COLUMN c_ai_feedback.feedback_time IS '反馈时间';
 COMMENT ON COLUMN c_ai_feedback.fg_active IS '逻辑删除标记';
@@ -480,6 +490,7 @@ CREATE INDEX idx_c_ai_feedback_device ON c_ai_feedback (id_device, fg_active);
 CREATE INDEX idx_c_ai_feedback_kind ON c_ai_feedback (kind, fg_active);
 CREATE INDEX idx_c_ai_feedback_doctor ON c_ai_feedback (id_doctor, fg_active);
 CREATE INDEX idx_c_ai_feedback_dept ON c_ai_feedback (id_dept, fg_active);
+CREATE INDEX idx_c_ai_feedback_scope ON c_ai_feedback (id_device, feedback_scope_key, fg_latest, fg_active);
 
 
 CREATE TABLE c_ai_user (
