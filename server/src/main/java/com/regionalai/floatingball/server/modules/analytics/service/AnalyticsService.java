@@ -11,6 +11,7 @@ import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageTre
 import com.regionalai.floatingball.server.modules.analytics.dto.RegionDistributionItemVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
+import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -21,7 +22,9 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,9 +33,12 @@ import java.util.Map;
 public class AnalyticsService {
 
     private final AnalyticsMapper analyticsMapper;
+    private final AuditLogDisplayCatalog displayCatalog;
 
-    public AnalyticsService(AnalyticsMapper analyticsMapper) {
+    public AnalyticsService(AnalyticsMapper analyticsMapper,
+                            AuditLogDisplayCatalog displayCatalog) {
         this.analyticsMapper = analyticsMapper;
+        this.displayCatalog = displayCatalog;
     }
 
     public AnalyticsSummaryVO getSummary(AnalyticsQueryDTO query) {
@@ -275,11 +281,12 @@ public class AnalyticsService {
     }
 
     public FunctionUsageResponseVO getFunctionUsage(FunctionUsageQueryDTO query) {
+        FunctionUsageQueryDTO normalizedQuery = normalizeFunctionUsageQuery(query);
         FunctionUsageResponseVO vo = new FunctionUsageResponseVO();
 
-        List<FunctionUsageItemVO> ranking = analyticsMapper.queryFunctionUsageRanking(query);
+        List<FunctionUsageItemVO> ranking = analyticsMapper.queryFunctionUsageRanking(normalizedQuery);
         for (FunctionUsageItemVO item : ranking) {
-            item.setModuleName(toCnModule(item.getModuleName()));
+            item.setModuleName(toDisplayModule(item.getModuleName()));
         }
 
         long totalCallCount = 0;
@@ -287,7 +294,7 @@ public class AnalyticsService {
             totalCallCount += item.getCallCount();
         }
 
-        long days = computeDaysFromFunctionQuery(query);
+        long days = computeDaysFromFunctionQuery(normalizedQuery);
         long avgDaily = days > 0 ? totalCallCount / days : 0;
 
         long activeModuleCount = ranking.size();
@@ -298,11 +305,11 @@ public class AnalyticsService {
         vo.setAvgDailyCalls(avgDaily);
         vo.setUsageRate(usageRate);
 
-        FunctionUsageQueryDTO prevQuery = buildPreviousFunctionUsageQuery(query);
+        FunctionUsageQueryDTO prevQuery = buildPreviousFunctionUsageQuery(normalizedQuery);
         List<FunctionUsageItemVO> prevRanking = analyticsMapper.queryFunctionUsagePreviousRanking(prevQuery);
         Map<String, Long> prevCallMap = new LinkedHashMap<>();
         for (FunctionUsageItemVO item : prevRanking) {
-            prevCallMap.put(toCnModule(item.getModuleName()), item.getCallCount());
+            prevCallMap.put(toDisplayModule(item.getModuleName()), item.getCallCount());
         }
         for (FunctionUsageItemVO item : ranking) {
             Long prev = prevCallMap.get(item.getModuleName());
@@ -319,10 +326,10 @@ public class AnalyticsService {
         int to = Math.min(from + size, ranking.size());
         vo.setRecords(ranking.subList(from, to));
 
-        List<Map<String, Object>> trendRows = analyticsMapper.queryFunctionUsageTrend(query);
+        List<Map<String, Object>> trendRows = analyticsMapper.queryFunctionUsageTrend(normalizedQuery);
         Map<String, Map<String, Long>> trendMap = new LinkedHashMap<>();
         for (Map<String, Object> row : trendRows) {
-            String module = toCnModule(String.valueOf(row.get("MODULENAME")));
+            String module = toDisplayModule(String.valueOf(row.get("MODULENAME")));
             String day = String.valueOf(row.get("DAYSTR"));
             Object cntObj = row.get("CNT");
             long cnt = cntObj instanceof Number ? ((Number) cntObj).longValue() : 0L;
@@ -335,7 +342,7 @@ public class AnalyticsService {
             topModules.add(ranking.get(i).getModuleName());
         }
 
-        List<String> allDays = collectDays(query);
+        List<String> allDays = collectDays(normalizedQuery);
         List<List<Long>> trendValues = new ArrayList<>();
 
         for (String module : topModules) {
@@ -415,55 +422,49 @@ public class AnalyticsService {
         return days;
     }
 
-    private String toCnModule(String module) {
-        if (module == null) return "";
-        java.util.Map<String, String> map = new java.util.HashMap<>();
-        map.put("aliyunSpeech", "语音识别");
-        map.put("app_shell", "应用外壳");
-        map.put("chat_panel", "对话面板");
-        map.put("consultation_ai", "问诊AI");
-        map.put("consultation_checklist", "鉴别排查");
-        map.put("consultation_dynamic_symptom", "动态症状");
-        map.put("consultation_page", "问诊页面");
-        map.put("consultation_record", "病历草稿");
-        map.put("consultation_reference", "PHIS引用");
-        map.put("deep_link_listener", "DeepLink监听");
-        map.put("diagnosis_path", "诊断路径");
-        map.put("diagnosis_reviewer", "诊断审查");
-        map.put("error_tracker", "错误追踪");
-        map.put("examination_reviewer", "检查审查");
-        map.put("fact_checker", "事实核查");
-        map.put("feedback", "反馈面板");
-        map.put("feedback_panel", "反馈面板");
-        map.put("his_bridge", "HIS桥接");
-        map.put("llm", "LLM调用");
-        map.put("medicine_reviewer", "用药审查");
-        map.put("navigation", "页面导航");
-        map.put("reception_capsule", "接诊胶囊");
-        map.put("reception_risk_analysis", "风险评估");
-        map.put("regional_runtime", "区域化运行时");
-        map.put("risk_alert_panel", "风险告警");
-        map.put("settings_feedback", "设置反馈");
-        map.put("settings_panel", "设置面板");
-        map.put("tcm_diagnosis_reviewer", "中医诊断审查");
-        map.put("tcm_medicine_reviewer", "中药审查");
-        map.put("voice_capsule", "语音采集");
-        map.put("voice_consultation_ai", "语音问诊AI");
-        map.put("voice_consultation_result", "语音问诊结果");
-        map.put("voice_intent", "语音意图识别");
-        map.put("voice_recommendation", "语音推荐反馈");
-        map.put("voice_record_field", "语音病例字段");
-        map.put("voice_safety_reviewer", "语音安全审查");
-        map.put("voice_session", "语音整页反馈");
-        return map.getOrDefault(module, module);
+    private String toDisplayModule(String module) {
+        if (module == null) {
+            return "";
+        }
+        return displayCatalog.resolveSourceModuleLabel(module);
+    }
+
+    private FunctionUsageQueryDTO normalizeFunctionUsageQuery(FunctionUsageQueryDTO query) {
+        FunctionUsageQueryDTO normalized = new FunctionUsageQueryDTO();
+        normalized.setDateFrom(query.getDateFrom());
+        normalized.setDateTo(query.getDateTo());
+        normalized.setIdOrg(query.getIdOrg());
+        normalized.setIdRegion(query.getIdRegion());
+        normalized.setCurrent(query.getCurrent());
+        normalized.setSize(query.getSize());
+        normalized.setFunctionModules(resolveFunctionModules(query.getFunctionModules()));
+        return normalized;
+    }
+
+    private List<String> resolveFunctionModules(List<String> selectedModules) {
+        if (selectedModules == null || selectedModules.isEmpty()) {
+            return selectedModules;
+        }
+        LinkedHashSet<String> resolved = new LinkedHashSet<String>();
+        for (String selectedModule : selectedModules) {
+            Collection<String> aliases = displayCatalog.lookupSourceModuleCodes(selectedModule);
+            if (aliases == null || aliases.isEmpty()) {
+                if (selectedModule != null && !selectedModule.trim().isEmpty()) {
+                    resolved.add(selectedModule.trim());
+                }
+                continue;
+            }
+            resolved.addAll(aliases);
+        }
+        return new ArrayList<String>(resolved);
     }
 
     public List<String> getFunctionModuleOptions() {
         List<String> modules = analyticsMapper.queryDistinctModules();
-        List<String> result = new ArrayList<>();
+        LinkedHashSet<String> result = new LinkedHashSet<String>();
         for (String m : modules) {
-            result.add(toCnModule(m));
+            result.add(toDisplayModule(m));
         }
-        return result;
+        return new ArrayList<String>(result);
     }
 }

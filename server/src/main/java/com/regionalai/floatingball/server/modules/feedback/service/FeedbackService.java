@@ -9,6 +9,7 @@ import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
+import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackDetailResponse;
 import com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackListItem;
@@ -27,6 +28,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -43,6 +45,7 @@ public class FeedbackService {
     private final AiFeedbackMapper aiFeedbackMapper;
     private final AiOpLogMapper aiOpLogMapper;
     private final ObjectMapper objectMapper;
+    private final AuditLogDisplayCatalog displayCatalog = new AuditLogDisplayCatalog();
 
     public FeedbackService(AiFeedbackMapper aiFeedbackMapper,
                            AiOpLogMapper aiOpLogMapper,
@@ -156,7 +159,7 @@ public class FeedbackService {
             wrapper.eq("score", query.getScore());
         }
         if (StringUtils.hasText(query.getSourceModule())) {
-            wrapper.like("source_module", query.getSourceModule().trim());
+            applySourceModuleFilter(wrapper, query.getSourceModule());
         }
         if (StringUtils.hasText(query.getKind())) {
             wrapper.eq("kind", query.getKind().trim());
@@ -241,6 +244,7 @@ public class FeedbackService {
         item.setScore(feedback.getScore());
         item.setComment(feedback.getCommentText());
         item.setSourceModule(feedback.getSourceModule());
+        item.setDisplaySourceModule(displayCatalog.resolveSourceModuleLabel(feedback.getSourceModule()));
         item.setKind(normalizeKind(feedback.getKind()));
         item.setSeverity(normalizeSeverity(feedback.getSeverity()));
         item.setTags(parseTags(feedback.getTagsJson()));
@@ -271,6 +275,7 @@ public class FeedbackService {
         detail.setScore(feedback.getScore());
         detail.setComment(feedback.getCommentText());
         detail.setSourceModule(feedback.getSourceModule());
+        detail.setDisplaySourceModule(displayCatalog.resolveSourceModuleLabel(feedback.getSourceModule()));
         detail.setKind(normalizeKind(feedback.getKind()));
         detail.setSeverity(normalizeSeverity(feedback.getSeverity()));
         detail.setTags(parseTags(feedback.getTagsJson()));
@@ -521,16 +526,19 @@ public class FeedbackService {
         item.setType("feedback");
         item.setTime(feedback.getFeedbackTime());
         item.setTitle("用户提交反馈");
+        item.setDisplaySourceModule(displayCatalog.resolveSourceModuleLabel(feedback.getSourceModule()));
         item.setResult("success");
         item.setPayload(parseJsonMap(feedback.getChainContextJson()));
         return item;
     }
 
     private FeedbackTimelineItem buildLogTimelineItem(AiOpLog log) {
+        displayCatalog.enrich(log);
         FeedbackTimelineItem item = new FeedbackTimelineItem();
         item.setType(log.getSdLogType());
         item.setTime(log.getOperationTime());
-        item.setTitle(firstNonBlank(log.getDesOp(), log.getNaModule(), log.getSdLogType()));
+        item.setTitle(firstNonBlank(log.getDisplayTitle(), log.getDesOp(), log.getDisplayAction(), log.getDisplayModule(), log.getSdLogType()));
+        item.setDisplaySourceModule(log.getDisplaySourceModule());
         item.setResult(resolveResult(log.getOpResult()));
         Map<String, Object> payload = new LinkedHashMap<String, Object>(parseJsonMap(log.getPayloadJson()));
         if (StringUtils.hasText(log.getAudioFilePath())) {
@@ -538,6 +546,21 @@ public class FeedbackService {
         }
         item.setPayload(payload);
         return item;
+    }
+
+    private void applySourceModuleFilter(QueryWrapper<AiFeedback> wrapper, String sourceModule) {
+        String text = sourceModule.trim();
+        Collection<String> aliases = displayCatalog.lookupSourceModuleCodes(sourceModule);
+        if (aliases == null || aliases.isEmpty()) {
+            wrapper.like("source_module", text);
+            return;
+        }
+        wrapper.and(q -> {
+            q.like("source_module", text);
+            for (String alias : aliases) {
+                q.or().eq("source_module", alias);
+            }
+        });
     }
 
     private Map<String, Object> parseJsonMap(String value) {

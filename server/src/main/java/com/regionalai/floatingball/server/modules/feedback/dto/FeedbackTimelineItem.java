@@ -10,6 +10,7 @@ public class FeedbackTimelineItem {
     private String type;
     private LocalDateTime time;
     private String title;
+    private String displaySourceModule;
     private String result;
     private Map<String, Object> payload;
 }

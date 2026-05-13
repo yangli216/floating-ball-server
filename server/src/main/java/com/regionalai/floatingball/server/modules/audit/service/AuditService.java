@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.audit.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,8 @@ import java.time.format.DateTimeParseException;
 import java.util.UUID;
 import java.util.Map;
 import java.util.Collections;
+import java.util.Collection;
+import java.util.List;
 
 @Service
 public class AuditService {
@@ -34,6 +37,7 @@ public class AuditService {
     private final AiOpLogMapper aiOpLogMapper;
     private final ObjectMapper objectMapper;
     private final AudioLogStorageService audioLogStorageService;
+    private final AuditLogDisplayCatalog displayCatalog = new AuditLogDisplayCatalog();
 
     public AuditService(AiOpLogMapper aiOpLogMapper,
                         ObjectMapper objectMapper,
@@ -244,50 +248,25 @@ public class AuditService {
             .eq(AiOpLog::getFgActive, "1")
             .orderByDesc(AiOpLog::getOperationTime);
         if (StringUtils.hasText(keyword)) {
-            wrapper.and(q -> q
-                .like(AiOpLog::getNaModule, keyword)
-                .or()
-                .like(AiOpLog::getOpAction, keyword)
-                .or()
-                .like(AiOpLog::getOpTitle, keyword)
-                .or()
-                .like(AiOpLog::getSourceModule, keyword)
-                .or()
-                .like(AiOpLog::getSceneCode, keyword)
-                .or()
-                .like(AiOpLog::getTraceId, keyword)
-                .or()
-                .like(AiOpLog::getConsultationId, keyword)
-                .or()
-                .like(AiOpLog::getSdLogType, keyword)
-                .or()
-                .like(AiOpLog::getDesOp, keyword)
-                .or()
-                .like(AiOpLog::getPayloadJson, keyword)
-                .or()
-                .like(AiOpLog::getAudioFilePath, keyword)
-                .or()
-                .like(AiOpLog::getIdDevice, keyword)
-                .or()
-                .like(AiOpLog::getIdOrg, keyword));
+            applyKeywordFilter(wrapper, keyword);
         }
         if (StringUtils.hasText(logType)) {
             wrapper.eq(AiOpLog::getSdLogType, logType.trim());
         }
         if (StringUtils.hasText(module)) {
-            wrapper.like(AiOpLog::getNaModule, module.trim());
+            applyAliasTextFilter(wrapper, AiOpLog::getNaModule, module, displayCatalog.lookupModuleCodes(module));
         }
         if (StringUtils.hasText(action)) {
-            wrapper.like(AiOpLog::getOpAction, action.trim());
+            applyAliasTextFilter(wrapper, AiOpLog::getOpAction, action, displayCatalog.lookupActionCodes(action));
         }
         if (StringUtils.hasText(title)) {
-            wrapper.like(AiOpLog::getOpTitle, title.trim());
+            applyTitleFilter(wrapper, title);
         }
         if (StringUtils.hasText(sourceModule)) {
-            wrapper.like(AiOpLog::getSourceModule, sourceModule.trim());
+            applyAliasTextFilter(wrapper, AiOpLog::getSourceModule, sourceModule, displayCatalog.lookupSourceModuleCodes(sourceModule));
         }
         if (StringUtils.hasText(scene)) {
-            wrapper.like(AiOpLog::getSceneCode, scene.trim());
+            applyAliasTextFilter(wrapper, AiOpLog::getSceneCode, scene, displayCatalog.lookupSceneCodes(scene));
         }
         if (StringUtils.hasText(traceId)) {
             wrapper.eq(AiOpLog::getTraceId, traceId.trim());
@@ -305,6 +284,7 @@ public class AuditService {
             wrapper.le(AiOpLog::getOperationTime, endTime);
         }
         Page<AiOpLog> pageResult = aiOpLogMapper.selectPage(page, wrapper);
+        enrichDisplayFields(pageResult.getRecords());
         return new PageResponse<AiOpLog>(
             pageResult.getCurrent(),
             pageResult.getSize(),
@@ -403,6 +383,101 @@ public class AuditService {
             return;
         }
         wrapper.eq(AiOpLog::getOpResult, result.trim());
+    }
+
+    private void enrichDisplayFields(List<AiOpLog> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        for (AiOpLog record : records) {
+            displayCatalog.enrich(record);
+        }
+    }
+
+    private void applyAliasTextFilter(LambdaQueryWrapper<AiOpLog> wrapper,
+                                      SFunction<AiOpLog, String> column,
+                                      String input,
+                                      Collection<String> aliases) {
+        final String text = input.trim();
+        if (aliases == null || aliases.isEmpty()) {
+            wrapper.like(column, text);
+            return;
+        }
+        wrapper.and(q -> {
+            q.like(column, text);
+            for (String alias : aliases) {
+                q.or().eq(column, alias);
+            }
+        });
+    }
+
+    private void applyTitleFilter(LambdaQueryWrapper<AiOpLog> wrapper, String title) {
+        final String text = title.trim();
+        final Collection<String> titleCodes = displayCatalog.lookupTitleCodes(title);
+        final Collection<String> actionCodes = displayCatalog.lookupActionCodes(title);
+        wrapper.and(q -> {
+            q.like(AiOpLog::getOpTitle, text)
+                .or()
+                .like(AiOpLog::getDesOp, text);
+            for (String alias : titleCodes) {
+                q.or().eq(AiOpLog::getOpTitle, alias);
+            }
+            for (String alias : actionCodes) {
+                q.or().eq(AiOpLog::getOpAction, alias);
+            }
+        });
+    }
+
+    private void applyKeywordFilter(LambdaQueryWrapper<AiOpLog> wrapper, String keyword) {
+        final String text = keyword.trim();
+        final Collection<String> moduleCodes = displayCatalog.lookupModuleCodes(keyword);
+        final Collection<String> actionCodes = displayCatalog.lookupActionCodes(keyword);
+        final Collection<String> titleCodes = displayCatalog.lookupTitleCodes(keyword);
+        final Collection<String> sourceCodes = displayCatalog.lookupSourceModuleCodes(keyword);
+        final Collection<String> sceneCodes = displayCatalog.lookupSceneCodes(keyword);
+        wrapper.and(q -> {
+            q.like(AiOpLog::getNaModule, text)
+                .or()
+                .like(AiOpLog::getOpAction, text)
+                .or()
+                .like(AiOpLog::getOpTitle, text)
+                .or()
+                .like(AiOpLog::getSourceModule, text)
+                .or()
+                .like(AiOpLog::getSceneCode, text)
+                .or()
+                .like(AiOpLog::getTraceId, text)
+                .or()
+                .like(AiOpLog::getConsultationId, text)
+                .or()
+                .like(AiOpLog::getSdLogType, text)
+                .or()
+                .like(AiOpLog::getDesOp, text)
+                .or()
+                .like(AiOpLog::getPayloadJson, text)
+                .or()
+                .like(AiOpLog::getAudioFilePath, text)
+                .or()
+                .like(AiOpLog::getIdDevice, text)
+                .or()
+                .like(AiOpLog::getIdOrg, text);
+            appendOrEquals(q, AiOpLog::getNaModule, moduleCodes);
+            appendOrEquals(q, AiOpLog::getOpAction, actionCodes);
+            appendOrEquals(q, AiOpLog::getOpTitle, titleCodes);
+            appendOrEquals(q, AiOpLog::getSourceModule, sourceCodes);
+            appendOrEquals(q, AiOpLog::getSceneCode, sceneCodes);
+        });
+    }
+
+    private void appendOrEquals(LambdaQueryWrapper<AiOpLog> wrapper,
+                                SFunction<AiOpLog, String> column,
+                                Collection<String> aliases) {
+        if (aliases == null || aliases.isEmpty()) {
+            return;
+        }
+        for (String alias : aliases) {
+            wrapper.or().eq(column, alias);
+        }
     }
 
     private LocalDateTime parseDateTime(String value, boolean endOfDay) {

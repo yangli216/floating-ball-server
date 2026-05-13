@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.userlog.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Collections;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -180,5 +182,32 @@ class UserConsultationLogServiceTest {
         );
 
         assertEquals("用户日志查询时间格式非法", ex.getMessage());
+    }
+
+    @Test
+    void getTimelineShouldExposeDisplayFields() {
+        AiUserConsultationLog log = new AiUserConsultationLog();
+        log.setIdLog("LOG001");
+        log.setFgActive("1");
+        log.setConsultationId("CONSULT-001");
+
+        AiOpLog opLog = new AiOpLog();
+        opLog.setSdLogType("operation");
+        opLog.setNaModule("consultation");
+        opLog.setOpAction("complete_consultation");
+        opLog.setOpTitle("完成智能问诊");
+        opLog.setDesOp("完成智能问诊");
+        opLog.setOpResult("1");
+        opLog.setOperationTime(java.time.LocalDateTime.of(2026, 5, 1, 10, 1, 0));
+        opLog.setPayloadJson("{}");
+
+        when(mapper.selectById("LOG001")).thenReturn(log);
+        when(opLogMapper.selectList(any())).thenReturn(Collections.singletonList(opLog));
+
+        List<com.regionalai.floatingball.server.modules.userlog.dto.ConsultationTimelineItem> timeline = service.getTimeline("LOG001");
+
+        assertEquals(1, timeline.size());
+        assertEquals("智能问诊", timeline.get(0).getDisplayModule());
+        assertEquals("完成智能问诊", timeline.get(0).getDisplayAction());
     }
 }

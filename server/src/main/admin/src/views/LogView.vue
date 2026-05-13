@@ -118,22 +118,26 @@
       </el-table-column>
       <el-table-column label="模块" min-width="120" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          {{ moduleLabel(row.naModule) }}
+          <div class="log-main-text">{{ primaryDisplay(row.displayModule, row.naModule) }}</div>
+          <div v-if="showRawMeta(row.displayModule, row.naModule)" class="log-sub-text">{{ row.naModule }}</div>
         </template>
       </el-table-column>
       <el-table-column label="业务标题" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          {{ displayText(row.opTitle || row.desOp) }}
+          <div class="log-main-text">{{ primaryDisplay(row.displayTitle, row.opTitle || row.desOp) }}</div>
+          <div v-if="showRawMeta(row.displayTitle, row.opTitle || row.desOp)" class="log-sub-text">{{ row.opTitle || row.desOp }}</div>
         </template>
       </el-table-column>
       <el-table-column label="动作编码" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
+          <div class="log-main-text">{{ primaryDisplay(row.displayAction, row.opAction) }}</div>
           <span class="code-tag">{{ displayText(row.opAction) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="来源/场景" min-width="180" show-overflow-tooltip>
+        <el-table-column label="来源/场景" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          {{ formatSourceScene(row.sourceModule, row.sceneCode) }}
+            <div class="log-main-text">{{ formatDisplaySourceScene(row) }}</div>
+            <div v-if="showRawSourceScene(row)" class="log-sub-text">{{ formatSourceScene(row.sourceModule, row.sceneCode) }}</div>
         </template>
       </el-table-column>
       <el-table-column label="结果" width="88">
@@ -145,7 +149,7 @@
       </el-table-column>
       <el-table-column label="原始数据" min-width="220" show-overflow-tooltip>
         <template slot-scope="{ row }">
-          <span class="code-tag log-summary">{{ summarizeRawData(row.payloadJson) }}</span>
+            <span class="code-tag log-summary">{{ summarizeRawData(row) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="操作时间" width="168">
@@ -180,23 +184,23 @@
         </div>
         <div class="detail-card">
           <div class="detail-card__label">模块</div>
-          <div class="detail-card__value">{{ moduleLabel(payloadRecord.naModule) }}</div>
+           <div class="detail-card__value">{{ primaryDisplay(payloadRecord.displayModule, payloadRecord.naModule) }}</div>
         </div>
         <div class="detail-card">
           <div class="detail-card__label">业务标题</div>
-          <div class="detail-card__value">{{ displayText(payloadRecord.opTitle || payloadRecord.desOp) }}</div>
+           <div class="detail-card__value">{{ primaryDisplay(payloadRecord.displayTitle, payloadRecord.opTitle || payloadRecord.desOp) }}</div>
         </div>
         <div class="detail-card">
           <div class="detail-card__label">动作编码</div>
-          <div class="detail-card__value">{{ displayText(payloadRecord.opAction) }}</div>
+           <div class="detail-card__value">{{ primaryDisplay(payloadRecord.displayAction, payloadRecord.opAction) }}</div>
         </div>
         <div class="detail-card">
           <div class="detail-card__label">来源模块</div>
-          <div class="detail-card__value">{{ displayText(payloadRecord.sourceModule) }}</div>
+           <div class="detail-card__value">{{ primaryDisplay(payloadRecord.displaySourceModule, payloadRecord.sourceModule) }}</div>
         </div>
         <div class="detail-card">
           <div class="detail-card__label">业务场景</div>
-          <div class="detail-card__value">{{ displayText(payloadRecord.sceneCode) }}</div>
+           <div class="detail-card__value">{{ primaryDisplay(payloadRecord.displayScene, payloadRecord.sceneCode) }}</div>
         </div>
         <div class="detail-card">
           <div class="detail-card__label">Trace ID</div>
@@ -230,6 +234,7 @@ const MODULE_LABELS = {
   feedback: '反馈弹层',
   settings_feedback: '设置页反馈',
   llm: 'AI 对话代理',
+    ai: 'AI 代理',
   aliyunSpeech: '语音识别代理',
   operation: '操作日志',
   metric: '指标日志',
@@ -256,13 +261,21 @@ const MODULE_LABELS = {
   consultation: '智能问诊',
   voice_consultation: '语音问诊',
   voice_capture: '语音采集',
+    settings: '设置',
   reception: '接诊风险评估',
   reviewer: '独立审查AI',
   his_bridge: 'HIS 桥接',
   regional_runtime: '区域化运行时',
   diagnosis_path: '诊断路径',
   navigation: '页面导航',
-  shell: '应用壳层'
+    shell: '应用壳层',
+    consultation_ai: '问诊 AI',
+    consultation_reference: '问诊引用',
+    consultation_record: '问诊病历',
+    system_integration: '系统集成',
+    lab_test: '检验项目',
+    procedure: '处置建议',
+    examination: '检查项目'
 }
 
 const MODULE_OPTIONS = [
@@ -295,13 +308,22 @@ const MODULE_OPTIONS = [
   { value: 'consultation', label: MODULE_LABELS.consultation },
   { value: 'voice_consultation', label: MODULE_LABELS.voice_consultation },
   { value: 'voice_capture', label: MODULE_LABELS.voice_capture },
+    { value: 'settings', label: MODULE_LABELS.settings },
   { value: 'reception', label: MODULE_LABELS.reception },
   { value: 'reviewer', label: MODULE_LABELS.reviewer },
   { value: 'his_bridge', label: MODULE_LABELS.his_bridge },
   { value: 'regional_runtime', label: MODULE_LABELS.regional_runtime },
   { value: 'diagnosis_path', label: MODULE_LABELS.diagnosis_path },
   { value: 'navigation', label: MODULE_LABELS.navigation },
-  { value: 'shell', label: MODULE_LABELS.shell }
+    { value: 'shell', label: MODULE_LABELS.shell },
+    { value: 'consultation_ai', label: MODULE_LABELS.consultation_ai },
+    { value: 'consultation_reference', label: MODULE_LABELS.consultation_reference },
+    { value: 'consultation_record', label: MODULE_LABELS.consultation_record },
+    { value: 'system_integration', label: MODULE_LABELS.system_integration },
+    { value: 'ai', label: MODULE_LABELS.ai },
+    { value: 'procedure', label: MODULE_LABELS.procedure },
+    { value: 'lab_test', label: MODULE_LABELS.lab_test },
+    { value: 'examination', label: MODULE_LABELS.examination }
 ]
 
 function createDefaultFilters() {
@@ -408,6 +430,14 @@ export default {
     displayText(value) {
       return this.normalizeText(value) || '--'
     },
+      primaryDisplay(displayValue, rawValue) {
+        return this.displayText(this.normalizeText(displayValue) || rawValue)
+      },
+      showRawMeta(displayValue, rawValue) {
+        const displayText = this.normalizeText(displayValue)
+        const rawText = this.normalizeText(rawValue)
+        return !!displayText && !!rawText && displayText !== rawText
+      },
     moduleLabel(value) {
       const text = this.displayText(value)
       if (text === '--') {
@@ -447,28 +477,28 @@ export default {
       }
       return { label: text, type: 'info' }
     },
-    summarizeRawData(value) {
-      const text = this.normalizeText(value)
+    summarizeRawData(row) {
+      const text = this.normalizeText(row && row.payloadJson)
       if (!text) {
         return '无原始数据'
       }
       try {
         const payload = JSON.parse(text)
         const summaryParts = []
-        const moduleName = this.moduleLabel(payload.module)
-        const sourceScene = this.formatSourceScene(payload.sourceModule, payload.scene)
-        const title = this.normalizeText(payload.title)
-        const action = this.normalizeText(payload.action)
+        const moduleName = this.primaryDisplay(row && row.displayModule, payload.module)
+        const sourceScene = this.formatDisplaySourceScene(row)
+        const title = this.primaryDisplay(row && row.displayTitle, payload.title)
+        const action = this.primaryDisplay(row && row.displayAction, payload.action)
         const operationName = this.normalizeText(payload.operationName)
         const responseText = this.normalizeText(payload.responseText)
         const errorMessage = this.normalizeText(payload.errorMessage)
         if (moduleName) {
           summaryParts.push(moduleName)
         }
-        if (title) {
+        if (title && title !== '--') {
           summaryParts.push(title)
         }
-        if (action) {
+        if (action && action !== '--') {
           summaryParts.push(action)
         } else if (operationName) {
           summaryParts.push(operationName)
@@ -513,6 +543,12 @@ export default {
         return `${left} / ${right}`
       }
       return left || right || '--'
+      },
+      formatDisplaySourceScene(row) {
+        return this.formatSourceScene(row && row.displaySourceModule, row && row.displayScene)
+      },
+      showRawSourceScene(row) {
+        return this.formatDisplaySourceScene(row) !== this.formatSourceScene(row && row.sourceModule, row && row.sceneCode)
     }
   }
 }
@@ -552,6 +588,18 @@ export default {
   text-overflow: ellipsis;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+.log-main-text {
+  color: #2C2C2A;
+  line-height: 1.5;
+}
+
+.log-sub-text {
+  margin-top: 2px;
+  color: #888780;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .detail-grid {

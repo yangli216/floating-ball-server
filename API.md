@@ -1038,7 +1038,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 
 ### 5.8 GET `/admin/api/analytics/function-modules`
 
-用途：返回所有已记录的功能模块名称列表，供辅诊功能应用统计页的功能模块多选下拉使用。
+用途：返回所有已记录的功能模块展示名称列表，供辅诊功能应用统计页的功能模块多选下拉使用。
 
 无请求参数。
 
@@ -1060,7 +1060,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 | `dateTo` | string | 截止日期 yyyy-MM-dd |
 | `idRegion` | string | 区域 ID（可选） |
 | `idOrg` | string | 机构 ID（可选） |
-| `functionModules` | string[] | 功能模块筛选（可选，多选） |
+| `functionModules` | string[] | 功能模块筛选（可选，多选），支持传展示名称或原始编码 |
 | `current` | int | 当前页（默认 1） |
 | `size` | int | 每页条数（默认 20） |
 
@@ -1093,6 +1093,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 约束：
 
 1. `ranking` 按 `callCount` 倒序排列，已计算增长率（与上一等长周期对比）
+2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的模块名均已统一为后台展示目录中的中文名称，同时保留对原始编码筛选的兼容
 2. `trend` 仅包含排名前 5 的功能模块的逐日调用趋势
 3. `records` 为当前页数据，支持分页
 
@@ -1587,10 +1588,15 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
       "idOrg": "ORG001",
       "sdLogType": "operation",
       "naModule": "consultation",
+      "displayModule": "智能问诊",
       "opAction": "reference_feedback_diagnosis",
+      "displayAction": "接收诊断引用回执",
       "opTitle": "接收 PHIS 引用回执",
+      "displayTitle": "接收 PHIS 诊断引用回执",
       "sourceModule": "consultation_reference",
+      "displaySourceModule": "问诊引用",
       "sceneCode": "consultation-reference",
+      "displayScene": "问诊引用回写",
       "traceId": "TRACE-001",
       "consultationId": "CONSULT-001",
       "desOp": "接收 PHIS 引用回执",
@@ -1609,6 +1615,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 2. 若存在录音文件落盘，返回记录中的 `audioFilePath` 会指向该文件
 3. `desOp` 默认优先展示 `title`，缺失时回退 `action / operationName`
 4. `traceId` 默认从顶层 `traceId` 提取；若顶层缺失则回退 `details.traceId`
+5. `displayModule/displayAction/displayTitle/displaySourceModule/displayScene` 为服务端统一生成的中文展示字段；管理端应优先展示这些字段，同时保留 `naModule/opAction/opTitle/sourceModule/sceneCode` 原始码用于精准排障与复制检索
 
 ### 5.54 GET `/admin/api/user-logs/consultations`
 用途：分页查询运维用户日志列表。该模块是专门给运维人员使用的问诊聚合日志，不替代原有操作日志页面。
@@ -1689,6 +1696,31 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 1. 仅管理端鉴权后可访问。
 2. 接口只根据 `idLog` 查表后读取服务端保存的音频文件，不接受任意文件路径参数。
 
+### 5.56 GET `/admin/api/user-logs/consultations/{idLog}/timeline`
+用途：查看一次问诊关联的操作时间线，按发生时间正序返回，便于快速识别关键步骤。
+
+响应 `data`：
+
+```json
+[
+  {
+    "eventType": "operation",
+    "module": "consultation",
+    "displayModule": "智能问诊",
+    "action": "完成智能问诊",
+    "displayAction": "完成智能问诊",
+    "result": "1",
+    "operationTime": "2026-04-27T10:05:00",
+    "details": {}
+  }
+]
+```
+
+补充约束：
+
+1. `module/action` 保留原始入库值；`displayModule/displayAction` 为服务端统一生成的中文展示字段。
+2. 管理端时间线应优先展示 `displayModule/displayAction`，同时保留原始字段用于精确定位与排障。
+
 ### 5.51 GET `/admin/api/feedbacks`
 
 用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。默认只返回每个反馈槽位的最新版本；如需查看历史修订，可显式传 `includeHistory=true`。
@@ -1715,6 +1747,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
   "severity": "medium",
   "comment": "主诉漏掉发热三天",
   "sourceModule": "voice_record_field",
+  "displaySourceModule": "语音病例字段",
   "tags": ["data_accuracy"],
   "hasCorrection": true,
   "hasTrace": true,
@@ -1734,6 +1767,11 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 }
 ```
 
+补充约束：
+
+1. `sourceModule` 仍保留原始编码；`displaySourceModule` 为服务端统一生成的中文展示字段，管理端列表与详情应优先展示该字段。
+2. `sourceModule` 查询兼容中文展示名和原始编码，两者都可命中同一批反馈记录。
+
 ### 5.57 GET `/admin/api/feedbacks/{feedbackId}`
 用途：查看反馈详情。管理端将其拆分为「摘要」与「技术详情」两个 Tab，前者展示评分/说明/医生身份/标签/截图，后者展示 traceId/chainContext/sessionId 等技术字段，便于工程师排查。
 
@@ -1748,6 +1786,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
     "severity": "medium",
     "comment": "主诉漏掉发热三天",
     "sourceModule": "voice_record_field",
+    "displaySourceModule": "语音病例字段",
     "tags": ["data_accuracy"],
     "hasCorrection": true,
     "hasTrace": true,
@@ -1772,11 +1811,16 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
     }
   },
   "timeline": [
-    { "type": "ai_proxy", "time": "2026-04-22T10:11:10", "title": "chat", "result": "success", "payload": {} },
-    { "type": "feedback", "time": "2026-04-22T10:11:12", "title": "用户提交反馈", "result": "success", "payload": {} }
+    { "type": "ai_proxy", "time": "2026-04-22T10:11:10", "title": "AI 对话请求", "displaySourceModule": "AI 对话代理", "result": "success", "payload": {} },
+    { "type": "feedback", "time": "2026-04-22T10:11:12", "title": "用户提交反馈", "displaySourceModule": "语音病例字段", "result": "success", "payload": {} }
   ]
 }
 ```
+
+补充约束：
+
+1. `timeline[*].title` 已按服务端统一展示目录优先中文化；管理端无需再自行猜测 `payload.action/operationName`。
+2. `timeline[*].displaySourceModule` 仅用于快速识别来源模块，排障仍应结合 `payload` 原始字段。
 
 ## 5. 管理端接口范围
 

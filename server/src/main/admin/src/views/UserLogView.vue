@@ -268,8 +268,14 @@
               :type="item.result === '1' || item.result === 'success' ? 'success' : item.result === '0' ? 'danger' : 'primary'"
             >
               <div class="timeline-content">
-                <span class="timeline-module">{{ item.module || item.eventType }}</span>
-                <span class="timeline-action">{{ item.action }}</span>
+                <div class="timeline-primary-row">
+                  <span class="timeline-module">{{ primaryDisplay(item.displayModule, item.module || item.eventType) }}</span>
+                  <span class="timeline-action">{{ primaryDisplay(item.displayAction, item.action) }}</span>
+                </div>
+                <div v-if="showTimelineRaw(item)" class="timeline-raw-row">
+                  <span>{{ item.module || item.eventType }}</span>
+                  <span>{{ item.action }}</span>
+                </div>
               </div>
             </el-timeline-item>
           </el-timeline>
@@ -620,6 +626,18 @@ export default {
     displayText(value) {
       return this.normalizeText(value) || '--'
     },
+      primaryDisplay(displayValue, rawValue) {
+        return this.displayText(this.normalizeText(displayValue) || rawValue)
+      },
+      showRawMeta(displayValue, rawValue) {
+        const displayText = this.normalizeText(displayValue)
+        const rawText = this.normalizeText(rawValue)
+        return !!displayText && !!rawText && displayText !== rawText
+      },
+      showTimelineRaw(item) {
+        if (!item) return false
+        return this.showRawMeta(item.displayModule, item.module || item.eventType) || this.showRawMeta(item.displayAction, item.action)
+      },
     formatDateTime(value) {
       const text = this.normalizeText(value)
       if (!text) return '--'
@@ -1038,6 +1056,14 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .timeline-module {
@@ -1052,5 +1078,10 @@ export default {
 .timeline-action {
   color: #2C2C2A;
   font-size: 13px;
+}
+
+.timeline-raw-row {
+  font-size: 12px;
+  color: #888780;
 }
 </style>

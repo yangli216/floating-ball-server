@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.feedback.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.feedback.dto.ClientFeedbackSubmitRequest;
@@ -17,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -127,6 +129,7 @@ class FeedbackServiceTest {
         assertEquals(1, result.getRecords().size());
         assertEquals(Integer.valueOf(2), result.getRecords().get(0).getRevisionNo());
         assertTrue(Boolean.TRUE.equals(result.getRecords().get(0).getLatest()));
+        assertEquals("智能问诊页", result.getRecords().get(0).getDisplaySourceModule());
 
         clearInvocations(aiFeedbackMapper);
         FeedbackListQuery includeHistoryQuery = new FeedbackListQuery();
@@ -135,6 +138,37 @@ class FeedbackServiceTest {
         verify(aiFeedbackMapper).selectPage(
             org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.extension.plugins.pagination.Page<AiFeedback>>any(),
             argThat(wrapper -> !String.valueOf(wrapper.getCustomSqlSegment()).contains("fg_latest")));
+    }
+
+    @Test
+    void detailShouldExposeDisplayFieldsForFeedbackAndTimeline() {
+        AiFeedback feedback = new AiFeedback();
+        feedback.setIdFeedback("feedback-1");
+        feedback.setFgActive("1");
+        feedback.setSourceModule("voice_record_field");
+        feedback.setFeedbackTime(java.time.LocalDateTime.of(2026, 5, 1, 10, 0, 0));
+
+        AiOpLog log = new AiOpLog();
+        log.setSdLogType("ai_proxy");
+        log.setNaModule("llm");
+        log.setOpAction("chat");
+        log.setOpTitle("chat");
+        log.setSourceModule("llm");
+        log.setDesOp("chat");
+        log.setOpResult("1");
+        log.setOperationTime(java.time.LocalDateTime.of(2026, 5, 1, 9, 59, 0));
+        log.setPayloadJson("{}");
+
+        when(aiFeedbackMapper.selectOne(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiFeedback>>any()))
+            .thenReturn(feedback);
+        when(aiOpLogMapper.selectList(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiOpLog>>any()))
+            .thenReturn(Collections.singletonList(log));
+
+        com.regionalai.floatingball.server.modules.feedback.dto.AdminFeedbackDetailResponse response = feedbackService.detail("feedback-1");
+
+        assertEquals("语音病例字段", response.getFeedback().getDisplaySourceModule());
+        assertEquals("AI 对话请求", response.getTimeline().get(0).getTitle());
+        assertEquals("AI 对话代理", response.getTimeline().get(0).getDisplaySourceModule());
     }
 
     private Map<String, Object> buildChainContext(String scopeKey, String previousFeedbackId, int revision) {

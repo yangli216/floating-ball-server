@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
@@ -46,6 +47,7 @@ public class UserConsultationLogService {
     private final AiOpLogMapper aiOpLogMapper;
     private final ObjectMapper objectMapper;
     private final AudioLogStorageService audioLogStorageService;
+    private final AuditLogDisplayCatalog displayCatalog = new AuditLogDisplayCatalog();
 
     public UserConsultationLogService(AiUserConsultationLogMapper userConsultationLogMapper,
                                       AiOpLogMapper aiOpLogMapper,
@@ -312,10 +314,13 @@ public class UserConsultationLogService {
         List<AiOpLog> opLogs = aiOpLogMapper.selectList(wrapper);
         List<ConsultationTimelineItem> items = new ArrayList<>();
         for (AiOpLog opLog : opLogs) {
+            displayCatalog.enrich(opLog);
             ConsultationTimelineItem item = new ConsultationTimelineItem();
             item.setEventType(opLog.getSdLogType());
             item.setModule(opLog.getNaModule());
+            item.setDisplayModule(opLog.getDisplayModule());
             item.setAction(opLog.getDesOp());
+            item.setDisplayAction(firstNonBlank(opLog.getDisplayTitle(), opLog.getDisplayAction(), opLog.getDesOp()));
             item.setResult(opLog.getOpResult());
             item.setOperationTime(opLog.getOperationTime());
             item.setDetails(parseJsonQuietly(opLog.getPayloadJson()));

@@ -104,7 +104,10 @@
         <template slot-scope="{ row }">{{ displayText(row.naOrg || row.idOrg) }}</template>
       </el-table-column>
       <el-table-column v-if="advancedMode" label="来源模块" min-width="130" show-overflow-tooltip>
-        <template slot-scope="{ row }">{{ moduleLabel(row.sourceModule) }}</template>
+        <template slot-scope="{ row }">
+          <div class="meta-main-text">{{ primaryDisplay(row.displaySourceModule, row.sourceModule) }}</div>
+          <div v-if="showRawMeta(row.displaySourceModule, row.sourceModule)" class="meta-sub-text">{{ row.sourceModule }}</div>
+        </template>
       </el-table-column>
       <el-table-column v-if="advancedMode" label="trace" min-width="130" show-overflow-tooltip>
         <template slot-scope="{ row }">
@@ -176,7 +179,10 @@
               </div>
               <div class="detail-card">
                 <div class="detail-card__label">来源模块</div>
-                <div class="detail-card__value">{{ moduleLabel(detailData.feedback.sourceModule) }}</div>
+                <div class="detail-card__value">
+                  <div class="meta-main-text">{{ primaryDisplay(detailData.feedback.displaySourceModule, detailData.feedback.sourceModule) }}</div>
+                  <div v-if="showRawMeta(detailData.feedback.displaySourceModule, detailData.feedback.sourceModule)" class="meta-sub-text">{{ detailData.feedback.sourceModule }}</div>
+                </div>
               </div>
               <div class="detail-card">
                 <div class="detail-card__label">提交时间</div>
@@ -472,6 +478,14 @@ export default {
       const text = String(value).trim()
       return text || '--'
     },
+    primaryDisplay(displayValue, rawValue) {
+      return this.displayText(this.normalizeText(displayValue) || rawValue)
+    },
+    showRawMeta(displayValue, rawValue) {
+      const displayText = this.normalizeText(displayValue)
+      const rawText = this.normalizeText(rawValue)
+      return !!displayText && !!rawText && displayText !== rawText
+    },
     moduleLabel(value) {
       const text = this.displayText(value)
       if (text === '--') return text
@@ -548,7 +562,7 @@ export default {
       const payload = item.payload || {}
       const explicitTitle = this.displayText(item.title)
       const payloadTitle = this.displayText(payload.title || payload.operationName || payload.action)
-      const sourceModule = this.moduleLabel(payload.sourceModule || payload.module)
+      const sourceModule = this.primaryDisplay(item.displaySourceModule, payload.sourceModule || payload.module)
       const traceId = this.displayText(payload.traceId)
       const parts = []
       if (explicitTitle !== '--') {
@@ -584,6 +598,8 @@ export default {
   padding-top: 8px;
   border-top: 1px dashed #ebeef5;
 }
+.meta-main-text { color: #303133; line-height: 1.5; }
+.meta-sub-text { margin-top: 2px; font-size: 12px; line-height: 1.4; color: #909399; }
 .search-input { width: 280px; }
 .filter-select { width: 150px; }
 .filter-narrow { width: 130px; }

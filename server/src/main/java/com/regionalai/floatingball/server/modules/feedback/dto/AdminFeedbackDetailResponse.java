@@ -18,6 +18,7 @@ public class AdminFeedbackDetailResponse {
         private Integer score;
         private String comment;
         private String sourceModule;
+        private String displaySourceModule;
         private String kind;
         private String severity;
         private List<String> tags;
