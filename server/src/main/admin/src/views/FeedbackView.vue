@@ -473,10 +473,18 @@ export default {
         this.detailLoading = false
       }
     },
-    displayText(value) {
-      if (value === null || value === undefined) return '--'
+    normalizeText(value) {
+      if (value === null || value === undefined) {
+        return ''
+      }
       const text = String(value).trim()
-      return text || '--'
+      if (!text || text === 'null' || text === 'undefined') {
+        return ''
+      }
+      return text
+    },
+    displayText(value) {
+      return this.normalizeText(value) || '--'
     },
     primaryDisplay(displayValue, rawValue) {
       return this.displayText(this.normalizeText(displayValue) || rawValue)
