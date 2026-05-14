@@ -9,6 +9,8 @@ import com.regionalai.floatingball.server.modules.release.dto.ReleaseRollbackReq
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseUploadRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseView;
 import com.regionalai.floatingball.server.modules.release.dto.TauriLatestJson;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -42,6 +44,8 @@ import java.util.stream.Stream;
 
 @Service
 public class ReleaseService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReleaseService.class);
 
     private static final List<String> CHANNELS = Arrays.asList("production", "testing");
     private static final Pattern SAFE_SEGMENT = Pattern.compile("[A-Za-z0-9._-]+");
@@ -117,6 +121,7 @@ public class ReleaseService {
             throw new BusinessException("RELEASE-IO", "回滚发布版本失败: " + ex.getMessage());
         }
 
+        log.info("release rollback. channel={}, version={}", channel, snapshotLatestJson.getVersion());
         return readReleaseView(channel);
     }
 
@@ -148,6 +153,7 @@ public class ReleaseService {
             throw new BusinessException("RELEASE-IO", "更新强制更新策略失败: " + ex.getMessage());
         }
 
+        log.info("release policy updated. channel={}, forceUpdate={}", channel, forceUpdate);
         return readReleaseView(channel);
     }
 
@@ -195,6 +201,7 @@ public class ReleaseService {
             ReleasePolicyView policy = updateReleasePolicy(channel, version, pubDate, notes, request.getForceUpdate());
             writeHistorySnapshot(channel, latestJson, policy);
 
+            log.info("release uploaded. channel={}, version={}, target={}, fileName={}", channel, version, target, originalFileName);
             return toReleaseView(channel, version, target, originalFileName, Files.size(targetPath), platformInfo.getUrl(), pubDate, notes, policy);
         } catch (IOException ex) {
             throw new BusinessException("RELEASE-IO", "保存发布文件失败: " + ex.getMessage());
@@ -387,7 +394,8 @@ public class ReleaseService {
             if (Files.isRegularFile(filePath)) {
                 try {
                     fileSize = Files.size(filePath);
-                } catch (IOException ignored) {
+                } catch (IOException ex) {
+                    log.debug("release file size check failed. path={}", filePath);
                     fileSize = null;
                 }
             }
@@ -951,7 +959,8 @@ public class ReleaseService {
                     }
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("lan ip detection failed. error={}", ex.getMessage());
             return "";
         }
         return "";

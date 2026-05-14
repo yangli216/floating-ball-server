@@ -12,6 +12,8 @@ import com.regionalai.floatingball.server.modules.analytics.dto.RegionDistributi
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -31,6 +33,8 @@ import java.util.Map;
 
 @Service
 public class AnalyticsService {
+
+    private static final Logger log = LoggerFactory.getLogger(AnalyticsService.class);
 
     private final AnalyticsMapper analyticsMapper;
     private final AuditLogDisplayCatalog displayCatalog;
@@ -233,7 +237,8 @@ public class AnalyticsService {
                 prev.setDateFrom(prevFrom.format(fmt));
                 prev.setDateTo(prevTo.format(fmt));
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("analytics previous period calculation failed. error={}", ex.getMessage());
         }
         return prev;
     }
@@ -397,7 +402,8 @@ public class AnalyticsService {
             LocalDate prevTo = from.minusDays(1);
             prev.setDateFrom(prevFrom.format(DateTimeFormatter.ISO_LOCAL_DATE));
             prev.setDateTo(prevTo.format(DateTimeFormatter.ISO_LOCAL_DATE));
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("analytics function usage previous period calculation failed. error={}", ex.getMessage());
         }
         return prev;
     }
@@ -417,7 +423,8 @@ public class AnalyticsService {
                 days.add(cursor.format(DateTimeFormatter.ISO_LOCAL_DATE));
                 cursor = cursor.plusDays(1);
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("analytics day collection failed. error={}", ex.getMessage());
         }
         return days;
     }

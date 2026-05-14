@@ -9,6 +9,8 @@ import com.regionalai.floatingball.server.modules.knowledge.dto.PmphaiClipReques
 import com.regionalai.floatingball.server.modules.knowledge.dto.PmphaiListRequest;
 import com.regionalai.floatingball.server.modules.knowledge.dto.PmphaiPageUrlRequest;
 import com.regionalai.floatingball.server.modules.knowledge.dto.PmphaiSearchRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -28,6 +30,8 @@ import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class PmphaiProxyService {
+
+    private static final Logger log = LoggerFactory.getLogger(PmphaiProxyService.class);
 
     private static final String DEFAULT_PMPHAI_BASE_URL = "https://pmphai.example.com";
 
@@ -186,11 +190,13 @@ public class PmphaiProxyService {
         JsonNode data = response == null ? null : response.path("data");
         String accessToken = data == null ? null : data.path("accessToken").asText(null);
         if (!StringUtils.hasText(accessToken)) {
+            log.warn("pmphai access token request failed. baseUrl={}", config.getBaseUrl());
             throw new BusinessException("获取 PMPHAI token 失败");
         }
         long expiresIn = data.path("expiresIn").asLong(3600L);
         long expiresAt = System.currentTimeMillis() + Math.max(60L, expiresIn - 300L) * 1000L;
         tokenCache.put(cacheKey, new TokenHolder(accessToken, expiresAt));
+        log.info("pmphai access token refreshed. baseUrl={}", config.getBaseUrl());
         return accessToken;
     }
 

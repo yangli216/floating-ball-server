@@ -9,6 +9,8 @@ import com.regionalai.floatingball.server.modules.audit.service.AuditService;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.service.ConfigService;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -40,6 +42,8 @@ import java.util.Map;
 
 @Service
 public class AiProxyService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiProxyService.class);
 
     private static final String ALIYUN_SPEECH_PROVIDER = "aliyun-dashscope";
     private static final String DEFAULT_OPENAI_AUDIO_MODEL = "whisper-1";
@@ -100,6 +104,7 @@ public class AiProxyService {
         Map<String, Object> payload = buildChatPayload(upstreamConfig.getModel(), messages, Boolean.FALSE, temperature, upstreamConfig.isEnableThinking());
 
         try {
+            log.info("ai chat request. model={}, baseUrl={}, stream=false", upstreamConfig.getModel(), upstreamConfig.getBaseUrl());
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(upstreamConfig.getApiKey());
@@ -115,6 +120,7 @@ public class AiProxyService {
             }
             JsonNode contentNode = response.path("choices").path(0).path("message").path("content");
             String responseText = contentNode.isMissingNode() ? response.toString() : contentNode.asText();
+            log.info("ai chat succeeded. model={}, responseLength={}", upstreamConfig.getModel(), responseText.length());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -125,6 +131,7 @@ public class AiProxyService {
             );
             return responseText;
         } catch (HttpStatusCodeException ex) {
+            log.error("ai chat upstream error. model={}, status={}", upstreamConfig.getModel(), ex.getStatusCode());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -135,6 +142,7 @@ public class AiProxyService {
             );
             throw new BusinessException(buildUpstreamErrorMessage("AI", ex));
         } catch (ResourceAccessException ex) {
+            log.error("ai chat upstream unreachable. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -165,6 +173,7 @@ public class AiProxyService {
     }
 
     private void streamChat(AiDevice device, ChatRequest request, UpstreamChatConfig upstreamConfig, SseEmitter emitter) {
+        log.info("ai chat stream request. model={}, baseUrl={}", upstreamConfig.getModel(), upstreamConfig.getBaseUrl());
         Map<String, Object> payload = buildChatPayload(
             upstreamConfig.getModel(),
             request.getMessages(),
@@ -186,6 +195,7 @@ public class AiProxyService {
                 },
                 response -> {
                     StreamForwardResult result = forwardSseBody(response.getBody(), emitter, responseTextBuilder);
+                    log.info("ai chat stream completed. model={}, responseLength={}", upstreamConfig.getModel(), result.responseText.length());
                     auditService.saveSystemLog(
                         device,
                         "ai_proxy",
@@ -199,6 +209,7 @@ public class AiProxyService {
             );
         } catch (HttpStatusCodeException ex) {
             String errorMessage = buildUpstreamErrorMessage("AI", ex);
+            log.error("ai chat stream upstream error. model={}, status={}", upstreamConfig.getModel(), ex.getStatusCode());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -210,6 +221,7 @@ public class AiProxyService {
             sendErrorFrame(emitter, errorMessage);
         } catch (ResourceAccessException ex) {
             String errorMessage = buildUpstreamRequestErrorMessage("AI", ex);
+            log.error("ai chat stream upstream unreachable. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -221,6 +233,7 @@ public class AiProxyService {
             sendErrorFrame(emitter, errorMessage);
         } catch (Exception ex) {
             String errorMessage = "AI流式响应封装失败：" + (StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "未知异常");
+            log.error("ai chat stream internal error. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -305,6 +318,7 @@ public class AiProxyService {
         PreparedSpeechFile preparedFile = prepareSpeechFile(request);
         String audioModel = resolveAudioModel(config);
         String audioApiKey = resolveAudioApiKey(config);
+        log.info("speech proxy request. action={}, provider={}, model={}", action, config.getSpeechProvider(), audioModel);
 
         if (isDashScopeSpeech(config)) {
             return proxyDashScopeSpeech(device, request, action, config, preparedFile, audioModel, audioApiKey);
@@ -511,7 +525,8 @@ public class AiProxyService {
                 return messageNode.asText();
             }
             return responseBody;
-        } catch (Exception ignore) {
+        } catch (Exception ex) {
+            log.debug("upstream error message extraction failed. error={}", ex.getMessage());
             return responseBody;
         }
     }
@@ -816,7 +831,8 @@ public class AiProxyService {
             if (contentNode.isTextual()) {
                 return contentNode.asText();
             }
-        } catch (Exception ignore) {
+        } catch (Exception ex) {
+            log.debug("sse content extraction failed. error={}", ex.getMessage());
         }
         return null;
     }
@@ -834,7 +850,8 @@ public class AiProxyService {
                     return messageNode.asText();
                 }
             }
-        } catch (Exception ignore) {
+        } catch (Exception ex) {
+            log.debug("sse error message extraction failed. error={}", ex.getMessage());
         }
         return null;
     }

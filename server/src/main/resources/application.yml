@@ -1,6 +1,13 @@
 server:
   port: 8088
 
+logging:
+  level:
+    root: ${FB_LOG_ROOT_LEVEL:WARN}
+    com.regionalai.floatingball.server: ${FB_LOG_APP_LEVEL:INFO}
+  file:
+    path: ${FB_LOG_PATH:${java.io.tmpdir}/floating-ball-server/logs}
+
 spring:
   application:
     name: floating-ball-server

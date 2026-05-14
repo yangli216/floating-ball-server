@@ -18,6 +18,8 @@ import com.regionalai.floatingball.server.modules.datapackage.service.DataPackag
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.prompt.service.PromptService;
 import com.regionalai.floatingball.server.modules.symptom.service.SymptomTemplateService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -29,6 +31,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ConfigService {
+
+    private static final Logger log = LoggerFactory.getLogger(ConfigService.class);
 
     private static final String DEFAULT_AUDIO_MODEL = "whisper-1";
     private static final String DEFAULT_DASHSCOPE_AUDIO_MODEL = "qwen3-asr-flash";
@@ -100,8 +104,10 @@ public class ConfigService {
     public ResolvedAiConfig resolveByDevice(AiDevice device) {
         AiConfig config = resolveVisibleConfig(device.getIdOrg(), device.getIdRegion());
         if (config == null) {
+            log.warn("no active ai config found. orgId={}, regionId={}", device.getIdOrg(), device.getIdRegion());
             throw new BusinessException("未找到有效 AI 配置");
         }
+        log.info("ai config resolved. orgId={}, regionId={}, configId={}, model={}", device.getIdOrg(), device.getIdRegion(), config.getIdConfig(), config.getModelName());
         return toResolved(config);
     }
 
@@ -127,6 +133,7 @@ public class ConfigService {
             config.setSdStatus("1");
         }
         aiConfigMapper.insert(config);
+        log.info("ai config saved. configId={}, naConfig={}", config.getIdConfig(), config.getNaConfig());
         return toView(config);
     }
 
@@ -138,6 +145,7 @@ public class ConfigService {
         validateSaveRequest(request);
         mergeSaveRequest(existing, request, existing);
         aiConfigMapper.updateById(existing);
+        log.info("ai config updated. configId={}, naConfig={}", idConfig, existing.getNaConfig());
         return toView(existing);
     }
 
@@ -148,6 +156,7 @@ public class ConfigService {
         }
         config.setFgActive("0");
         aiConfigMapper.updateById(config);
+        log.info("ai config invalidated. configId={}", idConfig);
     }
 
     private void mergeSaveRequest(AiConfig target, AiConfigSaveRequest request, AiConfig existing) {

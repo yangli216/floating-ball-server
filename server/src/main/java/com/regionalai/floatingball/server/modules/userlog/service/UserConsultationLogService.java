@@ -16,6 +16,8 @@ import com.regionalai.floatingball.server.modules.userlog.dto.UserConsultationLo
 import com.regionalai.floatingball.server.modules.userlog.dto.UserConsultationLogRequest;
 import com.regionalai.floatingball.server.modules.userlog.entity.AiUserConsultationLog;
 import com.regionalai.floatingball.server.modules.userlog.mapper.AiUserConsultationLogMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -36,6 +38,8 @@ import java.util.UUID;
 
 @Service
 public class UserConsultationLogService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserConsultationLogService.class);
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
@@ -124,8 +128,10 @@ public class UserConsultationLogService {
             }
         } catch (RuntimeException ex) {
             audioLogStorageService.deleteQuietly(storedAudioPath);
+            log.error("user consultation log save failed. consultationId={}, error={}", consultationId, ex.getMessage());
             throw ex;
         }
+        log.info("user consultation log saved. consultationId={}, type={}, status={}, create={}", consultationId, consultationType, entity.getStatus(), create);
         return entity;
     }
 

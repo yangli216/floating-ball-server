@@ -7,6 +7,8 @@ import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.prompt.dto.PromptDeltaVO;
 import com.regionalai.floatingball.server.modules.prompt.entity.AiPrompt;
 import com.regionalai.floatingball.server.modules.prompt.mapper.AiPromptMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -17,6 +19,8 @@ import java.util.Map;
 
 @Service
 public class PromptService {
+
+    private static final Logger log = LoggerFactory.getLogger(PromptService.class);
 
     private final AiPromptMapper aiPromptMapper;
 
@@ -66,6 +70,7 @@ public class PromptService {
             prompt.setSdStatus("0");
         }
         aiPromptMapper.insert(prompt);
+        log.info("prompt saved. idPrompt={}, cdPrompt={}", prompt.getIdPrompt(), prompt.getCdPrompt());
         return prompt;
     }
 
@@ -85,6 +90,7 @@ public class PromptService {
         existing.setIdOrg(prompt.getIdOrg());
         existing.setIdRegion(prompt.getIdRegion());
         aiPromptMapper.updateById(existing);
+        log.info("prompt updated. idPrompt={}, cdPrompt={}", idPrompt, existing.getCdPrompt());
         return aiPromptMapper.selectById(idPrompt);
     }
 
@@ -104,6 +110,7 @@ public class PromptService {
         }
         prompt.setSdStatus("1");
         aiPromptMapper.updateById(prompt);
+        log.info("prompt published. idPrompt={}, cdPrompt={}", idPrompt, prompt.getCdPrompt());
     }
 
     public void archive(String idPrompt) {
@@ -113,6 +120,7 @@ public class PromptService {
         }
         prompt.setSdStatus("2");
         aiPromptMapper.updateById(prompt);
+        log.info("prompt archived. idPrompt={}", idPrompt);
     }
 
     public void invalidate(String idPrompt) {
@@ -122,6 +130,7 @@ public class PromptService {
         }
         prompt.setFgActive("0");
         aiPromptMapper.updateById(prompt);
+        log.info("prompt invalidated. idPrompt={}", idPrompt);
     }
 
     public String latestVisibleVersion(String orgId, String regionId) {

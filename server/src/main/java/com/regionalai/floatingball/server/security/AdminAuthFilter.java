@@ -5,6 +5,8 @@ import com.regionalai.floatingball.server.common.api.ApiResponse;
 import com.regionalai.floatingball.server.common.util.RequestIdUtils;
 import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
 import com.regionalai.floatingball.server.modules.auth.service.AdminTokenService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -17,6 +19,8 @@ import java.io.IOException;
 
 @Component
 public class AdminAuthFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminAuthFilter.class);
 
     private final AdminTokenService adminTokenService;
     private final ObjectMapper objectMapper;
@@ -40,6 +44,7 @@ public class AdminAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("admin auth failed: missing or invalid authorization header. uri={}", request.getRequestURI());
             writeUnauthorized(response, request, "缺少管理员令牌");
             return;
         }
@@ -47,6 +52,7 @@ public class AdminAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring("Bearer ".length()).trim();
         AdminCurrentUser user = adminTokenService.parse(token);
         if (user == null) {
+            log.warn("admin auth failed: invalid or expired token. uri={}", request.getRequestURI());
             writeUnauthorized(response, request, "管理员令牌无效或已过期");
             return;
         }

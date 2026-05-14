@@ -19,6 +19,8 @@ import com.regionalai.floatingball.server.modules.feedback.dto.FeedbackListQuery
 import com.regionalai.floatingball.server.modules.feedback.dto.FeedbackTimelineItem;
 import com.regionalai.floatingball.server.modules.feedback.entity.AiFeedback;
 import com.regionalai.floatingball.server.modules.feedback.mapper.AiFeedbackMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -38,6 +40,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class FeedbackService {
+
+    private static final Logger log = LoggerFactory.getLogger(FeedbackService.class);
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
@@ -131,6 +135,7 @@ public class FeedbackService {
             feedback.setIdFeedbackRoot(feedback.getIdFeedback());
             aiFeedbackMapper.updateById(feedback);
         }
+        log.info("feedback submitted. idFeedback={}, kind={}, score={}, deviceId={}", feedback.getIdFeedback(), feedback.getKind(), feedback.getScore(), device == null ? null : device.getIdDevice());
         return new ClientFeedbackSubmitResponse(feedback.getIdFeedback(), "accepted");
     }
 
@@ -335,7 +340,8 @@ public class FeedbackService {
             } else if ("session".equals(kind)) {
                 return "整页评分";
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("feedback target summary extraction failed. kind={}, error={}", kind, ex.getMessage());
         }
         return null;
     }
@@ -359,7 +365,8 @@ public class FeedbackService {
             } else if ("session".equals(kind)) {
                 return "session";
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("feedback target type extraction failed. kind={}, error={}", kind, ex.getMessage());
         }
         return null;
     }

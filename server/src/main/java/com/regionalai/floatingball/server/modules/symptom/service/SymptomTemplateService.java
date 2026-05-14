@@ -16,6 +16,8 @@ import com.regionalai.floatingball.server.modules.symptom.dto.JsonSymptomImportR
 import com.regionalai.floatingball.server.modules.symptom.dto.SymptomTemplateVO;
 import com.regionalai.floatingball.server.modules.symptom.entity.AiSymptomTemplate;
 import com.regionalai.floatingball.server.modules.symptom.mapper.AiSymptomTemplateMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.DigestUtils;
@@ -36,6 +38,8 @@ import java.util.Set;
 
 @Service
 public class SymptomTemplateService {
+
+    private static final Logger log = LoggerFactory.getLogger(SymptomTemplateService.class);
 
     private static final String ACTIVE_ENABLED = "1";
     private static final String ACTIVE_DISABLED = "0";
@@ -122,6 +126,7 @@ public class SymptomTemplateService {
         mergeRequest(entity, request, null);
         entity.setFgActive(ACTIVE_ENABLED);
         aiSymptomTemplateMapper.insert(entity);
+        log.info("symptom template saved. idTemplate={}, mode={}", entity.getIdTemplate(), entity.getSdMedicalMode());
         return toView(aiSymptomTemplateMapper.selectById(entity.getIdTemplate()));
     }
 
@@ -131,6 +136,7 @@ public class SymptomTemplateService {
         validateRequest(request, idTemplate);
         mergeRequest(existing, request, existing);
         aiSymptomTemplateMapper.updateById(existing);
+        log.info("symptom template updated. idTemplate={}", idTemplate);
         return toView(aiSymptomTemplateMapper.selectById(idTemplate));
     }
 
@@ -139,6 +145,7 @@ public class SymptomTemplateService {
         AiSymptomTemplate existing = requireActiveTemplate(idTemplate);
         existing.setFgActive(ACTIVE_DISABLED);
         aiSymptomTemplateMapper.updateById(existing);
+        log.info("symptom template invalidated. idTemplate={}", idTemplate);
     }
 
     @Transactional

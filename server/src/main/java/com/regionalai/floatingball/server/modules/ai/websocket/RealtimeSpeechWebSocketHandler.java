@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.service.ConfigService;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.socket.BinaryMessage;
@@ -30,6 +32,8 @@ import java.util.UUID;
 @Component
 public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(RealtimeSpeechWebSocketHandler.class);
+
     private static final String ALIYUN_SPEECH_PROVIDER = "aliyun-dashscope";
     private static final String DEFAULT_REALTIME_MODEL = "paraformer-realtime-v2";
     private static final String DEFAULT_DASHSCOPE_WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference";
@@ -48,22 +52,26 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) {
         AiDevice device = (AiDevice) session.getAttributes().get(RealtimeSpeechHandshakeInterceptor.DEVICE_ATTRIBUTE);
         if (device == null) {
+            log.warn("realtime speech ws: connection rejected, no device attribute. sessionId={}", session.getId());
             sendErrorAndClose(session, "设备令牌无效或已停用");
             return;
         }
 
         ResolvedAiConfig config = configService.resolveByDevice(device);
         if (!ALIYUN_SPEECH_PROVIDER.equalsIgnoreCase(config.getSpeechProvider())) {
+            log.warn("realtime speech ws: connection rejected, speech provider not dashscope. deviceId={}, provider={}", device.getIdDevice(), config.getSpeechProvider());
             sendErrorAndClose(session, "当前语音提供方未启用 DashScope 实时识别");
             return;
         }
 
         String apiKey = resolveAudioApiKey(config);
         if (!StringUtils.hasText(apiKey)) {
+            log.warn("realtime speech ws: connection rejected, no audio api key. deviceId={}", device.getIdDevice());
             sendErrorAndClose(session, "未配置语音服务密钥");
             return;
         }
 
+        log.info("realtime speech ws: connection established. deviceId={}, model={}", device.getIdDevice(), resolveRealtimeModel(config));
         RealtimeProxySession proxySession = new RealtimeProxySession(session, config);
         session.getAttributes().put(RealtimeProxySession.ATTRIBUTE, proxySession);
         proxySession.connect(apiKey);
@@ -100,6 +108,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        log.info("realtime speech ws: connection closed. sessionId={}, status={}", session.getId(), status);
         RealtimeProxySession proxySession = resolveProxySession(session);
         if (proxySession != null) {
             proxySession.closeDashScope();
@@ -108,6 +117,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
+        log.error("realtime speech ws: transport error. sessionId={}, error={}", session.getId(), exception.getMessage());
         RealtimeProxySession proxySession = resolveProxySession(session);
         if (proxySession != null) {
             proxySession.sendError("实时语音连接异常：" + exception.getMessage());
@@ -147,7 +157,8 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         try {
             sendJson(session, errorPayload(message));
             session.close(CloseStatus.SERVER_ERROR);
-        } catch (IOException ignore) {
+        } catch (IOException ex) {
+            log.debug("realtime speech ws: failed to send error and close session. sessionId={}, error={}", session.getId(), ex.getMessage());
         }
     }
 
@@ -233,7 +244,8 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
             if (dashScopeSession != null && dashScopeSession.isOpen()) {
                 try {
                     dashScopeSession.close();
-                } catch (IOException ignore) {
+                } catch (IOException ex) {
+                    log.debug("realtime speech ws: failed to close dashscope session. error={}", ex.getMessage());
                 }
             }
         }
@@ -362,7 +374,8 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         private void sendClient(Map<String, Object> payload) {
             try {
                 sendJson(clientSession, payload);
-            } catch (IOException ignore) {
+            } catch (IOException ex) {
+                log.debug("realtime speech ws: failed to send client payload. error={}", ex.getMessage());
             }
         }
     }

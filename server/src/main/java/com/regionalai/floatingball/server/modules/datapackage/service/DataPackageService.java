@@ -11,6 +11,8 @@ import com.regionalai.floatingball.server.modules.datapackage.dto.MappingDeltaVO
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
 import com.regionalai.floatingball.server.modules.datapackage.entity.AiDataPackage;
 import com.regionalai.floatingball.server.modules.datapackage.mapper.AiDataPackageMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -23,6 +25,8 @@ import java.util.Map;
 
 @Service
 public class DataPackageService {
+
+    private static final Logger log = LoggerFactory.getLogger(DataPackageService.class);
 
     private static final String ACTIVE_ENABLED = "1";
     private static final String ACTIVE_DISABLED = "0";
@@ -137,6 +141,7 @@ public class DataPackageService {
         if (STATUS_PUBLISHED.equals(dataPackage.getSdStatus())) {
             archiveOtherPublishedPackages(dataPackage.getIdPackage(), dataPackage.getSdPackageType(), dataPackage.getIdOrg(), dataPackage.getIdRegion());
         }
+        log.info("data package saved. idPackage={}, type={}, version={}", dataPackage.getIdPackage(), dataPackage.getSdPackageType(), dataPackage.getVersionNum());
         return aiDataPackageMapper.selectById(dataPackage.getIdPackage());
     }
 
@@ -156,6 +161,7 @@ public class DataPackageService {
         if (STATUS_PUBLISHED.equals(existing.getSdStatus())) {
             archiveOtherPublishedPackages(existing.getIdPackage(), existing.getSdPackageType(), existing.getIdOrg(), existing.getIdRegion());
         }
+        log.info("data package updated. idPackage={}, type={}, version={}", idPackage, existing.getSdPackageType(), existing.getVersionNum());
         return aiDataPackageMapper.selectById(idPackage);
     }
 
@@ -166,18 +172,21 @@ public class DataPackageService {
         dataPackage.setSdStatus(STATUS_PUBLISHED);
         aiDataPackageMapper.updateById(dataPackage);
         archiveOtherPublishedPackages(dataPackage.getIdPackage(), dataPackage.getSdPackageType(), dataPackage.getIdOrg(), dataPackage.getIdRegion());
+        log.info("data package published. idPackage={}, type={}", idPackage, dataPackage.getSdPackageType());
     }
 
     public void archive(String idPackage) {
         AiDataPackage dataPackage = requireActivePackage(idPackage);
         dataPackage.setSdStatus(STATUS_ARCHIVED);
         aiDataPackageMapper.updateById(dataPackage);
+        log.info("data package archived. idPackage={}", idPackage);
     }
 
     public void invalidate(String idPackage) {
         AiDataPackage dataPackage = requireActivePackage(idPackage);
         dataPackage.setFgActive(ACTIVE_DISABLED);
         aiDataPackageMapper.updateById(dataPackage);
+        log.info("data package invalidated. idPackage={}", idPackage);
     }
 
     public String latestVisibleVersion(String type, String orgId, String regionId) {

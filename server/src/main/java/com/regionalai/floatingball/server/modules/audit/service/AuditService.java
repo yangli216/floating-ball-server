@@ -11,6 +11,8 @@ import com.regionalai.floatingball.server.modules.audit.dto.AuditBatchRequest;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -30,6 +32,8 @@ import java.util.List;
 
 @Service
 public class AuditService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuditService.class);
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
@@ -51,35 +55,36 @@ public class AuditService {
         if (request.getEvents() == null || request.getEvents().isEmpty()) {
             return 0;
         }
+        log.info("audit batch save. deviceId={}, eventCount={}", device == null ? null : device.getIdDevice(), request.getEvents().size());
         int accepted = 0;
         for (AuditBatchRequest.AuditEvent event : request.getEvents()) {
             Map<String, Object> payload = event.getPayload();
-            AiOpLog log = new AiOpLog();
-            log.setIdDevice(device.getIdDevice());
-            log.setIdOrg(device.getIdOrg());
-            log.setSdLogType(event.getEventType());
+            AiOpLog opLog = new AiOpLog();
+            opLog.setIdDevice(device.getIdDevice());
+            opLog.setIdOrg(device.getIdOrg());
+            opLog.setSdLogType(event.getEventType());
             String module = resolveModule(event.getEventType(), payload);
             String action = resolveAction(event.getEventType(), payload);
             String title = resolveTitle(payload, action);
-            log.setNaModule(module);
-            log.setOpAction(action);
-            log.setOpTitle(title);
-            log.setSourceModule(resolveSourceModule(payload));
-            log.setSceneCode(resolveScene(payload));
-            log.setTraceId(resolveTraceId(payload));
-            log.setDesOp(title);
-            log.setOpResult(resolveResult(payload));
-            log.setOperationTime(event.getTimestamp() == null
+            opLog.setNaModule(module);
+            opLog.setOpAction(action);
+            opLog.setOpTitle(title);
+            opLog.setSourceModule(resolveSourceModule(payload));
+            opLog.setSceneCode(resolveScene(payload));
+            opLog.setTraceId(resolveTraceId(payload));
+            opLog.setDesOp(title);
+            opLog.setOpResult(resolveResult(payload));
+            opLog.setOperationTime(event.getTimestamp() == null
                 ? LocalDateTime.now()
                 : LocalDateTime.ofInstant(Instant.ofEpochMilli(event.getTimestamp()), ZoneId.systemDefault()));
-            log.setConsultationId(resolveConsultationId(payload));
-            log.setFgActive("1");
+            opLog.setConsultationId(resolveConsultationId(payload));
+            opLog.setFgActive("1");
             try {
-                log.setPayloadJson(objectMapper.writeValueAsString(payload));
+                opLog.setPayloadJson(objectMapper.writeValueAsString(payload));
             } catch (JsonProcessingException ex) {
                 throw new BusinessException("审计事件序列化失败");
             }
-            aiOpLogMapper.insert(log);
+            aiOpLogMapper.insert(opLog);
             accepted++;
         }
         return accepted;
@@ -321,34 +326,35 @@ public class AuditService {
                                        boolean success,
                                        byte[] audioBytes,
                                        String audioFileName) {
-        AiOpLog log = new AiOpLog();
-        log.setIdLog(UUID.randomUUID().toString().replace("-", ""));
-        log.setIdDevice(device == null ? null : device.getIdDevice());
-        log.setIdOrg(device == null ? null : device.getIdOrg());
-        log.setSdLogType(logType);
-        log.setNaModule(module);
+        AiOpLog opLog = new AiOpLog();
+        opLog.setIdLog(UUID.randomUUID().toString().replace("-", ""));
+        opLog.setIdDevice(device == null ? null : device.getIdDevice());
+        opLog.setIdOrg(device == null ? null : device.getIdOrg());
+        opLog.setSdLogType(logType);
+        opLog.setNaModule(module);
         Map<String, Object> payloadMap = asPayloadMap(payload);
-        log.setOpAction(action);
-        log.setOpTitle(resolveTitle(payloadMap, action));
-        log.setSourceModule(resolveSourceModule(payloadMap));
-        log.setSceneCode(resolveScene(payloadMap));
-        log.setTraceId(resolveTraceId(payloadMap));
-        log.setConsultationId(resolveConsultationId(payloadMap));
-        log.setDesOp(firstNonBlank(log.getOpTitle(), action));
-        log.setOpResult(success ? "1" : "0");
-        log.setOperationTime(LocalDateTime.now());
-        log.setFgActive("1");
+        opLog.setOpAction(action);
+        opLog.setOpTitle(resolveTitle(payloadMap, action));
+        opLog.setSourceModule(resolveSourceModule(payloadMap));
+        opLog.setSceneCode(resolveScene(payloadMap));
+        opLog.setTraceId(resolveTraceId(payloadMap));
+        opLog.setConsultationId(resolveConsultationId(payloadMap));
+        opLog.setDesOp(firstNonBlank(opLog.getOpTitle(), action));
+        opLog.setOpResult(success ? "1" : "0");
+        opLog.setOperationTime(LocalDateTime.now());
+        opLog.setFgActive("1");
         String storedAudioPath = null;
         try {
             if (audioBytes != null && audioBytes.length > 0) {
-                storedAudioPath = audioLogStorageService.store(audioBytes, audioFileName, log.getIdLog());
-                log.setAudioFilePath(storedAudioPath);
+                storedAudioPath = audioLogStorageService.store(audioBytes, audioFileName, opLog.getIdLog());
+                opLog.setAudioFilePath(storedAudioPath);
             }
-            log.setPayloadJson(objectMapper.writeValueAsString(payload == null ? Collections.emptyMap() : payload));
-            aiOpLogMapper.insert(log);
-        } catch (Exception ignored) {
+            opLog.setPayloadJson(objectMapper.writeValueAsString(payload == null ? Collections.emptyMap() : payload));
+            aiOpLogMapper.insert(opLog);
+        } catch (Exception ex) {
             audioLogStorageService.deleteQuietly(storedAudioPath);
-            // 审计日志不影响主链路
+            log.warn("audit system log save failed, swallowing to avoid breaking main flow. logType={}, module={}, action={}, error={}",
+                logType, module, action, ex.getMessage());
         }
     }
 

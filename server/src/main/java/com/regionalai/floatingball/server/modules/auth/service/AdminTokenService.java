@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.util.AesUtils;
 import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
 import com.regionalai.floatingball.server.modules.auth.dto.AdminLoginResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -13,6 +15,8 @@ import java.util.List;
 
 @Service
 public class AdminTokenService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminTokenService.class);
 
     private static final Duration TOKEN_TTL = Duration.ofHours(12);
 
@@ -48,6 +52,7 @@ public class AdminTokenService {
         try {
             TokenPayload payload = objectMapper.readValue(aesUtils.decrypt(token), TokenPayload.class);
             if (payload == null || payload.getExpiresAt() == null || payload.getExpiresAt() < Instant.now().toEpochMilli()) {
+                log.debug("admin token expired or invalid payload. cdUser={}", payload == null ? "null" : payload.getCdUser());
                 return null;
             }
             AdminCurrentUser user = new AdminCurrentUser();
@@ -58,6 +63,7 @@ public class AdminTokenService {
             user.setRoles(payload.getRoles() == null ? Collections.<String>emptyList() : payload.getRoles());
             return user;
         } catch (Exception ex) {
+            log.warn("admin token parse failed: {}", ex.getMessage());
             return null;
         }
     }

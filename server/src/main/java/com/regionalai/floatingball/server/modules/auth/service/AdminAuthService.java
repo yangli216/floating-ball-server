@@ -13,6 +13,8 @@ import com.regionalai.floatingball.server.modules.user.entity.AiUser;
 import com.regionalai.floatingball.server.modules.user.entity.AiUserRole;
 import com.regionalai.floatingball.server.modules.user.mapper.AiUserMapper;
 import com.regionalai.floatingball.server.modules.user.mapper.AiUserRoleMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -23,6 +25,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class AdminAuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminAuthService.class);
 
     private final AiUserMapper aiUserMapper;
     private final AiUserRoleMapper aiUserRoleMapper;
@@ -48,9 +52,11 @@ public class AdminAuthService {
             .eq(AiUser::getFgActive, "1")
             .last("FETCH FIRST 1 ROWS ONLY"));
         if (user == null || !"1".equals(user.getSdStatus()) || !PasswordUtils.matches(request.getPassword(), user.getPasswordHash())) {
+            log.warn("admin login failed: invalid credentials. username={}", request.getUsername().trim());
             throw new BusinessException("账号或密码错误");
         }
 
+        log.info("admin login succeeded. username={}", user.getCdUser());
         return adminTokenService.issue(toCurrentUser(user, findRoleCodesByUserId(user.getIdUser())));
     }
 
@@ -77,6 +83,7 @@ public class AdminAuthService {
 
         user.setPasswordHash(PasswordUtils.sha256(request.getNewPassword()));
         aiUserMapper.updateById(user);
+        log.info("admin password changed. username={}", currentUser.getCdUser());
     }
 
     public void bootstrapResetPassword(String username, String newPassword) {
@@ -88,6 +95,7 @@ public class AdminAuthService {
         AiUser user = requireActiveUserByUsername(username.trim(), "目标管理员不存在或已停用");
         user.setPasswordHash(PasswordUtils.sha256(newPassword));
         aiUserMapper.updateById(user);
+        log.info("admin bootstrap password reset. username={}", username.trim());
     }
 
     private List<String> findRoleCodesByUserId(String idUser) {

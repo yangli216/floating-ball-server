@@ -7,11 +7,15 @@ import com.regionalai.floatingball.server.modules.config.dto.AiConfigSaveRequest
 import com.regionalai.floatingball.server.modules.config.dto.AiConfigTestResult;
 import com.regionalai.floatingball.server.modules.config.entity.AiConfig;
 import com.regionalai.floatingball.server.modules.config.mapper.AiConfigMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class ConfigConnectionTestService {
+
+    private static final Logger log = LoggerFactory.getLogger(ConfigConnectionTestService.class);
 
     private final AiConfigMapper aiConfigMapper;
     private final AesUtils aesUtils;
@@ -33,6 +37,7 @@ public class ConfigConnectionTestService {
         String modelName = request.getModelName();
         String apiKey = resolveApiKey(request);
         String message = aiProxyService.testChatConnection(baseUrl, apiKey, modelName, Boolean.TRUE.equals(request.getEnableThinking()));
+        log.info("ai config connection test. baseUrl={}, model={}, success=true", baseUrl, modelName);
         return new AiConfigTestResult(true, message, baseUrl, modelName);
     }
 

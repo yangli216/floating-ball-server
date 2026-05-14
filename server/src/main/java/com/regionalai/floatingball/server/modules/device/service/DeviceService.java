@@ -18,6 +18,8 @@ import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -31,6 +33,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class DeviceService {
+
+    private static final Logger log = LoggerFactory.getLogger(DeviceService.class);
 
     private static final int DEFAULT_HEARTBEAT_INTERVAL = 30;
 
@@ -76,6 +80,7 @@ public class DeviceService {
                 existing.setDeviceToken(generateToken());
             }
             aiDeviceMapper.updateById(existing);
+            log.info("device re-registered. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
             return new RegisterDeviceResponse(existing.getIdDevice(), existing.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL);
         }
 
@@ -91,6 +96,7 @@ public class DeviceService {
         device.setOsInfo(request.getOsInfo());
         device.setFgActive("1");
         aiDeviceMapper.insert(device);
+        log.info("device registered. idDevice={}, cdDevice={}, idOrg={}", device.getIdDevice(), device.getCdDevice(), device.getIdOrg());
         return new RegisterDeviceResponse(device.getIdDevice(), device.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL);
     }
 
@@ -105,6 +111,7 @@ public class DeviceService {
         device.setDtLastHeartbeat(LocalDateTime.now());
         device.setSdStatus("1");
         aiDeviceMapper.updateById(device);
+        log.debug("device heartbeat. idDevice={}", device.getIdDevice());
     }
 
     public PageResponse<AiDeviceView> list(long current, long size, String keyword) {

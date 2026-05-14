@@ -1,6 +1,8 @@
 package com.regionalai.floatingball.server.modules.audit.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -15,6 +17,8 @@ import java.time.format.DateTimeFormatter;
 
 @Service
 public class AudioLogStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(AudioLogStorageService.class);
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.BASIC_ISO_DATE;
 
@@ -47,8 +51,8 @@ public class AudioLogStorageService {
                 return;
             }
             Files.deleteIfExists(path);
-        } catch (IOException | InvalidPathException ignored) {
-            // 日志文件清理失败不影响主链路
+        } catch (IOException | InvalidPathException ex) {
+            log.warn("audio log file deletion failed. path={}, error={}", storedPath, ex.getMessage());
         }
     }
 

@@ -6,6 +6,8 @@ import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -19,6 +21,8 @@ import java.io.IOException;
 
 @Component
 public class DeviceAuthFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(DeviceAuthFilter.class);
 
     private final DeviceService deviceService;
     private final ReleaseService releaseService;
@@ -47,6 +51,7 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("device auth failed: missing or invalid authorization header. uri={}", request.getRequestURI());
             writeUnauthorized(response, request, "缺少设备令牌");
             return;
         }
@@ -54,6 +59,7 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring("Bearer ".length()).trim();
         AiDevice device = deviceService.findActiveByToken(token);
         if (device == null) {
+            log.warn("device auth failed: invalid or inactive token. uri={}", request.getRequestURI());
             writeUnauthorized(response, request, "设备令牌无效或已停用");
             return;
         }
@@ -65,6 +71,8 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
         }
         if (releaseService.isUpdateRequired(updateChannel, clientVersion)) {
             ReleasePolicyView policy = releaseService.getRequiredPolicy(updateChannel);
+            log.warn("device version too old, update required. uri={}, clientVersion={}, minSupportedVersion={}",
+                request.getRequestURI(), clientVersion, policy.getMinSupportedVersion());
             writeUpdateRequired(response, request, policy.getMinSupportedVersion());
             return;
         }

@@ -2,6 +2,8 @@ package com.regionalai.floatingball.server.modules.ai.websocket;
 
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -19,6 +21,8 @@ import java.util.Map;
 @Component
 public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor {
 
+    private static final Logger log = LoggerFactory.getLogger(RealtimeSpeechHandshakeInterceptor.class);
+
     public static final String DEVICE_ATTRIBUTE = "aiDevice";
 
     private final DeviceService deviceService;
@@ -34,16 +38,19 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
                                    Map<String, Object> attributes) {
         String token = resolveQueryParam(request.getURI(), "token");
         if (!StringUtils.hasText(token)) {
+            log.warn("realtime speech ws handshake rejected: missing token. uri={}", request.getURI());
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
 
         AiDevice device = deviceService.findActiveByToken(token);
         if (device == null) {
+            log.warn("realtime speech ws handshake rejected: invalid token. uri={}", request.getURI());
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
 
+        log.info("realtime speech ws handshake succeeded. deviceId={}", device.getIdDevice());
         attributes.put(DEVICE_ATTRIBUTE, device);
         return true;
     }
