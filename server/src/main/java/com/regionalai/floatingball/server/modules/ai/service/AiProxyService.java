@@ -105,28 +105,68 @@ public class AiProxyService {
 
         try {
             log.info("ai chat request. model={}, baseUrl={}, stream=false", upstreamConfig.getModel(), upstreamConfig.getBaseUrl());
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(upstreamConfig.getApiKey());
-            ResponseEntity<JsonNode> responseEntity = restTemplate.postForEntity(
-                upstreamConfig.getBaseUrl() + "/chat/completions",
-                new HttpEntity<Map<String, Object>>(payload, headers),
-                JsonNode.class
-            );
-            JsonNode response = responseEntity.getBody();
 
-            if (response == null) {
-                throw new BusinessException("AI 响应为空");
-            }
-            JsonNode contentNode = response.path("choices").path(0).path("message").path("content");
-            String responseText = contentNode.isMissingNode() ? response.toString() : contentNode.asText();
+            StringBuilder responseTextBuilder = new StringBuilder();
+            String[] rawLogHolder = new String[1];
+
+            restTemplate.execute(
+                upstreamConfig.getBaseUrl() + "/chat/completions",
+                HttpMethod.POST,
+                requestCallback -> {
+                    requestCallback.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                    requestCallback.getHeaders().setBearerAuth(upstreamConfig.getApiKey());
+                    objectMapper.writeValue(requestCallback.getBody(), payload);
+                },
+                response -> {
+                    String rawBody = readFully(response.getBody());
+                    if (rawBody == null || rawBody.trim().isEmpty()) {
+                        throw new BusinessException("AI 响应为空");
+                    }
+                    rawLogHolder[0] = rawBody;
+
+                    MediaType ct = response.getHeaders().getContentType();
+                    boolean declaredSse = ct != null && MediaType.TEXT_EVENT_STREAM.includes(ct);
+                    boolean hasDataPrefix = rawBody.contains("data:");
+
+                    if (declaredSse && hasDataPrefix) {
+                        for (String line : rawBody.split("\n")) {
+                            String trimmed = line.trim();
+                            if (trimmed.startsWith("data:")) {
+                                String data = trimmed.substring(5).trim();
+                                if ("[DONE]".equals(data)) {
+                                    break;
+                                }
+                                String content = extractSseContent(data);
+                                if (content != null) {
+                                    responseTextBuilder.append(content);
+                                }
+                            }
+                        }
+                    } else {
+                        try {
+                            JsonNode jsonNode = objectMapper.readTree(rawBody);
+                            JsonNode contentNode = jsonNode.path("choices").path(0).path("message").path("content");
+                            String text = contentNode.isMissingNode() ? jsonNode.toString() : contentNode.asText();
+                            responseTextBuilder.append(text);
+                            rawLogHolder[0] = jsonNode.toString();
+                        } catch (IOException e) {
+                            throw new RuntimeException("AI 响应 JSON 解析失败: " + e.getMessage(), e);
+                        }
+                    }
+                    return null;
+                }
+            );
+
+            String responseText = responseTextBuilder.toString();
+            String rawLog = rawLogHolder[0] != null ? rawLogHolder[0] : responseText;
+
             log.info("ai chat succeeded. model={}, responseLength={}", upstreamConfig.getModel(), responseText.length());
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
                 "ai",
                 "chat",
-                buildChatLogPayload(request, upstreamConfig, payload, responseText, null, response.toString()),
+                buildChatLogPayload(request, upstreamConfig, payload, responseText, null, rawLog),
                 true
             );
             return responseText;
@@ -541,6 +581,9 @@ public class AiProxyService {
         payload.put("messages", messages);
         payload.put("stream", stream);
         payload.put("enable_thinking", enableThinking);
+        if (!Boolean.TRUE.equals(stream)) {
+            payload.put("max_tokens", 4096);
+        }
         if (temperature != null) {
             payload.put("temperature", temperature);
         }
@@ -819,6 +862,20 @@ public class AiProxyService {
         payload.put("uploadAudioSize", preparedFile.audioBytes.length);
         payload.put("normalizedToWav", preparedFile.normalizedToWav);
         return payload;
+    }
+
+    private String readFully(InputStream inputStream) throws IOException {
+        if (inputStream == null) {
+            return "";
+        }
+        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+        StringBuilder sb = new StringBuilder();
+        char[] buffer = new char[4096];
+        int len;
+        while ((len = reader.read(buffer)) != -1) {
+            sb.append(buffer, 0, len);
+        }
+        return sb.toString();
     }
 
     private String extractSseContent(String data) {

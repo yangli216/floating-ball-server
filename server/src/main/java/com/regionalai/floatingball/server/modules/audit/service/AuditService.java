@@ -28,7 +28,10 @@ import java.util.UUID;
 import java.util.Map;
 import java.util.Collections;
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
+
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuditService {
@@ -39,24 +42,28 @@ public class AuditService {
     private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private final AiOpLogMapper aiOpLogMapper;
+    private final AiOpLogService aiOpLogService;
     private final ObjectMapper objectMapper;
     private final AudioLogStorageService audioLogStorageService;
     private final AuditLogDisplayCatalog displayCatalog = new AuditLogDisplayCatalog();
 
     public AuditService(AiOpLogMapper aiOpLogMapper,
+                        AiOpLogService aiOpLogService,
                         ObjectMapper objectMapper,
                         AudioLogStorageService audioLogStorageService) {
         this.aiOpLogMapper = aiOpLogMapper;
+        this.aiOpLogService = aiOpLogService;
         this.objectMapper = objectMapper;
         this.audioLogStorageService = audioLogStorageService;
     }
 
+    @Transactional
     public int saveBatch(AiDevice device, AuditBatchRequest request) {
         if (request.getEvents() == null || request.getEvents().isEmpty()) {
             return 0;
         }
         log.info("audit batch save. deviceId={}, eventCount={}", device == null ? null : device.getIdDevice(), request.getEvents().size());
-        int accepted = 0;
+        List<AiOpLog> batch = new ArrayList<AiOpLog>(request.getEvents().size());
         for (AuditBatchRequest.AuditEvent event : request.getEvents()) {
             Map<String, Object> payload = event.getPayload();
             AiOpLog opLog = new AiOpLog();
@@ -72,22 +79,22 @@ public class AuditService {
             opLog.setSourceModule(resolveSourceModule(payload));
             opLog.setSceneCode(resolveScene(payload));
             opLog.setTraceId(resolveTraceId(payload));
+            opLog.setConsultationId(resolveConsultationId(payload));
             opLog.setDesOp(title);
             opLog.setOpResult(resolveResult(payload));
             opLog.setOperationTime(event.getTimestamp() == null
                 ? LocalDateTime.now()
                 : LocalDateTime.ofInstant(Instant.ofEpochMilli(event.getTimestamp()), ZoneId.systemDefault()));
-            opLog.setConsultationId(resolveConsultationId(payload));
             opLog.setFgActive("1");
             try {
                 opLog.setPayloadJson(objectMapper.writeValueAsString(payload));
             } catch (JsonProcessingException ex) {
                 throw new BusinessException("审计事件序列化失败");
             }
-            aiOpLogMapper.insert(opLog);
-            accepted++;
+            batch.add(opLog);
         }
-        return accepted;
+        aiOpLogService.saveBatch(batch);
+        return batch.size();
     }
 
     private String resolveModule(String eventType, Map<String, Object> payload) {

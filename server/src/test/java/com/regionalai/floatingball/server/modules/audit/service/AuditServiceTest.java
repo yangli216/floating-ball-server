@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,6 +37,9 @@ class AuditServiceTest {
     @Mock
     private AiOpLogMapper aiOpLogMapper;
 
+    @Mock
+    private AiOpLogService aiOpLogService;
+
     @TempDir
     Path tempDir;
 
@@ -45,6 +49,7 @@ class AuditServiceTest {
     void setUp() {
         auditService = new AuditService(
             aiOpLogMapper,
+            aiOpLogService,
             new ObjectMapper(),
             new AudioLogStorageService(tempDir.resolve("speech-audit").toString())
         );
@@ -84,9 +89,10 @@ class AuditServiceTest {
 
         assertEquals(1, accepted);
 
-        ArgumentCaptor<AiOpLog> captor = ArgumentCaptor.forClass(AiOpLog.class);
-        verify(aiOpLogMapper, times(1)).insert(captor.capture());
-        AiOpLog log = captor.getValue();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<AiOpLog>> batchCaptor = ArgumentCaptor.forClass(List.class);
+        verify(aiOpLogService, times(1)).saveBatch(batchCaptor.capture());
+        AiOpLog log = batchCaptor.getValue().get(0);
         assertEquals("DEV001", log.getIdDevice());
         assertEquals("ORG001", log.getIdOrg());
         assertEquals("operation", log.getSdLogType());
@@ -129,9 +135,10 @@ class AuditServiceTest {
 
         assertEquals(1, accepted);
 
-        ArgumentCaptor<AiOpLog> captor = ArgumentCaptor.forClass(AiOpLog.class);
-        verify(aiOpLogMapper, times(1)).insert(captor.capture());
-        AiOpLog log = captor.getValue();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<AiOpLog>> batchCaptor = ArgumentCaptor.forClass(List.class);
+        verify(aiOpLogService, times(1)).saveBatch(batchCaptor.capture());
+        AiOpLog log = batchCaptor.getValue().get(0);
         assertEquals("api_call", log.getNaModule());
         assertEquals("reference_feedback:diagnosis", log.getOpAction());
         assertEquals("reference_feedback:diagnosis", log.getOpTitle());
