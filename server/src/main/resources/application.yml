@@ -1,16 +1,11 @@
 server:
-  port: 8088
-
-logging:
-  level:
-    root: ${FB_LOG_ROOT_LEVEL:WARN}
-    com.regionalai.floatingball.server: ${FB_LOG_APP_LEVEL:INFO}
-  file:
-    path: ${FB_LOG_PATH:${java.io.tmpdir}/floating-ball-server/logs}
+  port: 8080
 
 spring:
   application:
     name: floating-ball-server
+  profiles:
+    active: ${FB_PROFILE:development}
   datasource:
     driver-class-name: oracle.jdbc.OracleDriver
     url: ${FB_DB_URL:jdbc:oracle:thin:@10.19.40.42:1521:phis}

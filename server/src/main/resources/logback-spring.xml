@@ -30,7 +30,6 @@
     <logger name="com.regionalai.floatingball.server.modules.audit" level="INFO"/>
     <logger name="com.regionalai.floatingball.server.modules.config" level="INFO"/>
     <logger name="com.regionalai.floatingball.server.modules.auth" level="INFO"/>
-    <logger name="com.regionalai.floatingball.server.security" level="INFO"/>
     <logger name="com.regionalai.floatingball.server.modules.knowledge" level="INFO"/>
     <logger name="com.regionalai.floatingball.server.modules.release" level="INFO"/>
     <logger name="com.regionalai.floatingball.server.modules.feedback" level="INFO"/>
@@ -41,17 +40,27 @@
     <logger name="com.baomidou.mybatisplus" level="WARN"/>
     <logger name="org.apache.ibatis" level="WARN"/>
 
-    <springProfile name="default">
+    <springProfile name="development">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="FILE"/>
         </root>
+        <logger name="com.regionalai.floatingball.server" level="DEBUG"/>
     </springProfile>
 
-    <springProfile name="prod">
+    <springProfile name="test">
+        <root level="WARN">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+        <logger name="com.regionalai.floatingball.server" level="INFO"/>
+    </springProfile>
+
+    <springProfile name="product">
         <root level="WARN">
             <appender-ref ref="FILE"/>
         </root>
+        <logger name="com.regionalai.floatingball.server" level="WARN"/>
     </springProfile>
 
 </configuration>

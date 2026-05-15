@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.regionalai.floatingball.server: DEBUG
+  file:
+    path: ${java.io.tmpdir}/floating-ball-server/logs
+
+spring:
+  datasource:
+    url: ${FB_DB_URL:jdbc:oracle:thin:@0.0.0.0:1521:orcl}
+    username: ${FB_DB_USERNAME:username}
+    password: ${FB_DB_PASSWORD:passwd}
+
+floating-ball:
+  admin:
+    bootstrap-reset:
+      enabled: true
+      username: admin
+      password: admin123
+  cors:
+    allowed-origins:
+      - http://localhost:5174
+      - http://127.0.0.1:5174
+      - http://localhost:4173
+      - http://127.0.0.1:4173
+  ai:
+    connect-timeout-ms: 30000
+    read-timeout-ms: 120000
+    proxy:
+      enabled: ${FB_AI_PROXY_ENABLED:true}
+      host: ${FB_AI_PROXY_HOST:127.0.0.1}
+      port: ${FB_AI_PROXY_PORT:7890}

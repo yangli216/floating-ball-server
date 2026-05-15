@@ -1,0 +1,37 @@
+server:
+  port: 8080
+
+logging:
+  level:
+    root: WARN
+    com.regionalai.floatingball.server: WARN
+  file:
+    path: ${FB_LOG_PATH:/var/log/floating-ball-server}
+
+spring:
+  datasource:
+    url: ${FB_DB_URL}
+    username: ${FB_DB_USERNAME}
+    password: ${FB_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+floating-ball:
+  aes-key: ${FB_AES_KEY}
+  admin:
+    bootstrap-reset:
+      enabled: false
+  cors:
+    allowed-origins:
+      - ${FB_ADMIN_ORIGIN}
+  ai:
+    connect-timeout-ms: ${FB_AI_CONNECT_TIMEOUT_MS:30000}
+    read-timeout-ms: ${FB_AI_READ_TIMEOUT_MS:120000}
+    proxy:
+      enabled: ${FB_AI_PROXY_ENABLED:false}
+      host: ${FB_AI_PROXY_HOST:}
+      port: ${FB_AI_PROXY_PORT:7890}
