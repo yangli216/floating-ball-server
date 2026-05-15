@@ -148,7 +148,8 @@ const menuItems = [
   { path: '/user-logs', label: '用户日志', icon: '用' },
   { path: '/feedbacks', label: '反馈', icon: '反' },
   { path: '/analytics', label: '统计分析', icon: '统' },
-  { path: '/function-usage', label: '辅诊功能', icon: '辅' }
+  { path: '/function-usage', label: '辅诊功能', icon: '辅' },
+  { path: '/user-activity', label: '用户活跃度', icon: '活' }
 ]
 
 export default {
@@ -340,6 +341,8 @@ export default {
   height: 100vh;
   background: #304156;
   color: #bfcbd9;
+  display: flex;
+  flex-direction: column;
 }
 
 .brand {
@@ -372,6 +375,8 @@ export default {
 
 .sidebar-nav {
   padding: 8px 0;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .sidebar-link {

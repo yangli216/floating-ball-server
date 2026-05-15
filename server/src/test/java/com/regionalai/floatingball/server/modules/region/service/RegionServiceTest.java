@@ -1,11 +1,14 @@
 package com.regionalai.floatingball.server.modules.region.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +37,10 @@ class RegionServiceTest {
 
     @BeforeEach
     void setUp() {
+        Configuration configuration = new Configuration();
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(configuration, "");
+        assistant.setCurrentNamespace("test");
+        TableInfoHelper.initTableInfo(assistant, AiRegion.class);
         regionService = new RegionService(aiRegionMapper);
     }
 

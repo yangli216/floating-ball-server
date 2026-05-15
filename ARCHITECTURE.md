@@ -65,7 +65,8 @@ floating-ball-server/
         │   ├── modules/knowledge/  # PMPHAI/知识库代理
         │   ├── modules/adminui/    # 管理端静态页面入口控制
         │   ├── modules/ai/         # chat / transcribe / realtime 代理
-        │   └── modules/analytics/  # 综合概况统计分析：趋势、分布、核心指标
+        │   ├── modules/analytics/  # 综合概况统计分析：趋势、分布、核心指标
+        │   ├── modules/useractivity/ # 区域用户活跃度统计：层级树、活跃指标、用户列表
         └── main/
             ├── admin/              # 管理端 Vue 2 + Element UI 源码
             │   ├── package.json

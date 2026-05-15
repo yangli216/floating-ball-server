@@ -21,6 +21,7 @@ const UserLogView = () => import('../views/UserLogView.vue')
 const FeedbackView = () => import('../views/FeedbackView.vue')
 const AnalyticsView = () => import('../views/AnalyticsView.vue')
 const FunctionUsageView = () => import('../views/FunctionUsageView.vue')
+const UserActivityView = () => import('../views/UserActivityView.vue')
 
 function resolveRedirectPath(value) {
   return typeof value === 'string' && value.indexOf('/') === 0 ? value : '/overview'
@@ -47,6 +48,7 @@ const router = new Router({
     { path: '/feedbacks', component: FeedbackView, meta: { title: '反馈管理' } },
     { path: '/analytics', component: AnalyticsView, meta: { title: '统计分析' } },
     { path: '/function-usage', component: FunctionUsageView, meta: { title: '辅诊功能' } },
+    { path: '/user-activity', component: UserActivityView, meta: { title: '用户活跃度' } },
     { path: '*', redirect: '/overview' }
   ]
 })

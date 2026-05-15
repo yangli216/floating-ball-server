@@ -5,10 +5,10 @@ spring:
   application:
     name: floating-ball-server
   profiles:
-    active: ${FB_PROFILE:development}
+    active: ${SPRING_PROFILES_ACTIVE:development}
   datasource:
     driver-class-name: oracle.jdbc.OracleDriver
-    url: ${FB_DB_URL:jdbc:oracle:thin:@10.19.40.42:1521:phis}
+    url: ${FB_DB_URL:jdbc:oracle:thin:@10.17.66.45:1521:phis}
     username: ${FB_DB_USERNAME:RBMH_AI}
     password: ${FB_DB_PASSWORD:RBMH_AI}
     hikari:

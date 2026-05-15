@@ -1,11 +1,14 @@
 package com.regionalai.floatingball.server.modules.org.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +37,10 @@ class OrgServiceTest {
 
     @BeforeEach
     void setUp() {
+        Configuration configuration = new Configuration();
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(configuration, "");
+        assistant.setCurrentNamespace("test");
+        TableInfoHelper.initTableInfo(assistant, AiOrg.class);
         orgService = new OrgService(aiOrgMapper);
     }
 

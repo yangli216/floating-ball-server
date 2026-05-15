@@ -1839,3 +1839,122 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
 11. 概览统计
 
 这些接口在第一轮脚手架阶段优先保证 CRUD 结构和分页查询能力，细节以实现文档和代码为准。
+
+### 5.58 GET `/admin/api/user-activity/summary`
+
+用途：返回指定时间范围和区域下的用户活跃度汇总指标。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| dateFrom | string | 否 | 起始日期，yyyy-MM-dd |
+| dateTo | string | 否 | 截止日期，yyyy-MM-dd |
+| idRegion | string | 否 | 区域 ID，为空时统计全部 |
+| timeRange | string | 否 | 时间范围：month / lastMonth / custom |
+
+响应 `data`：
+
+```json
+{
+  "activeUsers": 128,
+  "inactiveUsers": 16,
+  "activityRate": "88.9",
+  "avgUsageDuration": "2.5 小时",
+  "activeUsersGrowth": "8.3",
+  "inactiveUsersGrowth": "1",
+  "activityRateGrowth": "2.5",
+  "avgUsageDurationGrowth": "0.2 小时"
+}
+```
+
+字段说明：
+
+- `activeUsers`：所选时段内有问诊记录的设备数
+- `inactiveUsers`：所选时段内无问诊记录的设备数
+- `activityRate`：活跃率百分比，活跃用户数 / 总设备数 × 100
+- `avgUsageDuration`：活跃用户平均使用时长估算
+- `*Growth`：较上期增长率或变化量
+
+### 5.59 GET `/admin/api/user-activity/region-tree`
+
+用途：返回区域层级树，每个节点包含该区域下的活跃用户数。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：同 `summary` 接口。
+
+响应 `data`：
+
+```json
+[
+  {
+    "id": "REGION001",
+    "name": "北京市",
+    "type": "province",
+    "userCount": 16,
+    "children": [
+      {
+        "id": "REGION002",
+        "name": "北京市",
+        "type": "city",
+        "userCount": 16,
+        "children": [
+          {
+            "id": "REGION003",
+            "name": "东城区",
+            "type": "district",
+            "userCount": 5,
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+]
+```
+
+### 5.60 GET `/admin/api/user-activity/users`
+
+用途：返回用户活跃度明细列表，支持按活跃状态筛选和分页。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| dateFrom | string | 否 | 起始日期 |
+| dateTo | string | 否 | 截止日期 |
+| idRegion | string | 否 | 区域 ID |
+| timeRange | string | 否 | 时间范围 |
+| activeStatus | string | 否 | 活跃状态筛选：active / inactive |
+| current | long | 否 | 页码，默认 1 |
+| size | long | 否 | 每页条数，默认 10 |
+
+响应 `data`：
+
+```json
+{
+  "current": 1,
+  "size": 10,
+  "total": 144,
+  "records": [
+    {
+      "idDevice": "uuid",
+      "cdDevice": "9C:4E:36:AA:BB:CC",
+      "naDevice": "FloatingBall-win32",
+      "idOrg": "ORG001",
+      "naOrg": "区域中心医院",
+      "idRegion": "REGION003",
+      "naRegion": "东城区",
+      "activeStatus": "active",
+      "consultationCount": 12,
+      "operationCount": 45,
+      "lastActiveTime": "2026-05-15T10:30:00"
+    }
+  ]
+}
+```
