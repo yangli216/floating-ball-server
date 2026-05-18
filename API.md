@@ -1076,19 +1076,19 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.8 GET `/admin/api/analytics/function-modules`
 
-用途：返回所有已记录的功能模块展示名称列表，供辅诊功能应用统计页的功能模块多选下拉使用。
+用途：返回所有已记录的辅诊功能展示名称列表，供辅诊功能应用统计页的功能多选下拉使用。该接口返回产品功能维度，不返回底层 AI 操作名或审计日志来源模块名。
 
 无请求参数。
 
 响应 `data`：
 
 ```json
-["语音录入", "诊断建议", "知识库查询", "模板推荐", "AI问诊"]
+["语音问诊", "智能问诊", "报告单解读", "聊天", "AI诊断鉴别", "AI推荐诊断", "AI推荐用药", "AI推荐检查", "AI推荐检验", "AI推荐处置", "知识库使用"]
 ```
 
 ### 5.9 GET `/admin/api/analytics/function-usage`
 
-用途：返回辅诊功能应用统计数据，包含汇总指标、功能使用排行、趋势与分页明细。
+用途：返回辅诊功能应用统计数据，包含汇总指标、功能使用排行、趋势与分页明细。统计口径为“用户实际调用次数”，不按底层 AI 操作日志条数累加。
 
 请求参数：
 
@@ -1098,7 +1098,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | `dateTo` | string | 截止日期 yyyy-MM-dd |
 | `idRegion` | string | 区域 ID（可选） |
 | `idOrg` | string | 机构 ID（可选） |
-| `functionModules` | string[] | 功能模块筛选（可选，多选），支持传展示名称或原始编码 |
+| `functionModules` | string[] | 功能筛选（可选，多选），支持传功能展示名称，也兼容历史 `source_module / op_action / scene_code / na_module` 原始编码 |
 | `current` | int | 当前页（默认 1） |
 | `size` | int | 每页条数（默认 20） |
 
@@ -1111,7 +1111,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "usageRate": "83%",
   "ranking": [
     {
-      "moduleName": "语音录入",
+      "moduleName": "语音问诊",
       "callCount": 18500,
       "doctorCount": 42,
       "avgPerDoctor": 440,
@@ -1121,7 +1121,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "total": 6,
   "records": [],
   "trend": {
-    "modules": ["语音录入", "诊断建议", "知识库查询"],
+    "modules": ["语音问诊", "AI推荐诊断", "知识库使用"],
     "days": ["2026-04-01", "2026-04-02"],
     "values": [[120, 135], [98, 102], [75, 80]]
   }
@@ -1131,9 +1131,12 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 约束：
 
 1. `ranking` 按 `callCount` 倒序排列，已计算增长率（与上一等长周期对比）
-2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的模块名均已统一为后台展示目录中的中文名称，同时保留对原始编码筛选的兼容
-2. `trend` 仅包含排名前 5 的功能模块的逐日调用趋势
-3. `records` 为当前页数据，支持分页
+2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用
+3. 语音问诊、智能问诊以 `c_ai_user_consultation_log` 的聚合问诊记录计数；同一 `consultationId + consultationType + idDevice` 只算一次，避免把录音、识别、生成、回写等多条操作日志重复累加
+4. 报告单解读、聊天、AI 诊断鉴别、AI 推荐诊断/用药/检查/检验/处置、知识库使用以实际功能调用事件计数，服务端按 `trace_id` 优先去重；无 `trace_id` 时退回日志主键作为单次调用
+5. 服务端会基于 `op_action / op_title / source_module / scene_code / na_module` 统一归类功能，避免把“语音问诊 AI”“问诊 AI”“HIS 桥接”“页面导航”等实现层操作名展示为统计维度
+6. `trend` 仅包含排名前 5 的功能的逐日调用趋势
+7. `records` 为当前页数据，支持分页
 
 ### 5.10 GET `/admin/api/users`
 

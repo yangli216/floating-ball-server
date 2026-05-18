@@ -24,7 +24,6 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -35,14 +34,26 @@ import java.util.Map;
 public class AnalyticsService {
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsService.class);
+    private static final List<String> FUNCTION_USAGE_FEATURES = java.util.Arrays.asList(
+        "语音问诊",
+        "智能问诊",
+        "报告单解读",
+        "聊天",
+        "AI诊断鉴别",
+        "AI推荐诊断",
+        "AI推荐用药",
+        "AI推荐检查",
+        "AI推荐检验",
+        "AI推荐处置",
+        "知识库使用"
+    );
+    private static final Map<String, String> FUNCTION_USAGE_ALIASES = buildFunctionUsageAliases();
 
     private final AnalyticsMapper analyticsMapper;
-    private final AuditLogDisplayCatalog displayCatalog;
 
     public AnalyticsService(AnalyticsMapper analyticsMapper,
                             AuditLogDisplayCatalog displayCatalog) {
         this.analyticsMapper = analyticsMapper;
-        this.displayCatalog = displayCatalog;
     }
 
     public AnalyticsSummaryVO getSummary(AnalyticsQueryDTO query) {
@@ -290,9 +301,6 @@ public class AnalyticsService {
         FunctionUsageResponseVO vo = new FunctionUsageResponseVO();
 
         List<FunctionUsageItemVO> ranking = analyticsMapper.queryFunctionUsageRanking(normalizedQuery);
-        for (FunctionUsageItemVO item : ranking) {
-            item.setModuleName(toDisplayModule(item.getModuleName()));
-        }
 
         long totalCallCount = 0;
         for (FunctionUsageItemVO item : ranking) {
@@ -314,7 +322,7 @@ public class AnalyticsService {
         List<FunctionUsageItemVO> prevRanking = analyticsMapper.queryFunctionUsagePreviousRanking(prevQuery);
         Map<String, Long> prevCallMap = new LinkedHashMap<>();
         for (FunctionUsageItemVO item : prevRanking) {
-            prevCallMap.put(toDisplayModule(item.getModuleName()), item.getCallCount());
+            prevCallMap.put(item.getModuleName(), item.getCallCount());
         }
         for (FunctionUsageItemVO item : ranking) {
             Long prev = prevCallMap.get(item.getModuleName());
@@ -334,7 +342,7 @@ public class AnalyticsService {
         List<Map<String, Object>> trendRows = analyticsMapper.queryFunctionUsageTrend(normalizedQuery);
         Map<String, Map<String, Long>> trendMap = new LinkedHashMap<>();
         for (Map<String, Object> row : trendRows) {
-            String module = toDisplayModule(String.valueOf(row.get("MODULENAME")));
+            String module = String.valueOf(row.get("MODULENAME"));
             String day = String.valueOf(row.get("DAYSTR"));
             Object cntObj = row.get("CNT");
             long cnt = cntObj instanceof Number ? ((Number) cntObj).longValue() : 0L;
@@ -429,13 +437,6 @@ public class AnalyticsService {
         return days;
     }
 
-    private String toDisplayModule(String module) {
-        if (module == null) {
-            return "";
-        }
-        return displayCatalog.resolveSourceModuleLabel(module);
-    }
-
     private FunctionUsageQueryDTO normalizeFunctionUsageQuery(FunctionUsageQueryDTO query) {
         FunctionUsageQueryDTO normalized = new FunctionUsageQueryDTO();
         normalized.setDateFrom(query.getDateFrom());
@@ -454,14 +455,10 @@ public class AnalyticsService {
         }
         LinkedHashSet<String> resolved = new LinkedHashSet<String>();
         for (String selectedModule : selectedModules) {
-            Collection<String> aliases = displayCatalog.lookupSourceModuleCodes(selectedModule);
-            if (aliases == null || aliases.isEmpty()) {
-                if (selectedModule != null && !selectedModule.trim().isEmpty()) {
-                    resolved.add(selectedModule.trim());
-                }
-                continue;
+            String feature = resolveFunctionUsageFeature(selectedModule);
+            if (feature != null) {
+                resolved.add(feature);
             }
-            resolved.addAll(aliases);
         }
         return new ArrayList<String>(resolved);
     }
@@ -470,8 +467,100 @@ public class AnalyticsService {
         List<String> modules = analyticsMapper.queryDistinctModules();
         LinkedHashSet<String> result = new LinkedHashSet<String>();
         for (String m : modules) {
-            result.add(toDisplayModule(m));
+            result.add(m);
         }
         return new ArrayList<String>(result);
+    }
+
+    private static Map<String, String> buildFunctionUsageAliases() {
+        Map<String, String> aliases = new LinkedHashMap<String, String>();
+        registerFunctionUsageAliases(aliases, "语音问诊",
+            "语音问诊", "语音问诊AI", "语音录入", "语音采集", "语音胶囊", "语音结果页", "voice_consultation_ai",
+            "voice_intent", "voice_consultation_result", "voice_capsule", "voice_consultation", "voice_capture",
+            "speech", "speech_proxy", "aliyunSpeech", "start_voice_consultation", "start_voice_capture",
+            "open_voice_consultation", "extract_voice_record", "speech_transcribe", "speech_realtime", "transcribe", "realtime"
+        );
+        registerFunctionUsageAliases(aliases, "智能问诊",
+            "智能问诊", "问诊", "问诊AI", "智能问诊页", "问诊病历", "问诊引用", "HIS桥接", "consultation",
+            "consultation_page", "consultation_record", "consultation_reference", "his_bridge", "open_consultation",
+            "start_consultation", "start_consultation_assist", "generate_medical_record", "submit_to_his", "complete_consultation"
+        );
+        registerFunctionUsageAliases(aliases, "报告单解读",
+            "报告单解读", "报告解读", "检验检查报告解读", "report_interpretation", "report-interpretation",
+            "build_report_interpretation", "his_start_report_interpretation"
+        );
+        registerFunctionUsageAliases(aliases, "聊天",
+            "聊天", "AI对话", "聊天助手", "聊天面板", "chat", "chat_panel", "llm", "chat_stream", "stream_reply", "send_message"
+        );
+        registerFunctionUsageAliases(aliases, "AI诊断鉴别",
+            "AI诊断鉴别", "诊断鉴别", "鉴别排查", "consultation_checklist", "generate_diagnosis_checklist",
+            "confirm_differential_checklist", "consultation-diagnosis-checklist"
+        );
+        registerFunctionUsageAliases(aliases, "AI推荐诊断",
+            "AI推荐诊断", "诊断建议", "诊断推荐", "生成诊断推荐", "generate_diagnosis_recommendation",
+            "generate_tcm_diagnosis_recommendation", "consultation-diagnosis", "voice-consultation-diagnosis"
+        );
+        registerFunctionUsageAliases(aliases, "AI推荐用药",
+            "AI推荐用药", "用药推荐", "治疗推荐", "推荐用药", "generate_treatment_recommendation",
+            "generate_tcm_treatment_recommendation", "consultation-treatment-medication", "voice-consultation-treatment-medication"
+        );
+        registerFunctionUsageAliases(aliases, "AI推荐检查",
+            "AI推荐检查", "检查推荐", "推荐检查", "generate_examination_recommendation",
+            "consultation-treatment-examination", "voice-consultation-treatment-examination"
+        );
+        registerFunctionUsageAliases(aliases, "AI推荐检验",
+            "AI推荐检验", "检验推荐", "推荐检验", "generate_lab_test_recommendation",
+            "consultation-treatment-lab-test", "voice-consultation-treatment-lab-test"
+        );
+        registerFunctionUsageAliases(aliases, "AI推荐处置",
+            "AI推荐处置", "处置推荐", "推荐处置", "generate_procedure_recommendation",
+            "consultation-treatment-procedure", "voice-consultation-treatment-procedure"
+        );
+        registerFunctionUsageAliases(aliases, "知识库使用",
+            "知识库使用", "知识库查询", "知识库", "知识库页", "knowledge_base", "pmphai", "knowledge_panel", "knowledge-base"
+        );
+        return aliases;
+    }
+
+    private static void registerFunctionUsageAliases(Map<String, String> aliases, String feature, String... values) {
+        aliases.put(normalizeFeatureKey(feature), feature);
+        if (values == null) {
+            return;
+        }
+        for (String value : values) {
+            String key = normalizeFeatureKey(value);
+            if (key != null) {
+                aliases.put(key, feature);
+            }
+        }
+    }
+
+    private String resolveFunctionUsageFeature(String value) {
+        String key = normalizeFeatureKey(value);
+        if (key == null) {
+            return null;
+        }
+        String direct = FUNCTION_USAGE_ALIASES.get(key);
+        if (direct != null) {
+            return direct;
+        }
+        for (String feature : FUNCTION_USAGE_FEATURES) {
+            String featureKey = normalizeFeatureKey(feature);
+            if (featureKey != null && (key.contains(featureKey) || featureKey.contains(key))) {
+                return feature;
+            }
+        }
+        return value.trim();
+    }
+
+    private static String normalizeFeatureKey(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        return text.toLowerCase(Locale.ROOT).replace(" ", "").replace("_", "").replace("-", "");
     }
 }

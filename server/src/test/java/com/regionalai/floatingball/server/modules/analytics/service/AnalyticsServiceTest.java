@@ -38,19 +38,19 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    void getFunctionUsageShouldUseDisplayCatalogAndAcceptChineseModuleFilter() {
+    void getFunctionUsageShouldUseFeatureDimensionAndAcceptLegacyModuleFilter() {
         FunctionUsageItemVO rankingItem = new FunctionUsageItemVO();
-        rankingItem.setModuleName("consultation_reference");
+        rankingItem.setModuleName("语音问诊");
         rankingItem.setCallCount(12L);
         rankingItem.setDoctorCount(3L);
         rankingItem.setAvgPerDoctor(4L);
 
         FunctionUsageItemVO previousItem = new FunctionUsageItemVO();
-        previousItem.setModuleName("consultation_reference");
+        previousItem.setModuleName("语音问诊");
         previousItem.setCallCount(6L);
 
         Map<String, Object> trendRow = new LinkedHashMap<String, Object>();
-        trendRow.put("MODULENAME", "consultation_reference");
+        trendRow.put("MODULENAME", "语音问诊");
         trendRow.put("DAYSTR", "2026-05-01");
         trendRow.put("CNT", 12L);
 
@@ -66,25 +66,25 @@ class AnalyticsServiceTest {
         FunctionUsageQueryDTO query = new FunctionUsageQueryDTO();
         query.setDateFrom("2026-05-01");
         query.setDateTo("2026-05-01");
-        query.setFunctionModules(Collections.singletonList("问诊引用"));
+        query.setFunctionModules(Collections.singletonList("语音问诊 AI"));
 
         FunctionUsageResponseVO response = analyticsService.getFunctionUsage(query);
 
-        assertEquals("问诊引用", response.getRanking().get(0).getModuleName());
+        assertEquals("语音问诊", response.getRanking().get(0).getModuleName());
         assertEquals("100", response.getRanking().get(0).getGrowthRate());
-        assertIterableEquals(Collections.singletonList("问诊引用"), response.getTrend().getModules());
+        assertIterableEquals(Collections.singletonList("语音问诊"), response.getTrend().getModules());
         assertIterableEquals(Collections.singletonList("2026-05-01"), response.getTrend().getDays());
         verify(analyticsMapper).queryFunctionUsageRanking(argThat(arg -> arg.getFunctionModules() != null
-            && arg.getFunctionModules().contains("consultation_reference")));
+            && arg.getFunctionModules().contains("语音问诊")));
     }
 
     @Test
-    void getFunctionModuleOptionsShouldDeduplicateDisplayNames() {
+    void getFunctionModuleOptionsShouldReturnFeatureNames() {
         when(analyticsMapper.queryDistinctModules())
-            .thenReturn(Arrays.asList("feedback", "feedback_panel", "voice_capsule"));
+            .thenReturn(Arrays.asList("语音问诊", "智能问诊", "语音问诊"));
 
         List<String> options = analyticsService.getFunctionModuleOptions();
 
-        assertIterableEquals(Arrays.asList("反馈弹层", "反馈面板", "语音胶囊"), options);
+        assertIterableEquals(Arrays.asList("语音问诊", "智能问诊"), options);
     }
 }

@@ -3,8 +3,9 @@ server:
 
 logging:
   level:
-    root: DEBUG
+    root: INFO
     com.regionalai.floatingball.server: DEBUG
+    org.apache.coyote.http11.Http11Processor: WARN
   file:
     path: ${java.io.tmpdir}/floating-ball-server/logs
 

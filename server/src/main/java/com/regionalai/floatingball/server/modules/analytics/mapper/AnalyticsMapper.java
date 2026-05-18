@@ -14,6 +14,60 @@ import java.util.Map;
 @Mapper
 public interface AnalyticsMapper {
 
+    String FUNCTION_FEATURE_CASE =
+        "CASE "
+            + "WHEN op_action IN ('generate_diagnosis_checklist','confirm_differential_checklist') "
+            + "  OR op_title LIKE '%鉴别%' OR scene_code LIKE '%checklist%' THEN 'AI诊断鉴别' "
+            + "WHEN op_action IN ('generate_diagnosis_recommendation','generate_tcm_diagnosis_recommendation') "
+            + "  OR op_title LIKE '%诊断推荐%' OR scene_code LIKE '%diagnosis%' THEN 'AI推荐诊断' "
+            + "WHEN op_action IN ('generate_treatment_recommendation','generate_tcm_treatment_recommendation') "
+            + "  OR op_title LIKE '%用药推荐%' OR op_title LIKE '%治疗推荐%' OR scene_code LIKE '%medication%' THEN 'AI推荐用药' "
+            + "WHEN op_action = 'generate_examination_recommendation' "
+            + "  OR op_title LIKE '%检查推荐%' OR scene_code LIKE '%examination%' THEN 'AI推荐检查' "
+            + "WHEN op_action = 'generate_lab_test_recommendation' "
+            + "  OR op_title LIKE '%检验推荐%' OR scene_code LIKE '%lab-test%' OR scene_code LIKE '%lab_test%' THEN 'AI推荐检验' "
+            + "WHEN op_action = 'generate_procedure_recommendation' "
+            + "  OR op_title LIKE '%处置推荐%' OR scene_code LIKE '%procedure%' THEN 'AI推荐处置' "
+            + "WHEN op_action IN ('build_report_interpretation','his_start_report_interpretation') "
+            + "  OR source_module = 'report_interpretation' OR scene_code = 'report-interpretation' THEN '报告单解读' "
+            + "WHEN op_action IN ('extract_voice_record','repair_voice_extraction','start_voice_consultation','start_voice_capture','open_voice_consultation','discard_voice_result','speech_transcribe','speech_realtime','transcribe','realtime') "
+            + "  OR na_module IN ('voice_consultation','voice_capture','speech','speech_proxy','aliyunSpeech') "
+            + "  OR source_module IN ('voice_consultation_ai','voice_intent','voice_consultation_result','voice_capsule','aliyunSpeech','voice_safety_reviewer') "
+            + "  OR scene_code LIKE 'voice-%' OR scene_code IN ('voice-consultation','voice-interaction','chat-input') THEN '语音问诊' "
+            + "WHEN op_action IN ('open_consultation','start_consultation','start_consultation_assist','generate_medical_record','submit_to_his','complete_consultation','generate_final_report','request_phis_reference','request_reference:diagnosis','request_reference:medicine','request_reference:medication','request_reference:examination','request_reference:lab_test','request_reference:procedure','reference_feedback:diagnosis','reference_feedback:medicine','reference_feedback:medication','reference_feedback:examination','reference_feedback:lab_test','reference_feedback:procedure') "
+            + "  OR na_module = 'consultation' "
+            + "  OR source_module IN ('consultation_page','consultation_record','consultation_reference','his_bridge') "
+            + "  OR scene_code IN ('consultation','consultation-assist','consultation-reference','consultation-record') THEN '智能问诊' "
+            + "WHEN op_action IN ('chat','chat_stream','stream_reply','send_message') "
+            + "  OR na_module = 'chat' OR source_module IN ('chat_panel','llm') OR scene_code IN ('chat','chat-stream') THEN '聊天' "
+            + "WHEN op_action LIKE 'knowledge_%' OR source_module IN ('knowledge_base','pmphai','knowledge_panel') OR scene_code = 'knowledge-base' THEN '知识库使用' "
+            + "ELSE NULL END";
+
+    String FUNCTION_USAGE_CONSULTATION_EVENT_SELECT =
+        "  SELECT CASE LOWER(consultation_type) WHEN 'voice' THEN '语音问诊' WHEN 'smart' THEN '智能问诊' END AS feature_name,"
+            + "    'consultation:' || consultation_id || ':' || LOWER(consultation_type) || ':' || NVL(id_device, '-') AS event_key,"
+            + "    NVL(TRIM(id_doctor), id_device) AS doctor_key,"
+            + "    consultation_time AS event_time,"
+            + "    id_org"
+            + "  FROM c_ai_user_consultation_log"
+            + "  WHERE fg_active = '1' AND LOWER(consultation_type) IN ('voice','smart')";
+
+    String FUNCTION_USAGE_OP_EVENT_SELECT =
+        "  SELECT feature_name,"
+            + "    'op:' || COALESCE(TRIM(trace_id), id_log) AS event_key,"
+            + "    id_device AS doctor_key,"
+            + "    operation_time AS event_time,"
+            + "    id_org"
+            + "  FROM ("
+            + "    SELECT id_log, id_device, id_org, op_action, op_title, source_module, scene_code, na_module, trace_id, operation_time,"
+            + "      " + FUNCTION_FEATURE_CASE + " AS feature_name"
+            + "    FROM c_ai_op_log"
+            + "    WHERE fg_active = '1'";
+
+    String FUNCTION_USAGE_OP_EVENT_TAIL =
+        "  )"
+            + "  WHERE feature_name IS NOT NULL AND feature_name NOT IN ('语音问诊','智能问诊')";
+
     @Select({
         "<script>",
         "SELECT COUNT(1) AS cnt FROM c_ai_op_log WHERE fg_active = '1' AND sd_log_type = 'ai_proxy'",
@@ -198,33 +252,68 @@ public interface AnalyticsMapper {
     List<DistributionItemVO> queryRegionDistributionRaw(@Param("query") AnalyticsQueryDTO query);
 
     @Select({
-        "SELECT DISTINCT source_module AS module_name FROM c_ai_op_log",
-        "WHERE fg_active = '1' AND source_module IS NOT NULL",
-        "ORDER BY source_module"
+        "SELECT DISTINCT feature_name AS module_name",
+        "FROM (",
+        "  SELECT CASE LOWER(consultation_type) WHEN 'voice' THEN '语音问诊' WHEN 'smart' THEN '智能问诊' END AS feature_name",
+        "  FROM c_ai_user_consultation_log",
+        "  WHERE fg_active = '1' AND LOWER(consultation_type) IN ('voice','smart')",
+        "  UNION ALL",
+        "  SELECT feature_name",
+        "  FROM (",
+        "    SELECT " + FUNCTION_FEATURE_CASE + " AS feature_name",
+        "    FROM c_ai_op_log WHERE fg_active = '1'",
+        "  )",
+        "  WHERE feature_name IS NOT NULL AND feature_name NOT IN ('语音问诊','智能问诊')",
+        ")",
+        "WHERE feature_name IS NOT NULL",
+        "ORDER BY feature_name"
     })
     List<String> queryDistinctModules();
 
     @Select({
         "<script>",
-        "SELECT source_module AS moduleName,",
-        "  COUNT(1) AS callCount,",
-        "  COUNT(DISTINCT id_device) AS doctorCount,",
-        "  ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT id_device), 0)) AS avgPerDoctor",
-        "FROM c_ai_op_log WHERE fg_active = '1' AND source_module IS NOT NULL",
-        "<if test='query.dateFrom != null and query.dateFrom != \"\"'>",
-        "  AND operation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
-        "</if>",
-        "<if test='query.dateTo != null and query.dateTo != \"\"'>",
-        "  AND operation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
-        "</if>",
-        "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND id_org = #{query.idOrg}",
-        "</if>",
+        "SELECT feature_name AS moduleName, COUNT(1) AS callCount, COUNT(DISTINCT doctor_key) AS doctorCount,",
+        "  NVL(ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT doctor_key), 0)), 0) AS avgPerDoctor",
+        "FROM (",
+        "  SELECT feature_name, event_key, MAX(doctor_key) AS doctor_key, MIN(event_time) AS event_time",
+        "  FROM (",
+        FUNCTION_USAGE_CONSULTATION_EVENT_SELECT,
+        "  <if test='query.dateFrom != null and query.dateFrom != \"\"'>",
+        "    AND consultation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
+        "  </if>",
+        "  <if test='query.dateTo != null and query.dateTo != \"\"'>",
+        "    AND consultation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
+        "  </if>",
+        "  <if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "    AND id_org = #{query.idOrg}",
+        "  </if>",
+        "  <if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "    AND id_org IN (SELECT id_org FROM c_ai_org WHERE id_region = #{query.idRegion} AND fg_active = '1')",
+        "  </if>",
+        "  UNION ALL",
+        FUNCTION_USAGE_OP_EVENT_SELECT,
+        "    <if test='query.dateFrom != null and query.dateFrom != \"\"'>",
+        "      AND operation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
+        "    </if>",
+        "    <if test='query.dateTo != null and query.dateTo != \"\"'>",
+        "      AND operation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
+        "    </if>",
+        "    <if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "      AND id_org = #{query.idOrg}",
+        "    </if>",
+        "    <if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "      AND id_org IN (SELECT id_org FROM c_ai_org WHERE id_region = #{query.idRegion} AND fg_active = '1')",
+        "    </if>",
+        FUNCTION_USAGE_OP_EVENT_TAIL,
+        "  )",
+        "  WHERE feature_name IS NOT NULL",
         "<if test='query.functionModules != null and query.functionModules.size() > 0'>",
-        "  AND source_module IN",
+        "  AND feature_name IN",
         "  <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>",
         "</if>",
-        "GROUP BY source_module",
+        "  GROUP BY feature_name, event_key",
+        ")",
+        "GROUP BY feature_name",
         "ORDER BY callCount DESC",
         "</script>"
     })
@@ -232,25 +321,48 @@ public interface AnalyticsMapper {
 
     @Select({
         "<script>",
-        "SELECT source_module AS moduleName,",
-        "  COUNT(1) AS callCount,",
-        "  COUNT(DISTINCT id_device) AS doctorCount,",
-        "  ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT id_device), 0)) AS avgPerDoctor",
-        "FROM c_ai_op_log WHERE fg_active = '1' AND source_module IS NOT NULL",
-        "<if test='query.dateFrom != null and query.dateFrom != \"\"'>",
-        "  AND operation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
-        "</if>",
-        "<if test='query.dateTo != null and query.dateTo != \"\"'>",
-        "  AND operation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
-        "</if>",
-        "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND id_org = #{query.idOrg}",
-        "</if>",
+        "SELECT feature_name AS moduleName, COUNT(1) AS callCount, COUNT(DISTINCT doctor_key) AS doctorCount,",
+        "  NVL(ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT doctor_key), 0)), 0) AS avgPerDoctor",
+        "FROM (",
+        "  SELECT feature_name, event_key, MAX(doctor_key) AS doctor_key, MIN(event_time) AS event_time",
+        "  FROM (",
+        FUNCTION_USAGE_CONSULTATION_EVENT_SELECT,
+        "  <if test='query.dateFrom != null and query.dateFrom != \"\"'>",
+        "    AND consultation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
+        "  </if>",
+        "  <if test='query.dateTo != null and query.dateTo != \"\"'>",
+        "    AND consultation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
+        "  </if>",
+        "  <if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "    AND id_org = #{query.idOrg}",
+        "  </if>",
+        "  <if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "    AND id_org IN (SELECT id_org FROM c_ai_org WHERE id_region = #{query.idRegion} AND fg_active = '1')",
+        "  </if>",
+        "  UNION ALL",
+        FUNCTION_USAGE_OP_EVENT_SELECT,
+        "    <if test='query.dateFrom != null and query.dateFrom != \"\"'>",
+        "      AND operation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
+        "    </if>",
+        "    <if test='query.dateTo != null and query.dateTo != \"\"'>",
+        "      AND operation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
+        "    </if>",
+        "    <if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "      AND id_org = #{query.idOrg}",
+        "    </if>",
+        "    <if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "      AND id_org IN (SELECT id_org FROM c_ai_org WHERE id_region = #{query.idRegion} AND fg_active = '1')",
+        "    </if>",
+        FUNCTION_USAGE_OP_EVENT_TAIL,
+        "  )",
+        "  WHERE feature_name IS NOT NULL",
         "<if test='query.functionModules != null and query.functionModules.size() > 0'>",
-        "  AND source_module IN",
+        "  AND feature_name IN",
         "  <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>",
         "</if>",
-        "GROUP BY source_module",
+        "  GROUP BY feature_name, event_key",
+        ")",
+        "GROUP BY feature_name",
         "ORDER BY callCount DESC",
         "</script>"
     })
@@ -258,24 +370,48 @@ public interface AnalyticsMapper {
 
     @Select({
         "<script>",
-        "SELECT TO_CHAR(TRUNC(operation_time), 'yyyy-MM-dd') AS dayStr,",
-        "  source_module AS moduleName, COUNT(1) AS cnt",
-        "FROM c_ai_op_log WHERE fg_active = '1' AND source_module IS NOT NULL",
-        "<if test='query.dateFrom != null and query.dateFrom != \"\"'>",
-        "  AND operation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
-        "</if>",
-        "<if test='query.dateTo != null and query.dateTo != \"\"'>",
-        "  AND operation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
-        "</if>",
-        "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND id_org = #{query.idOrg}",
-        "</if>",
+        "SELECT TO_CHAR(TRUNC(event_time), 'yyyy-MM-dd') AS dayStr, feature_name AS moduleName, COUNT(1) AS cnt",
+        "FROM (",
+        "  SELECT feature_name, event_key, MIN(event_time) AS event_time",
+        "  FROM (",
+        FUNCTION_USAGE_CONSULTATION_EVENT_SELECT,
+        "  <if test='query.dateFrom != null and query.dateFrom != \"\"'>",
+        "    AND consultation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
+        "  </if>",
+        "  <if test='query.dateTo != null and query.dateTo != \"\"'>",
+        "    AND consultation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
+        "  </if>",
+        "  <if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "    AND id_org = #{query.idOrg}",
+        "  </if>",
+        "  <if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "    AND id_org IN (SELECT id_org FROM c_ai_org WHERE id_region = #{query.idRegion} AND fg_active = '1')",
+        "  </if>",
+        "  UNION ALL",
+        FUNCTION_USAGE_OP_EVENT_SELECT,
+        "    <if test='query.dateFrom != null and query.dateFrom != \"\"'>",
+        "      AND operation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
+        "    </if>",
+        "    <if test='query.dateTo != null and query.dateTo != \"\"'>",
+        "      AND operation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
+        "    </if>",
+        "    <if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "      AND id_org = #{query.idOrg}",
+        "    </if>",
+        "    <if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "      AND id_org IN (SELECT id_org FROM c_ai_org WHERE id_region = #{query.idRegion} AND fg_active = '1')",
+        "    </if>",
+        FUNCTION_USAGE_OP_EVENT_TAIL,
+        "  )",
+        "  WHERE feature_name IS NOT NULL",
         "<if test='query.functionModules != null and query.functionModules.size() > 0'>",
-        "  AND source_module IN",
+        "  AND feature_name IN",
         "  <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>",
         "</if>",
-        "GROUP BY TRUNC(operation_time), source_module",
-        "ORDER BY TRUNC(operation_time), source_module",
+        "  GROUP BY feature_name, event_key",
+        ")",
+        "GROUP BY TRUNC(event_time), feature_name",
+        "ORDER BY TRUNC(event_time), feature_name",
         "</script>"
     })
     List<Map<String, Object>> queryFunctionUsageTrend(@Param("query") FunctionUsageQueryDTO query);
