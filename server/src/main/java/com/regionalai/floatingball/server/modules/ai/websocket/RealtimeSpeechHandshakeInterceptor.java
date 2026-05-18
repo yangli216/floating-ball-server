@@ -2,6 +2,8 @@ package com.regionalai.floatingball.server.modules.ai.websocket;
 
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
+import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
 import com.regionalai.floatingball.server.modules.security.service.SecurityRejectionLogService;
 import com.regionalai.floatingball.server.security.RequestSignatureVerifier;
 import org.slf4j.Logger;
@@ -30,13 +32,16 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
     public static final String DEVICE_ATTRIBUTE = "aiDevice";
 
     private final DeviceService deviceService;
+    private final ReleaseService releaseService;
     private final RequestSignatureVerifier signatureVerifier;
     private final SecurityRejectionLogService rejectionLogService;
 
     public RealtimeSpeechHandshakeInterceptor(DeviceService deviceService,
+                                               ReleaseService releaseService,
                                                RequestSignatureVerifier signatureVerifier,
                                                SecurityRejectionLogService rejectionLogService) {
         this.deviceService = deviceService;
+        this.releaseService = releaseService;
         this.signatureVerifier = signatureVerifier;
         this.rejectionLogService = rejectionLogService;
     }
@@ -48,7 +53,7 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
                                    Map<String, Object> attributes) {
         String token = resolveQueryParam(request.getURI(), "token");
         if (!StringUtils.hasText(token)) {
-            log.warn("realtime speech ws handshake rejected: missing token. uri={}", request.getURI());
+            log.warn("realtime speech ws handshake rejected: missing token. uri={}", safeUri(request.getURI()));
             recordWsRejection("WS_AUTH_MISSING_TOKEN", request, null, "缺少设备令牌", "Token query param missing", false, null, null);
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
@@ -56,9 +61,23 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
 
         AiDevice device = deviceService.findActiveByToken(token);
         if (device == null) {
-            log.warn("realtime speech ws handshake rejected: invalid token. uri={}", request.getURI());
+            log.warn("realtime speech ws handshake rejected: invalid token. uri={}", safeUri(request.getURI()));
             recordWsRejection("WS_AUTH_INVALID_TOKEN", request, null, "设备令牌无效", "Token does not match any active device", false, null, null);
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return false;
+        }
+
+        String updateChannel = resolveQueryParam(request.getURI(), "updateChannel");
+        String clientVersion = resolveQueryParam(request.getURI(), "clientVersion");
+        if (!StringUtils.hasText(clientVersion)) {
+            clientVersion = device.getClientVersion();
+        }
+        if (releaseService.isUpdateRequired(updateChannel, clientVersion)) {
+            ReleasePolicyView policy = releaseService.getRequiredPolicy(updateChannel);
+            log.warn("realtime speech ws handshake rejected: client version too old. deviceId={}, currentVersion={}, minSupported={}",
+                device.getIdDevice(), clientVersion, policy.getMinSupportedVersion());
+            recordWsRejection("WS_VERSION_OUTDATED", request, device, "客户端版本过低", "minSupported=" + policy.getMinSupportedVersion() + " current=" + clientVersion, false, null, null);
+            response.setStatusCode(HttpStatus.UPGRADE_REQUIRED);
             return false;
         }
 
@@ -70,7 +89,7 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
             boolean hasSigParams = ts != null && nonce != null && sig != null;
 
             if (!hasSigParams) {
-                log.warn("realtime speech ws handshake rejected: missing signature params. uri={}", request.getURI());
+                log.warn("realtime speech ws handshake rejected: missing signature params. uri={}", safeUri(request.getURI()));
                 recordWsRejection("WS_SIG_MISSING", request, device, "缺少WebSocket签名参数", "Expected ts/nonce/sig query params", false, ts, nonce);
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return false;
@@ -82,13 +101,13 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
                 device.getDevicePublicKey(), "GET", path, ts, nonce, EMPTY_STRING_SHA256, sig);
 
             if (!result.isValid()) {
-                log.warn("realtime speech ws handshake rejected: signature invalid. uri={}, reason={}", request.getURI(), result.getErrorMessage());
+                log.warn("realtime speech ws handshake rejected: signature invalid. uri={}, reason={}", safeUri(request.getURI()), result.getErrorMessage());
                 recordWsRejection("WS_SIG_INVALID", request, device, "WebSocket签名验证失败", result.getErrorMessage(), true, ts, nonce);
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return false;
             }
         } else {
-            log.warn("realtime speech ws handshake rejected: device has no public key. uri={}, deviceId={}", request.getURI(), device.getIdDevice());
+            log.warn("realtime speech ws handshake rejected: device has no public key. uri={}, deviceId={}", safeUri(request.getURI()), device.getIdDevice());
             recordWsRejection("WS_SIG_NO_PUBLIC_KEY", request, device, "设备未注册公钥", "Device registered without ECDSA public key", false, null, null);
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
@@ -123,6 +142,34 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
     private String resolveClientIp(ServerHttpRequest request) {
         InetSocketAddress remoteAddress = request.getRemoteAddress();
         return remoteAddress != null ? remoteAddress.getAddress().getHostAddress() : "unknown";
+    }
+
+    private String safeUri(URI uri) {
+        String path = uri == null ? "" : uri.getPath();
+        String rawQuery = uri == null ? null : uri.getRawQuery();
+        if (!StringUtils.hasText(rawQuery)) {
+            return path;
+        }
+        StringBuilder safeQuery = new StringBuilder();
+        String[] pairs = rawQuery.split("&");
+        for (String pair : pairs) {
+            int equalsIndex = pair.indexOf('=');
+            String rawName = equalsIndex >= 0 ? pair.substring(0, equalsIndex) : pair;
+            String name = decode(rawName);
+            if (safeQuery.length() > 0) {
+                safeQuery.append('&');
+            }
+            safeQuery.append(rawName);
+            if (equalsIndex >= 0) {
+                safeQuery.append('=');
+                if ("token".equals(name) || "sig".equals(name)) {
+                    safeQuery.append("***");
+                } else {
+                    safeQuery.append(pair.substring(equalsIndex + 1));
+                }
+            }
+        }
+        return path + "?" + safeQuery;
     }
 
     private String resolveQueryParam(URI uri, String name) {

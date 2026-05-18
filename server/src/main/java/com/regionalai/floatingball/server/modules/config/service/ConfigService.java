@@ -243,7 +243,7 @@ public class ConfigService {
             .eq(AiConfig::getSdStatus, "1")
             .and(q -> q.eq(StringUtils.hasText(orgId), AiConfig::getIdOrg, orgId)
                 .or()
-                .eq(StringUtils.hasText(regionId), AiConfig::getIdRegion, regionId)
+                .isNull(AiConfig::getIdOrg).eq(StringUtils.hasText(regionId), AiConfig::getIdRegion, regionId)
                 .or()
                 .isNull(AiConfig::getIdOrg).isNull(AiConfig::getIdRegion))
             .orderByDesc(AiConfig::getUpdateTime));

@@ -50,7 +50,7 @@ floating-ball-server/
         │   │   ├── config/         # Spring 配置
         │   │   ├── exception/      # 全局异常
         │   │   └── model/          # 基础模型
-        │   ├── security/           # deviceToken / adminToken 鉴权
+        │   ├── security/           # deviceToken + ECDSA 请求签名 / adminToken 鉴权
         │   ├── modules/device/     # 注册、心跳、设备管理
         │   ├── modules/org/        # 机构管理
         │   ├── modules/region/     # 区域管理
@@ -86,6 +86,13 @@ floating-ball-server/
 2. 服务启动前必须注入 `FB_DB_URL`、`FB_DB_USERNAME`、`FB_DB_PASSWORD`、`FB_AES_KEY`。
 3. PMPHAI 等上游服务地址在公开仓库中只保留示例地址；真实地址通过管理端配置或部署环境注入。
 4. 本地联调如需私有覆盖配置，应使用未入库文件或部署环境变量，不得直接改回仓库默认值。
+
+### 3.2 客户端安全基线
+
+1. `/v1/client/register` 与 `/v1/client/releases/*` 是客户端侧仅有的未签名入口；其他 `/v1/*` 必须同时校验 `deviceToken` 与 ECDSA P-256 请求签名。
+2. 签名必须绑定实际请求体：服务端用收到的 body 重算 SHA-256，并用该 hash 参与验签，不信任客户端单独声明的 body hash。
+3. 已绑定公钥的设备不允许通过匿名注册覆盖公钥或取回旧 token；本地 token/key 丢失时，桌面端重新生成兜底设备编码注册为新设备，以降低弱运维场景下的人工介入。
+4. 实时语音 WebSocket 握手同样校验设备令牌、签名与客户端版本门禁；日志不得输出完整 token 或签名。
 
 ## 4. 后端分层
 

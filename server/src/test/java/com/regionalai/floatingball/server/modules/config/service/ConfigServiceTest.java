@@ -68,10 +68,11 @@ class ConfigServiceTest {
     void resolveByDeviceShouldPreferOrgScopedConfig() {
         AiConfig global = buildConfig(null, null, "https://global.example.com/", "global-key", "global-model");
         AiConfig region = buildConfig(null, "REG001", "https://region.example.com/", "region-key", "region-model");
+        AiConfig otherOrgInRegion = buildConfig("ORG002", "REG001", "https://other-org.example.com/", "other-key", "other-model");
         AiConfig org = buildConfig("ORG001", null, "https://org.example.com/", "org-key", "org-model");
         org.setFeaturesJson("{\"voice\":true}");
 
-        when(aiConfigMapper.selectList(any())).thenReturn(Arrays.asList(global, region, org));
+        when(aiConfigMapper.selectList(any())).thenReturn(Arrays.asList(global, region, otherOrgInRegion, org));
 
         AiDevice device = new AiDevice();
         device.setIdOrg("ORG001");

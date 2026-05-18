@@ -66,8 +66,10 @@ class PromptServiceTest {
     void publishShouldArchiveOtherPublishedPromptsInSameScene() {
         AiPrompt target = buildPrompt("P1", "diagnosis", "draft", "3.0.0", "ORG001", null, "0");
         AiPrompt published = buildPrompt("P2", "diagnosis", "published", "2.0.0", "ORG001", null, "1");
+        AiPrompt otherOrg = buildPrompt("P3", "diagnosis", "other-org", "2.0.0", "ORG002", null, "1");
+        AiPrompt global = buildPrompt("P4", "diagnosis", "global", "1.0.0", null, null, "1");
         when(aiPromptMapper.selectById("P1")).thenReturn(target);
-        when(aiPromptMapper.selectList(any())).thenReturn(Arrays.asList(target, published));
+        when(aiPromptMapper.selectList(any())).thenReturn(Arrays.asList(target, published, otherOrg, global));
 
         promptService.publish("P1");
 

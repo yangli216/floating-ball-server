@@ -26,13 +26,41 @@
 }
 ```
 
-## 2. 认证
+## 2. 认证与签名
 
 ### 2.1 客户端接口
 
 - 路径前缀：`/v1/*`
-- 认证方式：`Authorization: Bearer {deviceToken}`
-- 例外：`POST /v1/client/register` 与 `/v1/client/releases/*` 无需认证
+- 认证方式：`Authorization: Bearer {deviceToken}` + ECDSA P-256 请求签名
+- 例外：`POST /v1/client/register` 与 `/v1/client/releases/*` 无需设备令牌和请求签名
+
+除上述例外外，所有 `/v1/*` HTTP 请求必须携带：
+
+| Header | 必填 | 说明 |
+| --- | --- | --- |
+| Authorization | 是 | `Bearer {deviceToken}` |
+| X-Timestamp | 是 | 毫秒时间戳，服务端默认允许 5 分钟时钟偏移 |
+| X-Nonce | 是 | 每次请求唯一随机数，服务端会拒绝重放 |
+| X-Signature | 是 | ECDSA P-256 / SHA-256 签名，base64 编码 |
+| X-Body-SHA256 | 有 body 时是 | 请求体 SHA-256 hex；服务端会用实际 body 重算并比对 |
+
+签名原文固定为：
+
+```text
+METHOD
+PATH
+TIMESTAMP
+NONCE
+BODY_SHA256
+```
+
+说明：
+
+1. `METHOD` 使用大写 HTTP 方法，例如 `POST`。
+2. `PATH` 只包含路径，不包含 query，例如 `/v1/ai/chat`。
+3. `BODY_SHA256` 必须使用实际请求体字节计算；空 body 使用空字符串 SHA-256：`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+4. 服务端不会信任客户端声明的 `X-Body-SHA256`，会用实际收到的 body 重算并参与验签。
+5. 签名失败返回 `SIG-401`；令牌缺失或无效返回 `AUTH-401`；客户端版本过低返回 `UPDATE-REQUIRED`。
 
 ### 2.2 管理端接口
 
@@ -307,11 +335,18 @@ Content-Type: application/json
   "naDevice": "FloatingBall-win32",
   "cdOrg": "ORG001",
   "clientVersion": "0.1.0",
-  "osInfo": "Windows 10"
+  "updateChannel": "production",
+  "osInfo": "Windows 10",
+  "publicKey": "base64-spki-public-key"
 }
 ```
 
-说明：当前桌面端优先使用设备 MAC 地址作为 `cdDevice`；仅在当前环境无法读取 MAC 时才回退到本地兜底编码。
+说明：
+
+1. 当前桌面端优先使用设备 MAC 地址作为 `cdDevice`；仅在当前环境无法读取 MAC 时才回退到本地兜底编码。
+2. `publicKey` 为 ECDSA P-256 公钥，SPKI DER 后 base64 编码。
+3. 已存在且已绑定公钥的设备不允许匿名重新注册接管；若本地 token/key 丢失，客户端应生成新的兜底 `cdDevice` 注册为新设备，避免弱运维场景下阻断医生使用。
+4. 已存在但未绑定公钥的历史设备允许在注册时补录公钥，用于兼容旧数据。
 
 响应 `data`：
 
@@ -319,7 +354,8 @@ Content-Type: application/json
 {
   "idDevice": "uuid",
   "deviceToken": "32-char-token",
-  "heartbeatInterval": 30
+  "heartbeatInterval": 30,
+  "hasPublicKey": true
 }
 ```
 
@@ -742,15 +778,17 @@ Content-Type: application/json
 连接：
 
 ```text
-ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}
+ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={version}&updateChannel={channel}&ts={timestamp}&nonce={nonce}&sig={signature}
 ```
 
 约束：
 
 1. 浏览器 WebSocket 无法设置 `Authorization` 请求头，因此本通道通过 `token` query 参数携带设备令牌；服务端握手阶段按 `DeviceService.findActiveByToken` 校验。
-2. 当前仅在 `speechProvider=aliyun-dashscope` 时启用，服务端使用 `audioApiKey` 或主模型 `apiKey` 连接 DashScope WebSocket。
-3. 服务端向 DashScope `/api-ws/v1/inference` 发送 `run-task`，模型取 `speechModel`，默认 `paraformer-realtime-v2`；若配置其他同协议 Fun-ASR / Gummy / Paraformer realtime 模型则原样使用；音频格式为 `pcm` / `16000`。
-4. DashScope `qwen3-asr-flash-realtime` 属于另一套 `/api-ws/v1/realtime` session 协议，不属于当前代理通道；若后续要使用该模型，需要新增独立协议适配。
+2. `ts / nonce / sig` 为 WebSocket 握手签名参数，签名原文与 HTTP 一致：`GET`、路径 `/v1/ai/speech/realtime/ws`、空 body SHA-256。
+3. `clientVersion / updateChannel` 用于握手阶段强制更新门禁；版本过低时拒绝连接。
+4. 当前仅在 `speechProvider=aliyun-dashscope` 时启用，服务端使用 `audioApiKey` 或主模型 `apiKey` 连接 DashScope WebSocket。
+5. 服务端向 DashScope `/api-ws/v1/inference` 发送 `run-task`，模型取 `speechModel`，默认 `paraformer-realtime-v2`；若配置其他同协议 Fun-ASR / Gummy / Paraformer realtime 模型则原样使用；音频格式为 `pcm` / `16000`。
+6. DashScope `qwen3-asr-flash-realtime` 属于另一套 `/api-ws/v1/realtime` session 协议，不属于当前代理通道；若后续要使用该模型，需要新增独立协议适配。
 
 客户端发送：
 

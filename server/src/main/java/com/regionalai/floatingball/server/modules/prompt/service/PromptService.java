@@ -103,7 +103,7 @@ public class PromptService {
             .eq(AiPrompt::getCdPrompt, prompt.getCdPrompt())
             .eq(AiPrompt::getFgActive, "1"));
         for (AiPrompt item : sameScene) {
-            if (!item.getIdPrompt().equals(idPrompt) && "1".equals(item.getSdStatus())) {
+            if (!item.getIdPrompt().equals(idPrompt) && "1".equals(item.getSdStatus()) && sameScope(prompt, item)) {
                 item.setSdStatus("2");
                 aiPromptMapper.updateById(item);
             }
@@ -143,7 +143,7 @@ public class PromptService {
             .eq(AiPrompt::getSdStatus, "1")
             .and(q -> q.eq(StringUtils.hasText(orgId), AiPrompt::getIdOrg, orgId)
                 .or()
-                .eq(StringUtils.hasText(regionId), AiPrompt::getIdRegion, regionId)
+                .isNull(AiPrompt::getIdOrg).eq(StringUtils.hasText(regionId), AiPrompt::getIdRegion, regionId)
                 .or()
                 .isNull(AiPrompt::getIdOrg).isNull(AiPrompt::getIdRegion))
             .orderByDesc(AiPrompt::getUpdateTime));
@@ -175,5 +175,15 @@ public class PromptService {
             return 2;
         }
         return 1;
+    }
+
+    private boolean sameScope(AiPrompt left, AiPrompt right) {
+        return sameText(left.getIdOrg(), right.getIdOrg()) && sameText(left.getIdRegion(), right.getIdRegion());
+    }
+
+    private boolean sameText(String left, String right) {
+        String normalizedLeft = StringUtils.hasText(left) ? left : null;
+        String normalizedRight = StringUtils.hasText(right) ? right : null;
+        return normalizedLeft == null ? normalizedRight == null : normalizedLeft.equals(normalizedRight);
     }
 }

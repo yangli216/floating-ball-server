@@ -73,6 +73,10 @@ public class DeviceService {
             .last("FETCH FIRST 1 ROWS ONLY"));
 
         if (existing != null) {
+            if (StringUtils.hasText(existing.getDevicePublicKey())) {
+                log.warn("device anonymous re-register rejected. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
+                throw new BusinessException("设备已注册，请使用现有设备令牌；如本机密钥丢失请重新生成设备编码后注册");
+            }
             existing.setNaDevice(request.getNaDevice());
             existing.setClientVersion(request.getClientVersion());
             existing.setOsInfo(request.getOsInfo());
