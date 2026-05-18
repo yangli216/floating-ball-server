@@ -20,4 +20,7 @@ public class RegisterDeviceRequest {
     private String updateChannel;
 
     private String osInfo;
+
+    @NotBlank(message = "设备公钥不能为空")
+    private String publicKey;
 }

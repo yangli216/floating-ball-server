@@ -79,9 +79,12 @@ public class DeviceService {
             if (!StringUtils.hasText(existing.getDeviceToken())) {
                 existing.setDeviceToken(generateToken());
             }
+            if (StringUtils.hasText(request.getPublicKey())) {
+                existing.setDevicePublicKey(request.getPublicKey());
+            }
             aiDeviceMapper.updateById(existing);
             log.info("device re-registered. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
-            return new RegisterDeviceResponse(existing.getIdDevice(), existing.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL);
+            return new RegisterDeviceResponse(existing.getIdDevice(), existing.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL, StringUtils.hasText(existing.getDevicePublicKey()));
         }
 
         AiDevice device = new AiDevice();
@@ -90,6 +93,7 @@ public class DeviceService {
         device.setIdOrg(org.getIdOrg());
         device.setIdRegion(org.getIdRegion());
         device.setDeviceToken(generateToken());
+        device.setDevicePublicKey(request.getPublicKey());
         device.setSdStatus("0");
         device.setDtRegistered(LocalDateTime.now());
         device.setClientVersion(request.getClientVersion());
@@ -97,7 +101,7 @@ public class DeviceService {
         device.setFgActive("1");
         aiDeviceMapper.insert(device);
         log.info("device registered. idDevice={}, cdDevice={}, idOrg={}", device.getIdDevice(), device.getCdDevice(), device.getIdOrg());
-        return new RegisterDeviceResponse(device.getIdDevice(), device.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL);
+        return new RegisterDeviceResponse(device.getIdDevice(), device.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL, StringUtils.hasText(device.getDevicePublicKey()));
     }
 
     public AiDevice findActiveByToken(String token) {

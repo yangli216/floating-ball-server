@@ -50,4 +50,7 @@ public class AiDevice extends BaseEntity {
 
     @TableField("os_info")
     private String osInfo;
+
+    @TableField("device_public_key")
+    private String devicePublicKey;
 }

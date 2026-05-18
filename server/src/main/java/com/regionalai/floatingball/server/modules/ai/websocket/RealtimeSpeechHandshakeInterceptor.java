@@ -2,6 +2,8 @@ package com.regionalai.floatingball.server.modules.ai.websocket;
 
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
+import com.regionalai.floatingball.server.modules.security.service.SecurityRejectionLogService;
+import com.regionalai.floatingball.server.security.RequestSignatureVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -12,6 +14,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.io.UnsupportedEncodingException;
@@ -22,13 +25,20 @@ import java.util.Map;
 public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(RealtimeSpeechHandshakeInterceptor.class);
+    private static final String EMPTY_STRING_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     public static final String DEVICE_ATTRIBUTE = "aiDevice";
 
     private final DeviceService deviceService;
+    private final RequestSignatureVerifier signatureVerifier;
+    private final SecurityRejectionLogService rejectionLogService;
 
-    public RealtimeSpeechHandshakeInterceptor(DeviceService deviceService) {
+    public RealtimeSpeechHandshakeInterceptor(DeviceService deviceService,
+                                               RequestSignatureVerifier signatureVerifier,
+                                               SecurityRejectionLogService rejectionLogService) {
         this.deviceService = deviceService;
+        this.signatureVerifier = signatureVerifier;
+        this.rejectionLogService = rejectionLogService;
     }
 
     @Override
@@ -39,6 +49,7 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
         String token = resolveQueryParam(request.getURI(), "token");
         if (!StringUtils.hasText(token)) {
             log.warn("realtime speech ws handshake rejected: missing token. uri={}", request.getURI());
+            recordWsRejection("WS_AUTH_MISSING_TOKEN", request, null, "缺少设备令牌", "Token query param missing", false, null, null);
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
@@ -46,6 +57,39 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
         AiDevice device = deviceService.findActiveByToken(token);
         if (device == null) {
             log.warn("realtime speech ws handshake rejected: invalid token. uri={}", request.getURI());
+            recordWsRejection("WS_AUTH_INVALID_TOKEN", request, null, "设备令牌无效", "Token does not match any active device", false, null, null);
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return false;
+        }
+
+        if (StringUtils.hasText(device.getDevicePublicKey())) {
+            String ts = resolveQueryParam(request.getURI(), "ts");
+            String nonce = resolveQueryParam(request.getURI(), "nonce");
+            String sig = resolveQueryParam(request.getURI(), "sig");
+
+            boolean hasSigParams = ts != null && nonce != null && sig != null;
+
+            if (!hasSigParams) {
+                log.warn("realtime speech ws handshake rejected: missing signature params. uri={}", request.getURI());
+                recordWsRejection("WS_SIG_MISSING", request, device, "缺少WebSocket签名参数", "Expected ts/nonce/sig query params", false, ts, nonce);
+                response.setStatusCode(HttpStatus.UNAUTHORIZED);
+                return false;
+            }
+
+            String path = request.getURI().getPath();
+
+            RequestSignatureVerifier.VerificationResult result = signatureVerifier.verify(
+                device.getDevicePublicKey(), "GET", path, ts, nonce, EMPTY_STRING_SHA256, sig);
+
+            if (!result.isValid()) {
+                log.warn("realtime speech ws handshake rejected: signature invalid. uri={}, reason={}", request.getURI(), result.getErrorMessage());
+                recordWsRejection("WS_SIG_INVALID", request, device, "WebSocket签名验证失败", result.getErrorMessage(), true, ts, nonce);
+                response.setStatusCode(HttpStatus.UNAUTHORIZED);
+                return false;
+            }
+        } else {
+            log.warn("realtime speech ws handshake rejected: device has no public key. uri={}, deviceId={}", request.getURI(), device.getIdDevice());
+            recordWsRejection("WS_SIG_NO_PUBLIC_KEY", request, device, "设备未注册公钥", "Device registered without ECDSA public key", false, null, null);
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
@@ -60,6 +104,25 @@ public class RealtimeSpeechHandshakeInterceptor implements HandshakeInterceptor 
                                ServerHttpResponse response,
                                WebSocketHandler wsHandler,
                                Exception exception) {
+    }
+
+    private void recordWsRejection(String type, ServerHttpRequest request, AiDevice device,
+                                    String reason, String detail, boolean hasSignature,
+                                    String timestamp, String nonce) {
+        String clientIp = resolveClientIp(request);
+        String path = request.getURI().getPath();
+        SecurityRejectionLogService.RejectionRecord record = SecurityRejectionLogService.RejectionRecord
+            .of(type, "GET", path, clientIp)
+            .device(device)
+            .reason(reason)
+            .detail(detail)
+            .signature(hasSignature, timestamp, nonce);
+        rejectionLogService.logRejection(record);
+    }
+
+    private String resolveClientIp(ServerHttpRequest request) {
+        InetSocketAddress remoteAddress = request.getRemoteAddress();
+        return remoteAddress != null ? remoteAddress.getAddress().getHostAddress() : "unknown";
     }
 
     private String resolveQueryParam(URI uri, String name) {

@@ -149,7 +149,9 @@ const menuItems = [
   { path: '/feedbacks', label: '反馈', icon: '反' },
   { path: '/analytics', label: '统计分析', icon: '统' },
   { path: '/function-usage', label: '辅诊功能', icon: '辅' },
-  { path: '/user-activity', label: '用户活跃度', icon: '活' }
+  { path: '/user-activity', label: '用户活跃度', icon: '活' },
+  { path: '/security-rejections', label: '安全拦截', icon: '盾' },
+  { path: '/security-analytics', label: '安全分析', icon: '析' }
 ]
 
 export default {

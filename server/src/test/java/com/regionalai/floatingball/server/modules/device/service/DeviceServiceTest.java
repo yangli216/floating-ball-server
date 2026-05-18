@@ -71,6 +71,7 @@ class DeviceServiceTest {
         request.setNaDevice("诊室设备");
         request.setClientVersion("1.0.0");
         request.setOsInfo("Windows 11");
+        request.setPublicKey("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtest-public-key-base64");
 
         RegisterDeviceResponse response = deviceService.register(request);
 
@@ -78,9 +79,11 @@ class DeviceServiceTest {
         assertEquals(30, response.getHeartbeatInterval().intValue());
         assertFalse(response.getDeviceToken().isEmpty());
         assertEquals(32, response.getDeviceToken().length());
+        assertTrue(response.getHasPublicKey());
         assertEquals("诊室设备", existing.getNaDevice());
         assertEquals("1.0.0", existing.getClientVersion());
         assertEquals("Windows 11", existing.getOsInfo());
+        assertEquals("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtest-public-key-base64", existing.getDevicePublicKey());
         verify(aiDeviceMapper, times(1)).updateById(existing);
     }
 
@@ -99,6 +102,7 @@ class DeviceServiceTest {
         request.setCdDevice("DEV-CODE");
         request.setClientVersion("1.2.12");
         request.setUpdateChannel("production");
+        request.setPublicKey("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtest-public-key");
 
         UpdateRequiredException ex = assertThrows(UpdateRequiredException.class, () -> deviceService.register(request));
 

@@ -22,6 +22,8 @@ const FeedbackView = () => import('../views/FeedbackView.vue')
 const AnalyticsView = () => import('../views/AnalyticsView.vue')
 const FunctionUsageView = () => import('../views/FunctionUsageView.vue')
 const UserActivityView = () => import('../views/UserActivityView.vue')
+const SecurityRejectionView = () => import('../views/SecurityRejectionView.vue')
+const SecurityAnalyticsView = () => import('../views/SecurityAnalyticsView.vue')
 
 function resolveRedirectPath(value) {
   return typeof value === 'string' && value.indexOf('/') === 0 ? value : '/overview'
@@ -49,6 +51,8 @@ const router = new Router({
     { path: '/analytics', component: AnalyticsView, meta: { title: '统计分析' } },
     { path: '/function-usage', component: FunctionUsageView, meta: { title: '辅诊功能' } },
     { path: '/user-activity', component: UserActivityView, meta: { title: '用户活跃度' } },
+    { path: '/security-rejections', component: SecurityRejectionView, meta: { title: '安全拦截' } },
+    { path: '/security-analytics', component: SecurityAnalyticsView, meta: { title: '安全分析' } },
     { path: '*', redirect: '/overview' }
   ]
 })

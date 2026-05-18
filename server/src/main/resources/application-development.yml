@@ -3,16 +3,16 @@ server:
 
 logging:
   level:
-    root: INFO
+    root: DEBUG
     com.regionalai.floatingball.server: DEBUG
   file:
     path: ${java.io.tmpdir}/floating-ball-server/logs
 
 spring:
   datasource:
-    url: ${FB_DB_URL:jdbc:oracle:thin:@0.0.0.0:1521:orcl}
-    username: ${FB_DB_USERNAME:username}
-    password: ${FB_DB_PASSWORD:passwd}
+    url: ${FB_DB_URL:jdbc:oracle:thin:@10.19.40.42:1521:phis}
+    username: ${FB_DB_USERNAME:RBMH_AI}
+    password: ${FB_DB_PASSWORD:RBMH_AI}
 
 floating-ball:
   admin:
