@@ -86,7 +86,7 @@
         <div class="chart-card__header">
           <span class="chart-card__title">服务趋势分析</span>
           <el-select v-model="trendMetric" size="small" class="trend-select">
-            <el-option label="AI服务量" value="ai" />
+            <el-option label="功能调用量" value="ai" />
             <el-option label="问诊量" value="consultation" />
           </el-select>
         </div>
@@ -97,14 +97,14 @@
     <div class="chart-section chart-section--double">
       <div class="chart-card">
         <div class="chart-card__header">
-          <span class="chart-card__title">AI服务量按机构分布</span>
+          <span class="chart-card__title">功能调用量按机构分布</span>
           <span class="chart-card__subtitle">Top 10 医疗机构</span>
         </div>
         <div ref="orgChartRef" class="chart-body"></div>
       </div>
       <div class="chart-card">
         <div class="chart-card__header">
-          <span class="chart-card__title">AI服务量按区域分布</span>
+          <span class="chart-card__title">功能调用量按区域分布</span>
           <span class="chart-card__subtitle">各区县占比情况</span>
         </div>
         <div ref="regionChartRef" class="chart-body"></div>
@@ -138,8 +138,8 @@ const TIME_RANGES = [
 ]
 
 const CARD_DEFS = [
-  { key: 'aiServiceTotal', label: 'AI服务总量', desc: '所有AI辅诊功能调用次数之和' },
-  { key: 'avgDailyAiService', label: '日均AI服务量', desc: 'AI服务总量 ÷ 所选时间段的天数' },
+  { key: 'aiServiceTotal', label: '功能调用总量', desc: '用户实际调用辅诊功能的次数之和' },
+  { key: 'avgDailyAiService', label: '日均功能调用量', desc: '功能调用总量 ÷ 所选时间段的天数' },
   { key: 'aiAdoptionRate', label: 'AI诊断建议采纳率', desc: '医生采纳AI推荐诊断的次数占比', isPct: true },
   { key: 'diagnosisMatchRate', label: '诊断符合率', desc: '医生确认诊断与AI推荐完全一致的病例占比', isPct: true },
   { key: 'activeDoctorCount', label: '活跃医生数', desc: '每月登录≥10次且完成≥5次有效操作的医生' },
@@ -473,7 +473,7 @@ export default {
             left: 'center',
             top: '50%',
             style: {
-              text: '总服务量',
+              text: '总调用量',
               textAlign: 'center',
               fill: '#94A3B8',
               fontSize: 12

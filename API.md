@@ -527,7 +527,59 @@ Content-Type: application/json
 }
 ```
 
-### 3.8 POST `/v1/client/user-logs/consultations`
+说明：审计事件用于链路排障、操作追踪和反馈关联，不作为辅诊功能调用次数的统计事实源。
+
+### 3.8 POST `/v1/client/feature-events/batch`
+
+用途：桌面端批量提交“用户实际调用功能”的业务事件。该接口是辅诊功能统计的唯一事实入口；一次用户明确调用一个功能只提交一条事件，底层 AI 代理、语音识别、回写、反馈等审计日志继续写入 `/v1/client/audit/events/batch`。
+
+请求：
+
+```json
+{
+  "events": [
+    {
+      "eventId": "uuid",
+      "featureCode": "voice_consultation",
+      "eventAction": "submit_voice_recording",
+      "idempotencyKey": "consultation:voice:CONSULT-001",
+      "traceId": "TRACE-001",
+      "consultationId": "CONSULT-001",
+      "sessionId": "SESSION-001",
+      "sourceModule": "voice_consultation",
+      "scene": "voice-consultation",
+      "status": "success",
+      "doctorId": "DOC-001",
+      "doctorName": "张医生",
+      "deptId": "DEPT-001",
+      "deptName": "全科",
+      "payload": {
+        "patientId": "PAT-001"
+      },
+      "timestamp": 1770000000000
+    }
+  ]
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "accepted": 1,
+  "skipped": 0
+}
+```
+
+约束：
+
+1. 服务端以 `idDevice + idempotencyKey` 幂等，重复上报只跳过不重复计数。
+2. `featureCode` 当前固定支持：`voice_consultation`、`smart_consultation`、`report_interpretation`、`chat`、`diagnosis_checklist`、`diagnosis_recommendation`、`medication_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`knowledge_usage`。
+3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用。
+4. `traceId`、`consultationId`、`sessionId` 只用于关联审计链路，不参与调用次数累加。
+5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。
+
+### 3.9 POST `/v1/client/user-logs/consultations`
 
 用途：桌面端提交运维用户日志快照。该接口独立于原始操作日志，用于按“一名患者一次问诊”聚合首版 AI 生成内容和医生最终修改内容。
 
@@ -1029,7 +1081,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 | 指标 | 分子 | 分母 | 说明 |
 |------|------|------|------|
-| `aiServiceTotal` | `COUNT(c_ai_op_log WHERE sd_log_type='ai_proxy')` | — | 仅统计服务端 AI 代理调用，不含客户端操作事件 |
+| `aiServiceTotal` | `COUNT(c_ai_feature_event WHERE event_status='success')` | — | 统计用户实际调用辅诊功能次数，不按底层 AI 代理日志累加 |
 | `avgDailyAiService` | `aiServiceTotal` | 查询天数 | |
 | `aiAdoptionRate` | `COUNT(status='completed')` | `COUNT(全部问诊)` | 仅"一键回写"计为采纳 |
 | `diagnosisMatchRate` | `COUNT(JSON_VALUE(change_summary_json,'$.diagnosisChanges')=0)` | `COUNT(status IN ('completed','abandoned'))` | 比较 AI 最初诊断与医生最终诊断是否一致 |
@@ -1038,9 +1090,9 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.6 GET `/admin/api/analytics/trend`
 
-用途：返回AI服务量与问诊量按日聚合的趋势数据。
+用途：返回功能调用量与问诊量按日聚合的趋势数据。
 
-请求参数同 5.6。
+请求参数同 5.5。
 
 响应 `data`：
 
@@ -1056,7 +1108,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 用途：返回机构分布与区域分布数据。
 
-请求参数同 5.6。
+请求参数同 5.5。
 
 响应 `data`：
 
@@ -1076,7 +1128,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.8 GET `/admin/api/analytics/function-modules`
 
-用途：返回所有已记录的辅诊功能展示名称列表，供辅诊功能应用统计页的功能多选下拉使用。该接口返回产品功能维度，不返回底层 AI 操作名或审计日志来源模块名。
+用途：返回所有辅诊功能展示名称列表，供辅诊功能应用统计页的功能多选下拉使用。该接口返回产品功能维度，不返回底层 AI 操作名或审计日志来源模块名。
 
 无请求参数。
 
@@ -1088,7 +1140,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.9 GET `/admin/api/analytics/function-usage`
 
-用途：返回辅诊功能应用统计数据，包含汇总指标、功能使用排行、趋势与分页明细。统计口径为“用户实际调用次数”，不按底层 AI 操作日志条数累加。
+用途：返回辅诊功能应用统计数据，包含汇总指标、功能使用排行、趋势与分页明细。统计口径为 `/v1/client/feature-events/batch` 提交的“用户实际调用功能事件”，不按底层 AI 操作日志条数累加。
 
 请求参数：
 
@@ -1132,11 +1184,12 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 1. `ranking` 按 `callCount` 倒序排列，已计算增长率（与上一等长周期对比）
 2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用
-3. 语音问诊、智能问诊以 `c_ai_user_consultation_log` 的聚合问诊记录计数；同一 `consultationId + consultationType + idDevice` 只算一次，避免把录音、识别、生成、回写等多条操作日志重复累加
-4. 报告单解读、聊天、AI 诊断鉴别、AI 推荐诊断/用药/检查/检验/处置、知识库使用以实际功能调用事件计数，服务端按 `trace_id` 优先去重；无 `trace_id` 时退回日志主键作为单次调用
-5. 服务端会基于 `op_action / op_title / source_module / scene_code / na_module` 统一归类功能，避免把“语音问诊 AI”“问诊 AI”“HIS 桥接”“页面导航”等实现层操作名展示为统计维度
-6. `trend` 仅包含排名前 5 的功能的逐日调用趋势
-7. `records` 为当前页数据，支持分页
+3. 调用次数来自 `c_ai_feature_event`，同一 `idDevice + idempotencyKey` 只入库一次，避免离线重传、接口重试和底层多条审计日志造成重复统计
+4. `c_ai_op_log` 仅用于审计与排障，不再作为辅诊功能统计的事实源
+5. 主流程内部自动 AI 推荐不重复拆分为 AI 推荐诊断/用药/检查/检验/处置；这些子功能只在医生显式触发对应独立辅助入口时计数
+6. `doctorCount` 按事件中的医生 ID 优先统计；医生 ID 为空时回退设备 ID
+7. `trend` 仅包含排名前 5 的功能的逐日调用趋势
+8. `records` 为当前页数据，支持分页
 
 ### 5.10 GET `/admin/api/users`
 

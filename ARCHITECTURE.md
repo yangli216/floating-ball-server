@@ -208,6 +208,7 @@ floating-ball-server/
 5. 服务端兼容旧载荷：若未显式提供 `module/action/title/sourceModule/scene/result`，则回退从 `operationType/operationName/success` 与 `details.traceId / details.consultationId` 等字段推导
 6. 服务端写入 `c_ai_op_log`
 7. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选
+8. `c_ai_op_log` 是审计事实源，只回答“发生过哪些技术/业务操作、链路如何排障”，不得直接作为辅诊功能调用次数统计源
 
 代理日志补充约束：
 
@@ -215,6 +216,16 @@ floating-ball-server/
 2. `speech_proxy` 日志的原始录音不得写入 `payload_json`；录音文件单独落盘，表中通过 `audio_file_path` 指向对应文件
 3. API Key、Bearer Token 等凭据不得入库；除此之外，业务请求正文与回文可按原文保留
 4. 管理端日志页应支持按 `ai_proxy`、`speech_proxy` 等代理日志类型筛选与查看详情
+
+### 5.4 功能调用事件链路
+
+1. 功能调用事件是面向统计的业务事实源，独立于审计日志和问诊用户日志。
+2. 桌面端在用户真实触发功能时调用 `POST /v1/client/feature-events/batch`，一次明确功能调用只提交一条事件。
+3. 服务端以 `idDevice + idempotencyKey` 幂等入库到 `c_ai_feature_event`，客户端离线重试或接口重试不会重复计数。
+4. 事件固定使用 `featureCode` 表示产品功能，服务端统一映射展示名：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用。
+5. `traceId`、`consultationId`、`sessionId` 只用于把功能事件关联回 `c_ai_op_log` 或 `c_ai_user_consultation_log`，不参与统计去重。
+6. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。
+7. 管理端“辅诊功能”统计只读 `c_ai_feature_event`；`c_ai_op_log` 保留为排障与审计，不再承担统计推断。
 
 ### 5.5 用户反馈链路
 
@@ -258,11 +269,12 @@ floating-ball-server/
 8. `/v1/ai/speech/transcribe`
 9. `/v1/client/audit/events/batch`
 10. `/v1/client/user-logs/consultations`
-10. `/v1/knowledge/pmphai/search`
-11. `/v1/knowledge/pmphai/clip`
-12. `/v1/knowledge/pmphai/list`
-13. `/v1/knowledge/pmphai/page-url`
-10. 管理端最小 CRUD：
+11. `/v1/client/feature-events/batch`
+12. `/v1/knowledge/pmphai/search`
+13. `/v1/knowledge/pmphai/clip`
+14. `/v1/knowledge/pmphai/list`
+15. `/v1/knowledge/pmphai/page-url`
+16. 管理端最小 CRUD：
    - 完整 CRUD：区域、机构、设备、AI 配置、Prompt
    - 完整维护闭环：数据包
    - 查询增强：日志
@@ -294,14 +306,15 @@ floating-ball-server/
 4. 概览统计：
    - 首页汇总区域、机构、设备、配置、Prompt、数据包、日志、用户、角色数量
 5. 综合概况统计分析（`modules/analytics`）：
-   - 核心指标卡片：AI服务总量、日均AI服务量、AI诊断建议采纳率、诊断符合率、活跃医生数、问诊总数
-   - 服务趋势折线图：按日聚合AI服务量与问诊量趋势
-   - 机构分布柱状图：Top 10 机构AI服务量
-   - 区域分布饼图：各区县AI服务量占比
+   - 核心指标卡片：功能调用总量、日均功能调用量、AI诊断建议采纳率、诊断符合率、活跃医生数、问诊总数
+   - 服务趋势折线图：按日聚合功能调用量与问诊量趋势
+   - 机构分布柱状图：Top 10 机构功能调用量
+   - 区域分布饼图：各区县功能调用量占比
+   - 功能调用量统一按 `c_ai_feature_event` 中成功的用户实际功能调用事件计数，不再按 `c_ai_op_log` 的 AI 代理日志行数计数
    - 支持时间范围快捷切换（今日/本周/本月/本季度/本年/自定义）
    - 支持区域、机构下拉筛选
    - 支持数据导出
-   - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端基于实际用户调用事件统计，语音问诊/智能问诊以 `c_ai_user_consultation_log` 的聚合问诊记录为准，其它功能以审计日志中的实际功能调用按 `trace_id` 优先去重，再统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用
+   - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
 
 约束：
 
@@ -336,6 +349,7 @@ floating-ball-server/
    - 代理日志主体仍保存在 `payload_json`
    - 同步冗余结构化列：`op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`、`consultation_id`
    - 语音代理的录音文件路径保存在 `audio_file_path`
+   - 用于排障、审计和反馈关联，不作为辅诊功能调用次数统计源
 9. `c_ai_feedback`
    - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）
    - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
@@ -346,9 +360,13 @@ floating-ball-server/
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
    - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`
-9. `c_ai_user`
-10. `c_ai_role`
-11. `c_ai_user_role`
+11. `c_ai_feature_event`
+   - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
+   - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次
+   - 索引：`idx_c_ai_feature_event_time` / `_feature` / `_doctor` / `_org` / `_idem`
+12. `c_ai_user`
+13. `c_ai_role`
+14. `c_ai_user_role`
 
 扩展表如用户、角色、统计可在第二阶段补齐。
 
