@@ -3,6 +3,11 @@ package com.regionalai.floatingball.server.modules.analytics.service;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageItemVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQueryDTO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageResponseVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsQueryDTO;
+import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsSummaryVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.DistributionDataVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.DistributionItemVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,5 +91,83 @@ class AnalyticsServiceTest {
         List<String> options = analyticsService.getFunctionModuleOptions();
 
         assertIterableEquals(Arrays.asList("语音问诊", "智能问诊"), options);
+    }
+
+    @Test
+    void getSummaryShouldCalculateCurrentRatesAndGrowthAgainstPreviousPeriod() {
+        AnalyticsQueryDTO query = new AnalyticsQueryDTO();
+        query.setDateFrom("2026-05-01");
+        query.setDateTo("2026-05-02");
+        query.setTimeRange("custom");
+
+        when(analyticsMapper.countAiService(any(AnalyticsQueryDTO.class))).thenReturn(20L, 10L);
+        when(analyticsMapper.countConsultation(any(AnalyticsQueryDTO.class))).thenReturn(8L, 4L);
+        when(analyticsMapper.countActiveDoctors(any(AnalyticsQueryDTO.class))).thenReturn(5L, 3L);
+        when(analyticsMapper.countAdoptedConsultations(any(AnalyticsQueryDTO.class))).thenReturn(6L, 1L);
+        when(analyticsMapper.countFinalizedConsultations(any(AnalyticsQueryDTO.class))).thenReturn(4L, 2L);
+        when(analyticsMapper.countDiagnosisMatchedConsultations(any(AnalyticsQueryDTO.class))).thenReturn(3L, 1L);
+
+        AnalyticsSummaryVO summary = analyticsService.getSummary(query);
+
+        assertEquals(20L, summary.getAiServiceTotal());
+        assertEquals(10L, summary.getAvgDailyAiService());
+        assertEquals("75", summary.getAiAdoptionRate());
+        assertEquals("75", summary.getDiagnosisMatchRate());
+        assertEquals("100", summary.getAiServiceGrowth());
+        assertEquals("100", summary.getAvgDailyGrowth());
+        assertEquals("50", summary.getAdoptionRateGrowth());
+        assertEquals("25", summary.getMatchRateGrowth());
+        assertEquals("2", summary.getActiveDoctorGrowth());
+        assertEquals("100", summary.getConsultationGrowth());
+    }
+
+    @Test
+    void getTrendShouldFillMissingDaysBetweenDateRange() {
+        Map<String, Object> aiRow = new LinkedHashMap<String, Object>();
+        aiRow.put("DAY_STR", "2026-05-01");
+        aiRow.put("CNT", 3L);
+        Map<String, Object> consultationRow = new LinkedHashMap<String, Object>();
+        consultationRow.put("DAY_STR", "2026-05-03");
+        consultationRow.put("CNT", 2L);
+
+        when(analyticsMapper.queryAiServiceTrend(any(AnalyticsQueryDTO.class)))
+            .thenReturn(Collections.singletonList(aiRow));
+        when(analyticsMapper.queryConsultationTrend(any(AnalyticsQueryDTO.class)))
+            .thenReturn(Collections.singletonList(consultationRow));
+
+        AnalyticsQueryDTO query = new AnalyticsQueryDTO();
+        query.setDateFrom("2026-05-01");
+        query.setDateTo("2026-05-03");
+
+        TrendDataVO trend = analyticsService.getTrend(query);
+
+        assertIterableEquals(Arrays.asList("2026-05-01", "2026-05-02", "2026-05-03"), trend.getDays());
+        assertIterableEquals(Arrays.asList(3L, 0L, 0L), trend.getAiServiceValues());
+        assertIterableEquals(Arrays.asList(0L, 0L, 2L), trend.getConsultationValues());
+    }
+
+    @Test
+    void getDistributionShouldPreferOrgTotalAndComputeRegionPercentages() {
+        DistributionItemVO org = new DistributionItemVO();
+        org.setName("默认机构");
+        org.setValue(7L);
+
+        DistributionItemVO regionA = new DistributionItemVO();
+        regionA.setName("区域A");
+        regionA.setValue(3L);
+        DistributionItemVO regionB = new DistributionItemVO();
+        regionB.setName("区域B");
+        regionB.setValue(1L);
+
+        when(analyticsMapper.queryOrgDistribution(any(AnalyticsQueryDTO.class)))
+            .thenReturn(Collections.singletonList(org));
+        when(analyticsMapper.queryRegionDistributionRaw(any(AnalyticsQueryDTO.class)))
+            .thenReturn(Arrays.asList(regionA, regionB));
+
+        DistributionDataVO distribution = analyticsService.getDistribution(new AnalyticsQueryDTO());
+
+        assertEquals(Long.valueOf(7L), distribution.getTotalService());
+        assertEquals("75", distribution.getRegionDistribution().get(0).getPercentage());
+        assertEquals("25", distribution.getRegionDistribution().get(1).getPercentage());
     }
 }

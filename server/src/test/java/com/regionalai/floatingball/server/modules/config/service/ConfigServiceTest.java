@@ -226,6 +226,68 @@ class ConfigServiceTest {
         verify(aiConfigMapper, never()).insert(any(AiConfig.class));
     }
 
+    @Test
+    void resolveByDeviceShouldRejectWhenNoVisibleConfigExists() {
+        when(aiConfigMapper.selectList(any())).thenReturn(Arrays.asList());
+
+        AiDevice device = new AiDevice();
+        device.setIdOrg("ORG001");
+        device.setIdRegion("REG001");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> configService.resolveByDevice(device));
+
+        assertEquals("未找到有效 AI 配置", ex.getMessage());
+    }
+
+    @Test
+    void saveShouldEncryptAllProvidedSecretsAndNormalizeDashScopeAliases() {
+        AiConfigSaveRequest request = new AiConfigSaveRequest();
+        request.setCdConfig("dashscope");
+        request.setNaConfig("阿里云语音配置");
+        request.setProvider("openai-compatible");
+        request.setApiBaseUrl("https://llm.example.com/");
+        request.setApiKey("main-key");
+        request.setModelName("deepseek-chat");
+        request.setAudioApiKey("audio-key");
+        request.setSpeechProvider("dashscope");
+        request.setAudioModel("paraformer-realtime-v2");
+        request.setSpeechModel(null);
+        request.setReviewerApiKey("reviewer-key");
+        request.setPmphaiAppKey("pmphai-key");
+        request.setPmphaiAppSecret("pmphai-secret");
+        request.setReviewerCheckExaminationEnabled(false);
+
+        AiConfigView view = configService.save(request);
+
+        org.mockito.ArgumentCaptor<AiConfig> captor = org.mockito.ArgumentCaptor.forClass(AiConfig.class);
+        verify(aiConfigMapper).insert(captor.capture());
+        AiConfig saved = captor.getValue();
+        assertEquals("aliyun-dashscope", saved.getSpeechProvider());
+        assertEquals("qwen3-asr-flash", saved.getAudioModel());
+        assertEquals("paraformer-realtime-v2", saved.getSpeechModel());
+        assertEquals("0", saved.getReviewerCheckExaminationEnabled());
+        assertEquals("main-key", aesUtils.decrypt(saved.getApiKeyEncrypted()));
+        assertEquals("audio-key", aesUtils.decrypt(saved.getAudioApiKeyEncrypted()));
+        assertEquals("reviewer-key", aesUtils.decrypt(saved.getReviewerApiKeyEncrypted()));
+        assertEquals("pmphai-key", aesUtils.decrypt(saved.getPmphaiAppKeyEncrypted()));
+        assertEquals("pmphai-secret", aesUtils.decrypt(saved.getPmphaiAppSecretEncrypted()));
+        assertEquals("aliyun-dashscope", view.getSpeechProvider());
+        assertEquals("qwen3-asr-flash", view.getAudioModel());
+    }
+
+    @Test
+    void invalidateShouldSoftDeleteExistingConfig() {
+        AiConfig existing = buildConfig("ORG001", "REG001", "https://llm.example.com", "key", "deepseek-chat");
+        existing.setIdConfig("CFG001");
+        existing.setFgActive("1");
+        when(aiConfigMapper.selectById("CFG001")).thenReturn(existing);
+
+        configService.invalidate("CFG001");
+
+        assertEquals("0", existing.getFgActive());
+        verify(aiConfigMapper).updateById(existing);
+    }
+
     private AiConfig buildConfig(String idOrg, String idRegion, String apiBaseUrl, String apiKey, String modelName) {
         AiConfig config = new AiConfig();
         config.setIdOrg(idOrg);

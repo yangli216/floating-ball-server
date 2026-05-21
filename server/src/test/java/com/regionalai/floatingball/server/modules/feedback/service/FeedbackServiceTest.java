@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.feedback.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.clearInvocations;
@@ -169,6 +171,78 @@ class FeedbackServiceTest {
         assertEquals("语音病例字段", response.getFeedback().getDisplaySourceModule());
         assertEquals("AI 对话请求", response.getTimeline().get(0).getTitle());
         assertEquals("AI 对话代理", response.getTimeline().get(0).getDisplaySourceModule());
+    }
+
+    @Test
+    void submitShouldRejectInvalidScoreBlankCommentAndNonImageScreenshot() {
+        ClientFeedbackSubmitRequest missingComment = new ClientFeedbackSubmitRequest();
+        missingComment.setScore(3);
+
+        BusinessException missingCommentEx = assertThrows(
+            BusinessException.class,
+            () -> feedbackService.submit(new AiDevice(), missingComment)
+        );
+        assertEquals("反馈说明不能为空", missingCommentEx.getMessage());
+
+        ClientFeedbackSubmitRequest invalidScore = new ClientFeedbackSubmitRequest();
+        invalidScore.setScore(6);
+        invalidScore.setComment("评分超出范围");
+
+        BusinessException invalidScoreEx = assertThrows(
+            BusinessException.class,
+            () -> feedbackService.submit(new AiDevice(), invalidScore)
+        );
+        assertEquals("评分必须在 1 到 5 分之间", invalidScoreEx.getMessage());
+
+        ClientFeedbackSubmitRequest invalidScreenshot = new ClientFeedbackSubmitRequest();
+        invalidScreenshot.setScore(4);
+        invalidScreenshot.setComment("截图不是图片");
+        ClientFeedbackSubmitRequest.ScreenshotPayload screenshot = new ClientFeedbackSubmitRequest.ScreenshotPayload();
+        screenshot.setDataUrl("data:text/plain;base64,SGVsbG8=");
+        invalidScreenshot.setScreenshot(screenshot);
+
+        BusinessException invalidScreenshotEx = assertThrows(
+            BusinessException.class,
+            () -> feedbackService.submit(new AiDevice(), invalidScreenshot)
+        );
+        assertEquals("截图必须为图片 dataUrl", invalidScreenshotEx.getMessage());
+        verify(aiFeedbackMapper, never()).insert(any(AiFeedback.class));
+    }
+
+    @Test
+    void submitFirstRevisionShouldBackfillRootAndDefaultFields() throws Exception {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("device-1");
+        device.setIdOrg("ORG-1");
+
+        when(aiFeedbackMapper.insert(any(AiFeedback.class))).thenAnswer(invocation -> {
+            AiFeedback feedback = invocation.getArgument(0);
+            feedback.setIdFeedback("feedback-1");
+            return 1;
+        });
+
+        ClientFeedbackSubmitRequest request = new ClientFeedbackSubmitRequest();
+        request.setScore(5);
+        request.setComment(" 首次反馈 ");
+        request.setKind("unknown-kind");
+        request.setSeverity("unknown-severity");
+        request.setTraceId("trace-1");
+        request.setTags(Arrays.asList(" 准确 ", "准确", "", "及时"));
+
+        ClientFeedbackSubmitResponse response = feedbackService.submit(device, request);
+
+        assertEquals("feedback-1", response.getFeedbackId());
+        org.mockito.ArgumentCaptor<AiFeedback> captor = org.mockito.ArgumentCaptor.forClass(AiFeedback.class);
+        verify(aiFeedbackMapper).insert(captor.capture());
+        AiFeedback inserted = captor.getValue();
+        assertEquals("general", inserted.getKind());
+        assertEquals("medium", inserted.getSeverity());
+        assertEquals("settings_feedback", inserted.getSourceModule());
+        assertEquals("1", inserted.getHasTrace());
+        assertEquals("首次反馈", inserted.getCommentText());
+        assertEquals(Arrays.asList("准确", "及时"), objectMapper.readValue(inserted.getTagsJson(), java.util.List.class));
+        assertEquals("feedback-1", inserted.getIdFeedbackRoot());
+        verify(aiFeedbackMapper).updateById(inserted);
     }
 
     private Map<String, Object> buildChainContext(String scopeKey, String previousFeedbackId, int revision) {

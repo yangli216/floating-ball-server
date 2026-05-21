@@ -186,6 +186,67 @@ class DeviceServiceTest {
         verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
     }
 
+    @Test
+    void heartbeatShouldMarkDeviceOnlineAndPersistLastHeartbeat() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setSdStatus("0");
+
+        deviceService.heartbeat(device);
+
+        assertEquals("1", device.getSdStatus());
+        assertTrue(device.getDtLastHeartbeat() != null);
+        verify(aiDeviceMapper).updateById(device);
+    }
+
+    @Test
+    void updateShouldKeepExistingStatusWhenRequestStatusBlank() {
+        AiDevice existing = new AiDevice();
+        existing.setIdDevice("DEV001");
+        existing.setCdDevice("OLD-CODE");
+        existing.setIdOrg("ORG001");
+        existing.setFgActive("1");
+        existing.setSdStatus("1");
+        existing.setDeviceToken("1234567890abcdef1234567890abcdef");
+
+        AiOrg targetOrg = buildOrg("ORG002", "REG002");
+        when(aiDeviceMapper.selectById("DEV001")).thenReturn(existing);
+        when(aiOrgMapper.selectOne(any())).thenReturn(targetOrg);
+        when(aiDeviceMapper.selectOne(any())).thenReturn(null);
+
+        AiDeviceSaveRequest request = new AiDeviceSaveRequest();
+        request.setCdDevice(" NEW-CODE ");
+        request.setNaDevice("改名终端");
+        request.setIdOrg("ORG002");
+        request.setSdStatus("");
+        request.setClientVersion("2.0.0");
+        request.setOsInfo("macOS");
+
+        AiDeviceView view = deviceService.update("DEV001", request);
+
+        assertEquals("NEW-CODE", existing.getCdDevice());
+        assertEquals("REG002", existing.getIdRegion());
+        assertEquals("1", existing.getSdStatus());
+        assertEquals("ORG002", view.getIdOrg());
+        assertEquals("REG002", view.getIdRegion());
+        verify(aiDeviceMapper).updateById(existing);
+    }
+
+    @Test
+    void invalidateShouldSoftDeleteAndTakeDeviceOffline() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setFgActive("1");
+        device.setSdStatus("1");
+        when(aiDeviceMapper.selectById("DEV001")).thenReturn(device);
+
+        deviceService.invalidate("DEV001");
+
+        assertEquals("0", device.getFgActive());
+        assertEquals("0", device.getSdStatus());
+        verify(aiDeviceMapper).updateById(device);
+    }
+
     private AiOrg buildOrg(String idOrg, String idRegion) {
         AiOrg org = new AiOrg();
         org.setIdOrg(idOrg);
