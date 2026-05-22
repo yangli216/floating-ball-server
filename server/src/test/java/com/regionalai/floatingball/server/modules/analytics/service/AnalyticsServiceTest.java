@@ -7,15 +7,18 @@ import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsQueryDT
 import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsSummaryVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.DistributionDataVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.DistributionItemVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageTrendVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.ByteArrayInputStream;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -169,5 +172,83 @@ class AnalyticsServiceTest {
         assertEquals(Long.valueOf(7L), distribution.getTotalService());
         assertEquals("75", distribution.getRegionDistribution().get(0).getPercentage());
         assertEquals("25", distribution.getRegionDistribution().get(1).getPercentage());
+    }
+
+    @Test
+    void exportAnalyticsExcelShouldIncludeSummaryTrendAndDistributionSheets() throws Exception {
+        Map<String, Object> aiRow = new LinkedHashMap<String, Object>();
+        aiRow.put("DAY_STR", "2026-05-01");
+        aiRow.put("CNT", 3L);
+        Map<String, Object> consultationRow = new LinkedHashMap<String, Object>();
+        consultationRow.put("DAY_STR", "2026-05-01");
+        consultationRow.put("CNT", 2L);
+
+        DistributionItemVO org = new DistributionItemVO();
+        org.setName("默认机构");
+        org.setValue(7L);
+        DistributionItemVO region = new DistributionItemVO();
+        region.setName("默认区域");
+        region.setValue(7L);
+
+        when(analyticsMapper.countAiService(any(AnalyticsQueryDTO.class))).thenReturn(3L, 1L);
+        when(analyticsMapper.countConsultation(any(AnalyticsQueryDTO.class))).thenReturn(2L, 1L);
+        when(analyticsMapper.countActiveDoctors(any(AnalyticsQueryDTO.class))).thenReturn(1L, 1L);
+        when(analyticsMapper.countAdoptedConsultations(any(AnalyticsQueryDTO.class))).thenReturn(1L, 1L);
+        when(analyticsMapper.countFinalizedConsultations(any(AnalyticsQueryDTO.class))).thenReturn(1L, 1L);
+        when(analyticsMapper.countDiagnosisMatchedConsultations(any(AnalyticsQueryDTO.class))).thenReturn(1L, 1L);
+        when(analyticsMapper.queryAiServiceTrend(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(aiRow));
+        when(analyticsMapper.queryConsultationTrend(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(consultationRow));
+        when(analyticsMapper.queryOrgDistribution(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(org));
+        when(analyticsMapper.queryRegionDistributionRaw(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(region));
+
+        AnalyticsQueryDTO query = new AnalyticsQueryDTO();
+        query.setDateFrom("2026-05-01");
+        query.setDateTo("2026-05-01");
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(analyticsService.exportAnalyticsExcel(query)))) {
+            assertEquals("核心指标", workbook.getSheetAt(0).getSheetName());
+            assertEquals("趋势明细", workbook.getSheetAt(1).getSheetName());
+            assertEquals("机构分布", workbook.getSheetAt(2).getSheetName());
+            assertEquals("区域分布", workbook.getSheetAt(3).getSheetName());
+            assertEquals("功能调用总量", workbook.getSheetAt(0).getRow(1).getCell(0).getStringCellValue());
+        }
+    }
+
+    @Test
+    void exportFunctionUsageExcelShouldIncludeRankingAndTrendSheets() throws Exception {
+        FunctionUsageItemVO rankingItem = new FunctionUsageItemVO();
+        rankingItem.setModuleName("语音问诊");
+        rankingItem.setCallCount(12L);
+        rankingItem.setDoctorCount(3L);
+        rankingItem.setAvgPerDoctor(4L);
+
+        FunctionUsageItemVO previousItem = new FunctionUsageItemVO();
+        previousItem.setModuleName("语音问诊");
+        previousItem.setCallCount(6L);
+
+        Map<String, Object> trendRow = new LinkedHashMap<String, Object>();
+        trendRow.put("MODULENAME", "语音问诊");
+        trendRow.put("DAYSTR", "2026-05-01");
+        trendRow.put("CNT", 12L);
+
+        when(analyticsMapper.queryFunctionUsageRanking(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.singletonList(rankingItem));
+        when(analyticsMapper.queryFunctionUsagePreviousRanking(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.singletonList(previousItem));
+        when(analyticsMapper.queryFunctionUsageTrend(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.singletonList(trendRow));
+        when(analyticsMapper.queryDistinctModules())
+            .thenReturn(Collections.singletonList("语音问诊"));
+
+        FunctionUsageQueryDTO query = new FunctionUsageQueryDTO();
+        query.setDateFrom("2026-05-01");
+        query.setDateTo("2026-05-01");
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(analyticsService.exportFunctionUsageExcel(query)))) {
+            assertEquals("汇总指标", workbook.getSheetAt(0).getSheetName());
+            assertEquals("功能排行", workbook.getSheetAt(1).getSheetName());
+            assertEquals("趋势明细", workbook.getSheetAt(2).getSheetName());
+            assertEquals("语音问诊", workbook.getSheetAt(1).getRow(1).getCell(0).getStringCellValue());
+        }
     }
 }

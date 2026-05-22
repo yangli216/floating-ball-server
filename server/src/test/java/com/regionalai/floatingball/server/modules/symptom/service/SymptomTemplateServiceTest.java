@@ -5,11 +5,13 @@ import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
 import com.regionalai.floatingball.server.modules.datapackage.service.BuiltinTemplateSeedService;
 import com.regionalai.floatingball.server.modules.datapackage.service.DataPackageService;
+import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
 import com.regionalai.floatingball.server.modules.symptom.dto.BuiltinSymptomImportResultVO;
 import com.regionalai.floatingball.server.modules.symptom.dto.JsonSymptomImportRequest;
 import com.regionalai.floatingball.server.modules.symptom.dto.SymptomTemplateVO;
 import com.regionalai.floatingball.server.modules.symptom.entity.AiSymptomTemplate;
 import com.regionalai.floatingball.server.modules.symptom.mapper.AiSymptomTemplateMapper;
+import com.regionalai.floatingball.server.security.AdminContextHolder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,16 +42,21 @@ class SymptomTemplateServiceTest {
     @Mock
     private DataPackageService dataPackageService;
 
+    @Mock
+    private SymptomTemplateChangeLogService changeLogService;
+
     private SymptomTemplateService symptomTemplateService;
 
     @BeforeEach
     void setUp() {
+        AdminContextHolder.clear();
         ObjectMapper objectMapper = new ObjectMapper();
         symptomTemplateService = new SymptomTemplateService(
             aiSymptomTemplateMapper,
             objectMapper,
             new BuiltinTemplateSeedService(objectMapper),
-            dataPackageService
+            dataPackageService,
+            changeLogService
         );
     }
 
@@ -125,6 +132,12 @@ class SymptomTemplateServiceTest {
         assertEquals(2, result.getCreatedCount());
         assertEquals(0, result.getUpdatedCount());
         verify(aiSymptomTemplateMapper, times(2)).insert(any(AiSymptomTemplate.class));
+        verify(changeLogService, times(2)).record(
+            org.mockito.ArgumentMatchers.eq(SymptomTemplateChangeLogService.OPERATION_IMPORT_JSON),
+            org.mockito.ArgumentMatchers.isNull(),
+            any(SymptomTemplateVO.class),
+            org.mockito.ArgumentMatchers.isNull()
+        );
     }
 
     @Test
@@ -143,6 +156,80 @@ class SymptomTemplateServiceTest {
         assertEquals(0, result.getCreatedCount());
         assertEquals(1, result.getUpdatedCount());
         verify(aiSymptomTemplateMapper, times(1)).updateById(any(AiSymptomTemplate.class));
+        verify(changeLogService).record(
+            org.mockito.ArgumentMatchers.eq(SymptomTemplateChangeLogService.OPERATION_IMPORT_JSON),
+            any(SymptomTemplateVO.class),
+            any(SymptomTemplateVO.class),
+            org.mockito.ArgumentMatchers.isNull()
+        );
+    }
+
+    @Test
+    void saveShouldRecordCreateChangeLogWithCurrentAdmin() {
+        AdminCurrentUser admin = new AdminCurrentUser();
+        admin.setIdUser("USER001");
+        admin.setCdUser("admin");
+        admin.setNaUser("系统管理员");
+        AdminContextHolder.set(admin);
+
+        SymptomTemplateVO request = new SymptomTemplateVO();
+        request.setMedicalMode("western");
+        request.setKey("fever");
+        request.setName("发热");
+        request.setConfig(Collections.<String, Object>singletonMap("sections", Collections.emptyList()));
+
+        when(aiSymptomTemplateMapper.selectOne(any())).thenReturn(null);
+
+        symptomTemplateService.save(request);
+
+        verify(aiSymptomTemplateMapper).insert(any(AiSymptomTemplate.class));
+        verify(changeLogService).record(
+            org.mockito.ArgumentMatchers.eq(SymptomTemplateChangeLogService.OPERATION_CREATE),
+            org.mockito.ArgumentMatchers.isNull(),
+            any(SymptomTemplateVO.class),
+            org.mockito.ArgumentMatchers.same(admin)
+        );
+        AdminContextHolder.clear();
+    }
+
+    @Test
+    void updateShouldRecordBeforeAndAfterSnapshots() {
+        AiSymptomTemplate existing = buildTemplate("T1", "fever", "发热", "western", null, null, 1, LocalDateTime.now());
+        SymptomTemplateVO request = new SymptomTemplateVO();
+        request.setMedicalMode("western");
+        request.setKey("fever");
+        request.setName("高热");
+        request.setConfig(Collections.<String, Object>singletonMap("sections", Collections.emptyList()));
+        request.setSdStatus("1");
+
+        when(aiSymptomTemplateMapper.selectById("T1")).thenReturn(existing);
+        when(aiSymptomTemplateMapper.selectOne(any())).thenReturn(null);
+
+        symptomTemplateService.update("T1", request);
+
+        verify(aiSymptomTemplateMapper).updateById(existing);
+        verify(changeLogService).record(
+            org.mockito.ArgumentMatchers.eq(SymptomTemplateChangeLogService.OPERATION_UPDATE),
+            org.mockito.ArgumentMatchers.argThat(before -> "发热".equals(before.getName())),
+            org.mockito.ArgumentMatchers.argThat(after -> "高热".equals(after.getName())),
+            org.mockito.ArgumentMatchers.isNull()
+        );
+    }
+
+    @Test
+    void invalidateShouldRecordDeleteChangeLog() {
+        AiSymptomTemplate existing = buildTemplate("T1", "fever", "发热", "western", null, null, 1, LocalDateTime.now());
+        when(aiSymptomTemplateMapper.selectById("T1")).thenReturn(existing);
+
+        symptomTemplateService.invalidate("T1");
+
+        assertEquals("0", existing.getFgActive());
+        verify(changeLogService).record(
+            org.mockito.ArgumentMatchers.eq(SymptomTemplateChangeLogService.OPERATION_DELETE),
+            any(SymptomTemplateVO.class),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()
+        );
     }
 
     private AiSymptomTemplate buildTemplate(String id,

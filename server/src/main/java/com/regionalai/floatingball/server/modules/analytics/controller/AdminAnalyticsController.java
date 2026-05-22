@@ -9,11 +9,18 @@ import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQue
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageResponseVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.service.AnalyticsService;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -49,5 +56,27 @@ public class AdminAnalyticsController {
     @GetMapping("/function-usage")
     public ApiResponse<FunctionUsageResponseVO> functionUsage(FunctionUsageQueryDTO query, HttpServletRequest request) {
         return ApiResponse.success(analyticsService.getFunctionUsage(query), RequestIdUtils.resolve(request));
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<Resource> exportAnalytics(AnalyticsQueryDTO query) {
+        return excelResponse(analyticsService.exportAnalyticsExcel(query), "analytics-" + System.currentTimeMillis() + ".xlsx");
+    }
+
+    @GetMapping("/function-usage/export")
+    public ResponseEntity<Resource> exportFunctionUsage(FunctionUsageQueryDTO query) {
+        return excelResponse(analyticsService.exportFunctionUsageExcel(query), "function-usage-" + System.currentTimeMillis() + ".xlsx");
+    }
+
+    private ResponseEntity<Resource> excelResponse(byte[] data, String fileName) {
+        ByteArrayResource resource = new ByteArrayResource(data);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                .filename(fileName, StandardCharsets.UTF_8)
+                .build()
+                .toString())
+            .contentLength(data.length)
+            .body(resource);
     }
 }

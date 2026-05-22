@@ -6,7 +6,9 @@ import com.regionalai.floatingball.server.common.util.RequestIdUtils;
 import com.regionalai.floatingball.server.modules.symptom.dto.BuiltinSymptomImportRequest;
 import com.regionalai.floatingball.server.modules.symptom.dto.BuiltinSymptomImportResultVO;
 import com.regionalai.floatingball.server.modules.symptom.dto.JsonSymptomImportRequest;
+import com.regionalai.floatingball.server.modules.symptom.dto.SymptomTemplateChangeLogVO;
 import com.regionalai.floatingball.server.modules.symptom.dto.SymptomTemplateVO;
+import com.regionalai.floatingball.server.modules.symptom.service.SymptomTemplateChangeLogService;
 import com.regionalai.floatingball.server.modules.symptom.service.SymptomTemplateService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,9 +27,29 @@ import javax.servlet.http.HttpServletRequest;
 public class AdminSymptomTemplateController {
 
     private final SymptomTemplateService symptomTemplateService;
+    private final SymptomTemplateChangeLogService changeLogService;
 
-    public AdminSymptomTemplateController(SymptomTemplateService symptomTemplateService) {
+    public AdminSymptomTemplateController(SymptomTemplateService symptomTemplateService,
+                                          SymptomTemplateChangeLogService changeLogService) {
         this.symptomTemplateService = symptomTemplateService;
+        this.changeLogService = changeLogService;
+    }
+
+    @GetMapping("/change-logs")
+    public ApiResponse<PageResponse<SymptomTemplateChangeLogVO>> listChangeLogs(@RequestParam(defaultValue = "1") long current,
+                                                                                @RequestParam(defaultValue = "20") long size,
+                                                                                @RequestParam(required = false) String idTemplate,
+                                                                                @RequestParam(required = false) String keyword,
+                                                                                @RequestParam(required = false) String medicalMode,
+                                                                                @RequestParam(required = false) String operationType,
+                                                                                @RequestParam(required = false) String operatorKeyword,
+                                                                                @RequestParam(required = false) String dateFrom,
+                                                                                @RequestParam(required = false) String dateTo,
+                                                                                HttpServletRequest request) {
+        return ApiResponse.success(
+            changeLogService.list(current, size, idTemplate, keyword, medicalMode, operationType, operatorKeyword, dateFrom, dateTo),
+            RequestIdUtils.resolve(request)
+        );
     }
 
     @GetMapping

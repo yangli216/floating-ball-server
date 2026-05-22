@@ -87,5 +87,74 @@ BEGIN
         'IDX_C_AI_SYMPTOM_SORT',
         'CREATE INDEX idx_c_ai_symptom_sort ON c_ai_symptom_template (sd_medical_mode, sort_order, fg_active)'
     );
+
+    SELECT COUNT(*)
+      INTO v_exists
+      FROM user_tables
+     WHERE table_name = 'C_AI_SYMPTOM_TEMPLATE_CHANGE_LOG';
+
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE q'[
+            CREATE TABLE c_ai_symptom_template_change_log (
+                id_log                  VARCHAR2(32) PRIMARY KEY,
+                id_template             VARCHAR2(32),
+                cd_symptom              VARCHAR2(128),
+                na_symptom              VARCHAR2(200),
+                sd_medical_mode         VARCHAR2(16),
+                id_org                  VARCHAR2(32),
+                id_region               VARCHAR2(32),
+                operation_type          VARCHAR2(32) NOT NULL,
+                id_operator             VARCHAR2(32),
+                cd_operator             VARCHAR2(64),
+                na_operator             VARCHAR2(128),
+                change_summary          VARCHAR2(1000),
+                before_json             CLOB,
+                after_json              CLOB,
+                diff_json               CLOB,
+                operation_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fg_active               CHAR(1) DEFAULT '1' NOT NULL,
+                insert_time             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                update_time             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ]';
+
+        EXECUTE IMMEDIATE q'[COMMENT ON TABLE c_ai_symptom_template_change_log IS '症状模板修改日志表']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.id_log IS '修改日志主键ID']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.id_template IS '症状模板ID']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.cd_symptom IS '症状Key/编码']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.na_symptom IS '症状名称']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.sd_medical_mode IS '医学模式（western/tcm）']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.id_org IS '机构级作用范围ID']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.id_region IS '区域级作用范围ID']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.operation_type IS '操作类型（create/update/delete/import_builtin/import_json）']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.id_operator IS '操作者用户ID']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.cd_operator IS '操作者账号']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.na_operator IS '操作者姓名']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.change_summary IS '变更摘要']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.before_json IS '变更前模板快照']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.after_json IS '变更后模板快照']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.diff_json IS '字段级差异JSON']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.operation_time IS '操作时间']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.fg_active IS '逻辑删除标记']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.insert_time IS '创建时间']';
+        EXECUTE IMMEDIATE q'[COMMENT ON COLUMN c_ai_symptom_template_change_log.update_time IS '更新时间']';
+    END IF;
+
+    create_index_if_missing(
+        'IDX_C_AI_SYMPTOM_LOG_TEMPLATE',
+        'CREATE INDEX idx_c_ai_symptom_log_template ON c_ai_symptom_template_change_log (id_template, operation_time, fg_active)'
+    );
+    create_index_if_missing(
+        'IDX_C_AI_SYMPTOM_LOG_OPERATOR',
+        'CREATE INDEX idx_c_ai_symptom_log_operator ON c_ai_symptom_template_change_log (id_operator, operation_time, fg_active)'
+    );
+    create_index_if_missing(
+        'IDX_C_AI_SYMPTOM_LOG_ACTION',
+        'CREATE INDEX idx_c_ai_symptom_log_action ON c_ai_symptom_template_change_log (operation_type, operation_time, fg_active)'
+    );
+    create_index_if_missing(
+        'IDX_C_AI_SYMPTOM_LOG_SCOPE',
+        'CREATE INDEX idx_c_ai_symptom_log_scope ON c_ai_symptom_template_change_log (sd_medical_mode, id_org, id_region, fg_active)'
+    );
 END;
 /

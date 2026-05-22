@@ -43,6 +43,7 @@
           <el-button @click="resetFilters">重置</el-button>
         </div>
         <div class="symptom-toolbar__actions">
+          <el-button icon="el-icon-document" @click="openChangeLogDialog">修改日志</el-button>
           <el-button :loading="importingJson" @click="triggerJsonImport">导入配置文件</el-button>
           <el-button :loading="importing" @click="importBuiltin">导入内置模板</el-button>
           <el-button @click="exportCurrent">导出配置</el-button>
@@ -418,13 +419,141 @@
         </div>
       </div>
     </div>
+
+    <el-dialog
+      v-if="changeLogDialogVisible"
+      title="症状模板修改日志"
+      :visible.sync="changeLogDialogVisible"
+      width="1080px"
+      @opened="loadChangeLogs"
+    >
+      <div class="change-log-toolbar">
+        <el-input
+          v-model.trim="changeLogFilters.keyword"
+          clearable
+          placeholder="搜索症状、操作者或摘要"
+          class="search-input"
+          @keyup.enter.native="searchChangeLogs"
+        />
+        <el-select v-model="changeLogFilters.operationType" clearable placeholder="操作类型" class="filter-select">
+          <el-option v-for="item in operationTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-input
+          v-model.trim="changeLogFilters.operatorKeyword"
+          clearable
+          placeholder="操作者"
+          class="filter-input"
+          @keyup.enter.native="searchChangeLogs"
+        />
+        <el-date-picker
+          v-model="changeLogFilters.dateRange"
+          type="datetimerange"
+          clearable
+          unlink-panels
+          range-separator="至"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          value-format="yyyy-MM-dd HH:mm:ss"
+          class="filter-date"
+        />
+        <el-button type="primary" icon="el-icon-search" @click="searchChangeLogs">查询</el-button>
+        <el-button @click="resetChangeLogFilters">重置</el-button>
+      </div>
+
+      <el-table :data="changeLogRecords" v-loading="changeLogLoading" class="change-log-table">
+        <el-table-column label="操作" width="118">
+          <template slot-scope="{ row }">
+            <el-tag size="mini" :type="operationTypeMeta(row.operationType).type">
+              {{ operationTypeMeta(row.operationType).label }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="症状" min-width="150" show-overflow-tooltip>
+          <template slot-scope="{ row }">
+            <div class="log-main-text">{{ row.symptomName || '--' }}</div>
+            <div class="log-sub-text">{{ row.symptomKey || '--' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作者" min-width="140" show-overflow-tooltip>
+          <template slot-scope="{ row }">
+            <div class="log-main-text">{{ row.operatorName || row.operatorCode || '--' }}</div>
+            <div class="log-sub-text">{{ row.operatorCode || row.operatorId || '--' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="变更摘要" min-width="260" show-overflow-tooltip>
+          <template slot-scope="{ row }">{{ row.changeSummary || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="时间" width="168">
+          <template slot-scope="{ row }">{{ formatDateTime(row.operationTime) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="88" fixed="right">
+          <template slot-scope="{ row }">
+            <a class="table-action" @click="openChangeLogDetail(row)">详情</a>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="page-footer">
+        <el-pagination
+          background
+          layout="total, prev, pager, next"
+          :current-page.sync="changeLogPagination.current"
+          :page-size="changeLogPagination.size"
+          :total="changeLogPagination.total"
+          @current-change="loadChangeLogs"
+        />
+      </div>
+      <span slot="footer">
+        <el-button @click="changeLogDialogVisible = false">关闭</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog
+      v-if="changeLogDetailVisible"
+      title="修改日志详情"
+      :visible.sync="changeLogDetailVisible"
+      width="860px"
+    >
+      <div v-if="selectedChangeLog" class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-card__label">操作类型</div>
+          <div class="detail-card__value">{{ operationTypeMeta(selectedChangeLog.operationType).label }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">症状</div>
+          <div class="detail-card__value">{{ selectedChangeLog.symptomName || selectedChangeLog.symptomKey || '--' }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">操作者</div>
+          <div class="detail-card__value">{{ selectedChangeLog.operatorName || selectedChangeLog.operatorCode || '--' }}</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card__label">操作时间</div>
+          <div class="detail-card__value">{{ formatDateTime(selectedChangeLog.operationTime) }}</div>
+        </div>
+      </div>
+      <el-tabs v-model="changeLogDetailTab" class="change-log-tabs">
+        <el-tab-pane label="字段差异" name="diff">
+          <pre class="code-block">{{ formatJson(selectedChangeLog && selectedChangeLog.diff) }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="修改前" name="before">
+          <pre class="code-block">{{ formatJson(selectedChangeLog && selectedChangeLog.beforeSnapshot) }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="修改后" name="after">
+          <pre class="code-block">{{ formatJson(selectedChangeLog && selectedChangeLog.afterSnapshot) }}</pre>
+        </el-tab-pane>
+      </el-tabs>
+      <span slot="footer">
+        <el-button @click="changeLogDetailVisible = false">关闭</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import http from '../api/http'
 import { fetchOrgs, fetchRegions } from '../api/reference'
-import { buildLabelMap, resolveScopeLabel } from '../utils/admin'
+import { buildLabelMap, formatDateTime, resolveScopeLabel } from '../utils/admin'
 
 const medicalModeOptions = [
   { value: 'western', label: '西医' },
@@ -434,6 +563,14 @@ const medicalModeOptions = [
 const statusOptions = [
   { value: '1', label: '启用' },
   { value: '0', label: '停用' }
+]
+
+const operationTypeOptions = [
+  { value: 'create', label: '新增', type: 'success' },
+  { value: 'update', label: '修改', type: 'warning' },
+  { value: 'delete', label: '删除', type: 'danger' },
+  { value: 'import_builtin', label: '导入内置', type: 'info' },
+  { value: 'import_json', label: '导入文件', type: 'info' }
 ]
 
 const fieldTypeOptions = [
@@ -466,6 +603,15 @@ function createFilters() {
     sdStatus: '1',
     idRegion: '',
     idOrg: ''
+  }
+}
+
+function createChangeLogFilters() {
+  return {
+    keyword: '',
+    operationType: '',
+    operatorKeyword: '',
+    dateRange: []
   }
 }
 
@@ -546,6 +692,7 @@ export default {
     return {
       medicalModeOptions,
       statusOptions,
+      operationTypeOptions,
       fieldTypeOptions,
       systemCategoryOptions,
       loading: false,
@@ -562,7 +709,19 @@ export default {
       regionMap: {},
       orgMap: {},
       tcmMetadataText: '',
-      newBodyPart: ''
+      newBodyPart: '',
+      changeLogDialogVisible: false,
+      changeLogDetailVisible: false,
+      changeLogLoading: false,
+      changeLogRecords: [],
+      changeLogFilters: createChangeLogFilters(),
+      changeLogPagination: {
+        current: 1,
+        size: 10,
+        total: 0
+      },
+      selectedChangeLog: null,
+      changeLogDetailTab: 'diff'
     }
   },
   computed: {
@@ -591,6 +750,12 @@ export default {
     statusLabel(value) {
       const item = statusOptions.find(option => option.value === value)
       return item ? item.label : value || '--'
+    },
+    operationTypeMeta(value) {
+      return operationTypeOptions.find(option => option.value === value) || { label: value || '--', type: 'info' }
+    },
+    formatDateTime(value) {
+      return formatDateTime(value)
     },
     resolveScope(row) {
       return resolveScopeLabel(row, this.orgMap, this.regionMap)
@@ -1130,6 +1295,58 @@ export default {
       link.click()
       URL.revokeObjectURL(url)
     },
+    openChangeLogDialog() {
+      this.changeLogDialogVisible = true
+      this.changeLogPagination.current = 1
+      this.changeLogFilters = createChangeLogFilters()
+    },
+    async loadChangeLogs() {
+      if (!this.changeLogDialogVisible) {
+        return
+      }
+      this.changeLogLoading = true
+      try {
+        const range = this.changeLogFilters.dateRange || []
+        const data = await http.get('/admin/api/symptom-templates/change-logs', {
+          params: {
+            current: this.changeLogPagination.current,
+            size: this.changeLogPagination.size,
+            idTemplate: this.selectedId || undefined,
+            keyword: this.changeLogFilters.keyword || undefined,
+            medicalMode: this.filters.medicalMode || undefined,
+            operationType: this.changeLogFilters.operationType || undefined,
+            operatorKeyword: this.changeLogFilters.operatorKeyword || undefined,
+            dateFrom: range[0] || undefined,
+            dateTo: range[1] || undefined
+          }
+        })
+        this.changeLogRecords = data.records || []
+        this.changeLogPagination.total = data.total || 0
+      } catch (error) {
+        this.$message.error((error && error.message) || '加载修改日志失败')
+      } finally {
+        this.changeLogLoading = false
+      }
+    },
+    searchChangeLogs() {
+      this.changeLogPagination.current = 1
+      this.loadChangeLogs()
+    },
+    resetChangeLogFilters() {
+      this.changeLogFilters = createChangeLogFilters()
+      this.searchChangeLogs()
+    },
+    openChangeLogDetail(row) {
+      this.selectedChangeLog = row
+      this.changeLogDetailTab = 'diff'
+      this.changeLogDetailVisible = true
+    },
+    formatJson(value) {
+      if (!value || (typeof value === 'object' && !Object.keys(value).length)) {
+        return '{}'
+      }
+      return JSON.stringify(value, null, 2)
+    },
     getSymptomGenders() {
       if (!this.editingRecord) {
         return []
@@ -1149,7 +1366,11 @@ export default {
 <style scoped>
 .symptom-template-page {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
+  height: calc(100vh - 132px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .symptom-toolbar {
@@ -1168,17 +1389,20 @@ export default {
 .symptom-toolbar__actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .symptom-layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 16px;
-  min-height: 760px;
+  min-height: 0;
 }
 
 .symptom-sidebar,
 .symptom-editor {
+  overflow: hidden;
   min-height: 0;
 }
 
@@ -1193,11 +1417,14 @@ export default {
 }
 
 .symptom-list {
+  flex: 1;
+  min-height: 0;
   margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow: auto;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .symptom-item {
@@ -1260,7 +1487,8 @@ export default {
 .editor-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .editor-header {
@@ -1279,9 +1507,14 @@ export default {
 }
 
 .editor-scroll {
+  flex: 1;
+  min-height: 0;
   margin-top: 16px;
   display: grid;
   gap: 16px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .editor-section {
@@ -1462,13 +1695,121 @@ export default {
   border: 1px solid #dbe5ef;
 }
 
+.change-log-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.change-log-table {
+  width: 100%;
+}
+
+.filter-input {
+  width: 180px;
+}
+
+.filter-date {
+  width: 360px;
+}
+
+.log-main-text {
+  color: #16324f;
+  font-weight: 500;
+}
+
+.log-sub-text {
+  margin-top: 3px;
+  color: #7d8ca0;
+  font-size: 12px;
+}
+
+.table-action {
+  color: #1D9E75;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.page-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.detail-card {
+  border: 1px solid #e8eef5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.detail-card__label {
+  color: #7d8ca0;
+  font-size: 12px;
+}
+
+.detail-card__value {
+  margin-top: 4px;
+  color: #16324f;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.change-log-tabs {
+  margin-top: 6px;
+}
+
+.code-block {
+  max-height: 460px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #e8eef5;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 1280px) {
   .symptom-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 32%) minmax(0, 1fr);
   }
 }
 
 @media (max-width: 960px) {
+  .symptom-template-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .symptom-layout {
+    grid-template-rows: auto;
+  }
+
+  .symptom-sidebar,
+  .symptom-editor {
+    overflow: visible;
+  }
+
+  .symptom-list,
+  .editor-scroll {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
   .editor-header,
   .symptom-toolbar {
     flex-direction: column;

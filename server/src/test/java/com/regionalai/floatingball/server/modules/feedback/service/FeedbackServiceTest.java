@@ -143,6 +143,41 @@ class FeedbackServiceTest {
     }
 
     @Test
+    void listShouldApplyMultiScoreFilterAndIgnoreInvalidValues() {
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<AiFeedback> page =
+            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<AiFeedback>(1, 10);
+        page.setRecords(Collections.emptyList());
+        page.setTotal(0);
+        when(aiFeedbackMapper.selectPage(
+            any(com.baomidou.mybatisplus.extension.plugins.pagination.Page.class),
+            org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiFeedback>>any()))
+            .thenReturn(page);
+
+        FeedbackListQuery query = new FeedbackListQuery();
+        query.setScores(Arrays.asList(1, 3, 3, 6, null, 5));
+
+        feedbackService.list(query);
+
+        verify(aiFeedbackMapper).selectPage(
+            org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.extension.plugins.pagination.Page<AiFeedback>>any(),
+            argThat(wrapper -> {
+                String segment = String.valueOf(wrapper.getCustomSqlSegment());
+                if (!(wrapper instanceof com.baomidou.mybatisplus.core.conditions.AbstractWrapper)) {
+                    return false;
+                }
+                @SuppressWarnings("unchecked")
+                com.baomidou.mybatisplus.core.conditions.AbstractWrapper<AiFeedback, ?, ?> abstractWrapper =
+                    (com.baomidou.mybatisplus.core.conditions.AbstractWrapper<AiFeedback, ?, ?>) wrapper;
+                Map<String, Object> params = abstractWrapper.getParamNameValuePairs();
+                return segment.contains("score IN")
+                    && params.containsValue(1)
+                    && params.containsValue(3)
+                    && params.containsValue(5)
+                    && !params.containsValue(6);
+            }));
+    }
+
+    @Test
     void detailShouldExposeDisplayFieldsForFeedbackAndTimeline() {
         AiFeedback feedback = new AiFeedback();
         feedback.setIdFeedback("feedback-1");

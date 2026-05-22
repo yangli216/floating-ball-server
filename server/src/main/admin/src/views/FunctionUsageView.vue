@@ -57,7 +57,7 @@
         </div>
       </div>
       <div class="export-bar">
-        <el-button size="small" icon="el-icon-download" @click="exportData">导出数据</el-button>
+        <el-button size="small" icon="el-icon-download" :loading="exporting" @click="exportData">导出数据</el-button>
       </div>
     </div>
 
@@ -159,6 +159,7 @@ export default {
       moduleOptions: [],
       regionOptions: [],
       orgOptions: [],
+      exporting: false,
       COLORS,
       rankChart: null,
       trendChart: null
@@ -263,8 +264,30 @@ export default {
       this.pageNum = p
       this.search()
     },
-    exportData() {
-      this.$message.info('导出功能开发中')
+    async exportData() {
+      this.exporting = true
+      try {
+        const params = { ...this.query }
+        if (!params.idRegion) delete params.idRegion
+        if (!params.idOrg) delete params.idOrg
+        if (!params.functionModules || params.functionModules.length === 0) delete params.functionModules
+        const blob = await http.get('/admin/api/analytics/function-usage/export', { params, responseType: 'blob' })
+        this.downloadBlob(blob, '辅诊功能统计_' + new Date().toISOString().slice(0, 10) + '.xlsx')
+      } catch (error) {
+        this.$message.error((error && error.message) || '导出失败')
+      } finally {
+        this.exporting = false
+      }
+    },
+    downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     },
     disposeCharts() {
       if (this.rankChart) { this.rankChart.dispose(); this.rankChart = null }

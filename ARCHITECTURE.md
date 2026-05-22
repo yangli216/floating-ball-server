@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-04-28
+> 更新日期：2026-05-22
 
 ## 1. 项目定位
 
@@ -66,7 +66,7 @@ floating-ball-server/
         │   ├── modules/adminui/    # 管理端静态页面入口控制
         │   ├── modules/ai/         # chat / transcribe / realtime 代理
         │   ├── modules/analytics/  # 综合概况统计分析：趋势、分布、核心指标
-        │   ├── modules/useractivity/ # 区域用户活跃度统计：层级树、活跃指标、用户列表
+        │   ├── modules/useractivity/ # 用户活跃度统计：时间/区域/机构筛选、活跃指标、用户列表
         └── main/
             ├── admin/              # 管理端 Vue 2 + Element UI 源码
             │   ├── package.json
@@ -93,6 +93,7 @@ floating-ball-server/
 2. 签名必须绑定实际请求体：服务端用收到的 body 重算 SHA-256，并用该 hash 参与验签，不信任客户端单独声明的 body hash。
 3. 已绑定公钥的设备不允许通过匿名注册覆盖公钥或取回旧 token；本地 token/key 丢失时，桌面端重新生成兜底设备编码注册为新设备，以降低弱运维场景下的人工介入。
 4. 实时语音 WebSocket 握手同样校验设备令牌、签名与客户端版本门禁；日志不得输出完整 token 或签名。
+5. 所有 `ApiResponse.timestamp` 均为服务端 epoch 毫秒时间，桌面端可用它维护签名时钟偏移；服务端仍按固定时钟窗口验签，不因客户端本地时区或系统时间漂移绕过签名校验。
 
 ## 4. 后端分层
 
@@ -108,7 +109,7 @@ floating-ball-server/
 - 负责业务校验、配置分层查找、版本比较、上游代理转发
 - 封装“机构级 > 区域级 > 全局级”的配置查找优先级
 - `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管 `chatFast` 独立模型、`enableThinking` 开关、独立审查 AI、`check_examination` 审查开关与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
-- `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并与客户端 `templates/delta` 聚合，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
+- `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并、客户端 `templates/delta` 聚合与症状模板修改日志，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
 
@@ -140,11 +141,18 @@ floating-ball-server/
 - `mvn -f server/pom.xml process-resources/test/package` 会在资源阶段自动执行管理端 `npm ci` 与 `npm run build`，确保 `/admin/index.html` 与静态资源进入后端类路径
 - 管理端接口继续使用 `/admin/api/*`，但页面与接口默认同源，不再依赖独立部署
 - 如需单独前端调试，仍可在 `server/src/main/admin` 内运行 Vite dev server；此时后端 CORS 仅作为本地开发补充能力
+- 管理端请求错误统一由 `server/src/main/admin/src/api/http.js` 归一化：业务校验展示服务端友好 `message`，网络不可达、超时、5xx、非 JSON 响应等场景转换为可操作提示；存在 `requestId` 时带出请求 ID，避免把 Axios、HTTP statusText 或后端底层异常原样弹给管理员
 - 管理端 UI 采用 vue-admin 类后台骨架：深色固定侧栏、顶部导航栏、tags-view、浅灰内容区；仍避免页面副标题、说明型提示文案、列表页默认统计卡片或 Element UI 默认蓝色主题
 - 管理端表格统一使用弱分隔线、无竖线、无 `border/stripe` 网格样式；状态、编码、ID 使用 pill 或 code tag 表达
 - 管理端详情/编辑弹窗默认销毁隐藏 DOM，避免隐藏表单进入可访问树；表单采用 `label-position="top"` 与分组式结构
 - 远端 `/v1/*` 默认 CORS 需要兼容 `floating-ball` 的 Tauri dev / desktop WebView origin，且 `OPTIONS` 预检请求不能被设备鉴权拦截
 - `floating-ball.cors.allowed-origins` 的本地配置只能做增量补充，不能覆盖掉桌面端默认 origin（`tauri://localhost`、`asset://localhost`、`https://tauri.localhost`、`http://tauri.localhost`、本地 localhost/127.0.0.1`），否则桌面端会在浏览器 Fetch 层直接报 `Load failed`
+
+### 4.5 错误信息出口
+
+- `common/exception/GlobalExceptionHandler` 是 HTTP 业务异常的统一出口。`BusinessException` 可返回明确业务原因；未知异常、数据库异常、参数解析异常必须转换为用户可理解的提示，并通过日志保留完整堆栈。
+- `security/DeviceAuthFilter` 与 `AdminAuthFilter` 负责鉴权失败响应。设备签名失败响应只给出“请重新连接/重新注册设备”的操作建议，具体签名缺失、时间戳、nonce、验签异常等原因进入安全拒绝日志，不直接暴露给桌面端。
+- 所有错误响应继续使用 `ApiResponse`，并带 `requestId`。前端和运维排障以 `requestId` 关联服务端日志，不依赖把技术细节展示给最终用户。
 
 ## 5. 核心业务链路
 
@@ -171,6 +179,7 @@ floating-ball-server/
 3. 管理端支持把桌面端已有 `templates.json`、`tcm-templates.json` 或后台导出的症状模板 JSON 重新导入 `c_ai_symptom_template`
 4. 若当前作用域没有任何启用的症状模板记录，则兼容回退到已发布的 legacy `template` 数据包
 5. 若既没有症状模板记录，也没有 legacy `template` 数据包，则回退到 `server/src/main/resources/template-seeds/` 内置症状模板基线
+6. 管理端对症状模板新增、修改、删除、内置导入和 JSON 导入写入 `c_ai_symptom_template_change_log`，记录操作者、操作时间、操作类型、模板快照和字段级差异，供审计追踪
 
 ### 5.2 AI 代理链路
 
@@ -313,7 +322,7 @@ floating-ball-server/
    - 功能调用量统一按 `c_ai_feature_event` 中成功的用户实际功能调用事件计数，不再按 `c_ai_op_log` 的 AI 代理日志行数计数
    - 支持时间范围快捷切换（今日/本周/本月/本季度/本年/自定义）
    - 支持区域、机构下拉筛选
-   - 支持数据导出
+   - 支持统计分析、辅诊功能和用户活跃度 Excel 数据导出
    - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
 
 约束：
@@ -345,28 +354,33 @@ floating-ball-server/
 5. `c_ai_prompt`
 6. `c_ai_data_package`
 7. `c_ai_symptom_template`
-8. `c_ai_op_log`
+8. `c_ai_symptom_template_change_log`
+   - 记录症状模板新增、修改、删除、内置导入和 JSON 导入
+   - 关键列包括模板 ID / Key / 名称 / 医学模式 / 作用域、操作者 ID / 账号 / 姓名、操作类型、操作时间、变更摘要
+   - `before_json`、`after_json` 保存变更前后完整模板视图，`diff_json` 保存字段级差异
+   - 仅作为症状模板审计追踪，不参与客户端 `templates/delta` 下发
+9. `c_ai_op_log`
    - 代理日志主体仍保存在 `payload_json`
    - 同步冗余结构化列：`op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`、`consultation_id`
    - 语音代理的录音文件路径保存在 `audio_file_path`
    - 用于排障、审计和反馈关联，不作为辅诊功能调用次数统计源
-9. `c_ai_feedback`
+10. `c_ai_feedback`
    - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）
    - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
    - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`（机构 ID 沿用 `id_org`），由桌面端 SDK handshake 解析的 `urt` 信息回填
    - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`
-10. `c_ai_user_consultation_log`
+11. `c_ai_user_consultation_log`
    - 按一次问诊聚合运维用户日志，关键列包括机构、医生、患者、问诊类型、问诊时间
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
    - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`
-11. `c_ai_feature_event`
+12. `c_ai_feature_event`
    - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
    - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次
    - 索引：`idx_c_ai_feature_event_time` / `_feature` / `_doctor` / `_org` / `_idem`
-12. `c_ai_user`
-13. `c_ai_role`
-14. `c_ai_user_role`
+13. `c_ai_user`
+14. `c_ai_role`
+15. `c_ai_user_role`
 
 扩展表如用户、角色、统计可在第二阶段补齐。
 

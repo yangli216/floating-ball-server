@@ -1,15 +1,24 @@
 package com.regionalai.floatingball.server.modules.useractivity.service;
 
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.useractivity.dto.RegionTreeNodeVO;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityItemVO;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityQueryDTO;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivitySummaryVO;
 import com.regionalai.floatingball.server.modules.useractivity.mapper.UserActivityMapper;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -25,6 +34,7 @@ import java.util.Map;
 public class UserActivityService {
 
     private static final Logger log = LoggerFactory.getLogger(UserActivityService.class);
+    private static final long EXPORT_MAX_ROWS = 10000L;
 
     private final UserActivityMapper userActivityMapper;
 
@@ -40,25 +50,25 @@ public class UserActivityService {
         long activeUsers = userActivityMapper.countActiveUsers(query);
         long totalDevices = userActivityMapper.countTotalDevices(query);
         long inactiveUsers = totalDevices - activeUsers;
+        long totalConsultations = userActivityMapper.countConsultations(query);
+        long effectiveConsultations = userActivityMapper.countEffectiveConsultations(query);
 
         String activityRate = totalDevices > 0
             ? formatPercent((double) activeUsers / totalDevices * 100) : "0";
-
-        Double avgDuration = userActivityMapper.queryAvgUsageDuration(query);
-        String avgUsageDuration = avgDuration != null
-            ? formatDuration(avgDuration) : "0";
+        String effectiveConsultationRate = totalConsultations > 0
+            ? formatPercent((double) effectiveConsultations / totalConsultations * 100) : "0";
 
         vo.setActiveUsers(activeUsers);
         vo.setInactiveUsers(inactiveUsers);
         vo.setActivityRate(activityRate);
-        vo.setAvgUsageDuration(avgUsageDuration);
+        vo.setEffectiveConsultationRate(effectiveConsultationRate);
 
         UserActivityQueryDTO prevQuery = buildPreviousPeriodQuery(query);
         long prevActive = userActivityMapper.countActiveUsers(prevQuery);
         long prevTotal = userActivityMapper.countTotalDevices(prevQuery);
         long prevInactive = prevTotal - prevActive;
-
-        Double prevAvgDuration = userActivityMapper.queryAvgUsageDuration(prevQuery);
+        long prevTotalConsultations = userActivityMapper.countConsultations(prevQuery);
+        long prevEffectiveConsultations = userActivityMapper.countEffectiveConsultations(prevQuery);
 
         vo.setActiveUsersGrowth(formatPercentGrowth(activeUsers, prevActive));
         vo.setInactiveUsersGrowth(formatAbsoluteGrowth(inactiveUsers, prevInactive));
@@ -67,9 +77,9 @@ public class UserActivityService {
         double curRate = totalDevices > 0 ? (double) activeUsers / totalDevices * 100 : 0;
         vo.setActivityRateGrowth(formatPercentDiffGrowth(curRate, prevRate));
 
-        double prevDur = prevAvgDuration != null ? prevAvgDuration : 0;
-        double curDur = avgDuration != null ? avgDuration : 0;
-        vo.setAvgUsageDurationGrowth(formatDurationDiffGrowth(curDur, prevDur));
+        double prevEffectiveRate = prevTotalConsultations > 0 ? (double) prevEffectiveConsultations / prevTotalConsultations * 100 : 0;
+        double curEffectiveRate = totalConsultations > 0 ? (double) effectiveConsultations / totalConsultations * 100 : 0;
+        vo.setEffectiveConsultationRateGrowth(formatPercentDiffGrowth(curEffectiveRate, prevEffectiveRate));
 
         return vo;
     }
@@ -136,7 +146,7 @@ public class UserActivityService {
             item.setNaRegion(stringVal(row.get("NAREGION")));
             item.setNaDoctor(stringVal(row.get("NADOCTOR")));
             item.setConsultationCount(longVal(row.get("CONSULTATIONCOUNT")));
-            item.setOperationCount(longVal(row.get("OPERATIONCOUNT")));
+            item.setEffectiveConsultationCount(longVal(row.get("EFFECTIVECONSULTATIONCOUNT")));
             item.setLastActiveTime(row.get("LASTACTIVETIME") != null ? String.valueOf(row.get("LASTACTIVETIME")) : null);
             item.setActiveStatus(item.getConsultationCount() > 0 ? "active" : "inactive");
             items.add(item);
@@ -150,6 +160,49 @@ public class UserActivityService {
         return new PageResponse<>(current, size, total, page);
     }
 
+    public byte[] exportExcel(UserActivityQueryDTO query) {
+        UserActivitySummaryVO summary = getSummary(query);
+        PageResponse<UserActivityItemVO> page = getUserList(query, 1, EXPORT_MAX_ROWS);
+        List<UserActivityItemVO> users = page.getRecords();
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            XSSFSheet summarySheet = workbook.createSheet("活跃度汇总");
+            writeHeader(summarySheet, headerStyle, "指标", "数值", "对比变化");
+            writeRow(summarySheet, 1, "活跃用户数", summary.getActiveUsers(), summary.getActiveUsersGrowth() + "%");
+            writeRow(summarySheet, 2, "不活跃用户数", summary.getInactiveUsers(), summary.getInactiveUsersGrowth());
+            writeRow(summarySheet, 3, "活跃率", summary.getActivityRate() + "%", summary.getActivityRateGrowth() + "%");
+            writeRow(summarySheet, 4, "有效问诊率", summary.getEffectiveConsultationRate() + "%", summary.getEffectiveConsultationRateGrowth() + "%");
+            autoSize(summarySheet, 3);
+
+            XSSFSheet userSheet = workbook.createSheet("用户明细");
+            writeHeader(userSheet, headerStyle, "医生姓名", "设备编码", "所属机构", "所属区域", "活跃状态", "问诊次数", "有效问诊数", "最后活跃时间");
+            for (int i = 0; i < users.size(); i++) {
+                UserActivityItemVO item = users.get(i);
+                writeRow(
+                    userSheet,
+                    i + 1,
+                    item.getNaDoctor(),
+                    item.getCdDevice(),
+                    item.getNaOrg(),
+                    item.getNaRegion(),
+                    "active".equals(item.getActiveStatus()) ? "活跃" : "不活跃",
+                    item.getConsultationCount(),
+                    item.getEffectiveConsultationCount(),
+                    item.getLastActiveTime()
+                );
+            }
+            autoSize(userSheet, 8);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw new BusinessException("导出Excel失败：" + ex.getMessage());
+        }
+    }
+
     private void normalizeDateRange(UserActivityQueryDTO query) {
         if (query.getDateFrom() != null && !query.getDateFrom().isEmpty()
             && query.getDateTo() != null && !query.getDateTo().isEmpty()) {
@@ -160,14 +213,22 @@ public class UserActivityService {
         DateTimeFormatter fmt = DateTimeFormatter.ISO_LOCAL_DATE;
         String range = query.getTimeRange();
 
-        if ("month".equals(range) || range == null || range.isEmpty()) {
+        if ("today".equals(range)) {
+            query.setDateFrom(now.format(fmt));
+            query.setDateTo(now.format(fmt));
+        } else if ("week".equals(range)) {
+            query.setDateFrom(now.minusDays(now.getDayOfWeek().getValue() - 1L).format(fmt));
+            query.setDateTo(now.format(fmt));
+        } else if ("month".equals(range) || range == null || range.isEmpty()) {
             query.setDateFrom(now.withDayOfMonth(1).format(fmt));
             query.setDateTo(now.format(fmt));
-        } else if ("lastMonth".equals(range)) {
-            LocalDate prevMonth = now.minusMonths(1);
-            query.setDateFrom(prevMonth.withDayOfMonth(1).format(fmt));
-            query.setDateFrom(prevMonth.withDayOfMonth(prevMonth.lengthOfMonth()).format(fmt));
-            query.setDateTo(prevMonth.withDayOfMonth(prevMonth.lengthOfMonth()).format(fmt));
+        } else if ("quarter".equals(range)) {
+            int quarterStartMonth = ((now.getMonthValue() - 1) / 3) * 3 + 1;
+            query.setDateFrom(LocalDate.of(now.getYear(), quarterStartMonth, 1).format(fmt));
+            query.setDateTo(now.format(fmt));
+        } else if ("year".equals(range)) {
+            query.setDateFrom(LocalDate.of(now.getYear(), 1, 1).format(fmt));
+            query.setDateTo(now.format(fmt));
         } else {
             query.setDateFrom(now.withDayOfMonth(1).format(fmt));
             query.setDateTo(now.format(fmt));
@@ -177,6 +238,7 @@ public class UserActivityService {
     private UserActivityQueryDTO buildPreviousPeriodQuery(UserActivityQueryDTO current) {
         UserActivityQueryDTO prev = new UserActivityQueryDTO();
         prev.setIdRegion(current.getIdRegion());
+        prev.setIdOrg(current.getIdOrg());
         prev.setActiveStatus(current.getActiveStatus());
 
         String fromStr = current.getDateFrom();
@@ -190,16 +252,31 @@ public class UserActivityService {
             DateTimeFormatter fmt = DateTimeFormatter.ISO_LOCAL_DATE;
 
             String range = current.getTimeRange();
-            if ("month".equals(range) || range == null || range.isEmpty()) {
+            if ("today".equals(range)) {
+                LocalDate yesterday = from.minusDays(1);
+                prev.setDateFrom(yesterday.format(fmt));
+                prev.setDateTo(yesterday.format(fmt));
+            } else if ("week".equals(range)) {
+                LocalDate prevWeekEnd = from.minusDays(1);
+                LocalDate prevWeekStart = prevWeekEnd.minusDays(6);
+                prev.setDateFrom(prevWeekStart.format(fmt));
+                prev.setDateTo(prevWeekEnd.format(fmt));
+            } else if ("month".equals(range) || range == null || range.isEmpty()) {
                 LocalDate prevMonthEnd = from.minusDays(1);
                 LocalDate prevMonthStart = prevMonthEnd.withDayOfMonth(1);
                 prev.setDateFrom(prevMonthStart.format(fmt));
                 prev.setDateTo(prevMonthEnd.format(fmt));
-            } else if ("lastMonth".equals(range)) {
-                LocalDate prevPrevEnd = from.minusDays(1);
-                LocalDate prevPrevStart = prevPrevEnd.withDayOfMonth(1);
-                prev.setDateFrom(prevPrevStart.format(fmt));
-                prev.setDateTo(prevPrevEnd.format(fmt));
+            } else if ("quarter".equals(range)) {
+                LocalDate prevQuarterEnd = from.minusDays(1);
+                int prevQuarterMonth = ((prevQuarterEnd.getMonthValue() - 1) / 3) * 3 + 1;
+                LocalDate prevQuarterStart = LocalDate.of(prevQuarterEnd.getYear(), prevQuarterMonth, 1);
+                prev.setDateFrom(prevQuarterStart.format(fmt));
+                prev.setDateTo(prevQuarterEnd.format(fmt));
+            } else if ("year".equals(range)) {
+                LocalDate prevYearEnd = from.minusDays(1);
+                LocalDate prevYearStart = LocalDate.of(prevYearEnd.getYear(), 1, 1);
+                prev.setDateFrom(prevYearStart.format(fmt));
+                prev.setDateTo(prevYearEnd.format(fmt));
             } else {
                 long span = ChronoUnit.DAYS.between(from, to);
                 LocalDate prevFrom = from.minusDays(span + 1);
@@ -240,14 +317,6 @@ public class UserActivityService {
         return new BigDecimal(value).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
-    private String formatDuration(double minutes) {
-        if (minutes < 60) {
-            return new BigDecimal(minutes).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " 分钟";
-        }
-        double hours = minutes / 60.0;
-        return new BigDecimal(hours).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " 小时";
-    }
-
     private String formatPercentGrowth(long current, long previous) {
         if (previous == 0) {
             return current > 0 ? "100" : "0";
@@ -266,15 +335,6 @@ public class UserActivityService {
         return new BigDecimal(diff).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
-    private String formatDurationDiffGrowth(double currentMinutes, double previousMinutes) {
-        double diff = currentMinutes - previousMinutes;
-        if (Math.abs(diff) < 60) {
-            return new BigDecimal(diff).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " 分钟";
-        }
-        double hours = diff / 60.0;
-        return new BigDecimal(hours).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " 小时";
-    }
-
     private String stringVal(Object obj) {
         return obj != null ? String.valueOf(obj) : null;
     }
@@ -284,5 +344,45 @@ public class UserActivityService {
             return ((Number) obj).longValue();
         }
         return 0L;
+    }
+
+    private static CellStyle createHeaderStyle(XSSFWorkbook workbook) {
+        CellStyle headerStyle = workbook.createCellStyle();
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerStyle.setFont(headerFont);
+        return headerStyle;
+    }
+
+    private static void writeHeader(XSSFSheet sheet, CellStyle headerStyle, String... headers) {
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            createCell(headerRow, i, headers[i], headerStyle);
+        }
+    }
+
+    private static void writeRow(XSSFSheet sheet, int rowIndex, Object... values) {
+        Row row = sheet.createRow(rowIndex);
+        for (int i = 0; i < values.length; i++) {
+            createCell(row, i, values[i], null);
+        }
+    }
+
+    private static void createCell(Row row, int columnIndex, Object value, CellStyle style) {
+        Cell cell = row.createCell(columnIndex);
+        if (value instanceof Number) {
+            cell.setCellValue(((Number) value).doubleValue());
+        } else {
+            cell.setCellValue(value != null ? String.valueOf(value) : "");
+        }
+        if (style != null) {
+            cell.setCellStyle(style);
+        }
+    }
+
+    private static void autoSize(XSSFSheet sheet, int columns) {
+        for (int i = 0; i < columns; i++) {
+            sheet.autoSizeColumn(i);
+        }
     }
 }

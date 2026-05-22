@@ -1,6 +1,6 @@
 # floating-ball-server API 说明
 
-> 更新日期：2026-05-11
+> 更新日期：2026-05-22
 > 范围：`floating-ball` 区域化模式下调用的远端 `/v1/*` 接口
 
 ## 1. 约束说明
@@ -26,6 +26,10 @@
 }
 ```
 
+错误响应仍使用同一结构，`code` 为非 `0`，`requestId` 必须随响应返回。`message` 面向医生或管理员展示，默认不得包含 Java 类名、SQL/Oracle 错误、堆栈、文件系统路径、上游原始响应体、token 或签名细节；需要排障时通过 `requestId` 在服务端日志、审计日志或安全拒绝日志中查找完整原因。客户端展示失败信息时应优先使用 `message`，并在存在 `requestId` 时附加“请求ID：xxx”作为排障线索。
+
+`timestamp` 始终表示服务端生成响应时的 epoch 毫秒时间，可作为桌面端校准签名时钟偏移的参考；客户端不得把本地时区换算结果写入签名，只能使用 epoch 毫秒。
+
 ## 2. 认证与签名
 
 ### 2.1 客户端接口
@@ -39,7 +43,7 @@
 | Header | 必填 | 说明 |
 | --- | --- | --- |
 | Authorization | 是 | `Bearer {deviceToken}` |
-| X-Timestamp | 是 | 毫秒时间戳，服务端默认允许 5 分钟时钟偏移 |
+| X-Timestamp | 是 | 毫秒时间戳，服务端默认允许 5 分钟时钟偏移；桌面端可使用响应体 `timestamp` 校准本机到服务端的签名时钟偏移 |
 | X-Nonce | 是 | 每次请求唯一随机数，服务端会拒绝重放 |
 | X-Signature | 是 | ECDSA P-256 / SHA-256 签名，base64 编码 |
 | X-Body-SHA256 | 有 body 时是 | 请求体 SHA-256 hex；服务端会用实际 body 重算并比对 |
@@ -61,6 +65,7 @@ BODY_SHA256
 3. `BODY_SHA256` 必须使用实际请求体字节计算；空 body 使用空字符串 SHA-256：`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
 4. 服务端不会信任客户端声明的 `X-Body-SHA256`，会用实际收到的 body 重算并参与验签。
 5. 签名失败返回 `SIG-401`；令牌缺失或无效返回 `AUTH-401`；客户端版本过低返回 `UPDATE-REQUIRED`。
+6. 客户端收到 `SIG-401` 且响应带 `timestamp` 时，应先用该服务端时间刷新本地签名偏移并重签重试一次；仍失败时再按设备令牌或密钥异常处理。
 
 ### 2.2 管理端接口
 
@@ -1126,6 +1131,20 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 }
 ```
 
+### 5.7.1 GET `/admin/api/analytics/export`
+
+用途：按当前统计分析筛选条件导出 Excel 文件，包含核心指标、趋势明细、机构分布和区域分布。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：同 5.5。
+
+响应：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+
+响应头：
+
+- `Content-Disposition: attachment; filename*=UTF-8''analytics-*.xlsx`
+
 ### 5.8 GET `/admin/api/analytics/function-modules`
 
 用途：返回所有辅诊功能展示名称列表，供辅诊功能应用统计页的功能多选下拉使用。该接口返回产品功能维度，不返回底层 AI 操作名或审计日志来源模块名。
@@ -1190,6 +1209,20 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 6. `doctorCount` 按事件中的医生 ID 优先统计；医生 ID 为空时回退设备 ID
 7. `trend` 仅包含排名前 5 的功能的逐日调用趋势
 8. `records` 为当前页数据，支持分页
+
+### 5.9.1 GET `/admin/api/analytics/function-usage/export`
+
+用途：按当前辅诊功能统计筛选条件导出 Excel 文件，包含汇总指标、功能排行明细和趋势数据。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：同 5.9；导出忽略分页参数，导出当前筛选条件下的完整排行与趋势。
+
+响应：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+
+响应头：
+
+- `Content-Disposition: attachment; filename*=UTF-8''function-usage-*.xlsx`
 
 ### 5.10 GET `/admin/api/users`
 
@@ -1586,12 +1619,23 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 - 请求体使用与桌面端 disease editor 基本一致的模板结构
 - `medicalMode` 仅支持 `western`、`tcm`
+- 成功后写入症状模板修改日志，`operationType=create`
 
 ### 5.49 PUT `/admin/api/symptom-templates/{id}`
 用途：修改症状模板。
 
+说明：
+
+- 成功后写入症状模板修改日志，`operationType=update`
+- 日志记录修改前后完整模板快照，并在 `diff` 中输出字段级 before/after
+
 ### 5.50 DELETE `/admin/api/symptom-templates/{id}`
 用途：逻辑删除症状模板。
+
+说明：
+
+- 成功后写入症状模板修改日志，`operationType=delete`
+- 日志保留删除前模板快照，`afterSnapshot` 为空
 
 ### 5.51 POST `/admin/api/symptom-templates/import-builtin`
 用途：将服务端内置 `template-seeds` 症状模板按指定作用域导入 `c_ai_symptom_template`。
@@ -1616,6 +1660,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "updatedCount": 0
 }
 ```
+
+说明：
+
+- 每条实际新增 / 覆盖更新的模板都会写入症状模板修改日志，`operationType=import_builtin`
 
 ### 5.52 POST `/admin/api/symptom-templates/import-json`
 用途：将桌面端已有症状模板 JSON 文件写入 `c_ai_symptom_template`，支持 `templates.json`、`tcm-templates.json` 以及后台导出的当前模式症状数组。
@@ -1645,6 +1693,55 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "medicalMode": "western",
   "createdCount": 12,
   "updatedCount": 3
+}
+```
+
+说明：
+
+- 每条实际新增 / 覆盖更新的模板都会写入症状模板修改日志，`operationType=import_json`
+
+### 5.52.1 GET `/admin/api/symptom-templates/change-logs`
+用途：分页查询症状模板修改日志，用于审计追踪“谁在什么时候改了什么”。
+
+请求参数：
+
+- `current`
+- `size`
+- `idTemplate`
+- `keyword`：匹配症状名称、症状 Key、操作者账号 / 姓名、变更摘要
+- `medicalMode`
+- `operationType`：`create` / `update` / `delete` / `import_builtin` / `import_json`
+- `operatorKeyword`
+- `dateFrom`
+- `dateTo`
+
+响应 `data.records[*]` 结构：
+
+```json
+{
+  "idLog": "uuid",
+  "idTemplate": "template-id",
+  "symptomKey": "fever",
+  "symptomName": "发热",
+  "medicalMode": "western",
+  "idRegion": null,
+  "idOrg": null,
+  "operationType": "update",
+  "operatorId": "USER001",
+  "operatorCode": "admin",
+  "operatorName": "系统管理员",
+  "changeSummary": "修改症状名称、状态",
+  "beforeSnapshot": {},
+  "afterSnapshot": {},
+  "diff": {
+    "name": {
+      "before": "发热",
+      "after": "发热待查"
+    }
+  },
+  "operationTime": "2026-05-22T10:30:00",
+  "createdAt": 1770000000000,
+  "updatedAt": 1770000000000
 }
 ```
 
@@ -1824,7 +1921,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `current`、`size`
 - `includeHistory`：是否包含历史修订，默认 `false`
 - `keyword`：跨 `comment / sourceModule / traceId / sessionId / na_org / na_doctor / na_dept` 模糊搜索
-- `score`、`sourceModule`、`kind`（`general | recommendation | record_field | session`）、`severity`（`low | medium | high`）
+- `scores`：评分多选过滤，逗号分隔，取值范围 `1-5`，例如 `1,3,5`；兼容旧版单值参数 `score`
+- `sourceModule`、`kind`（`general | recommendation | record_field | session`）、`severity`（`low | medium | high`）
 - `doctor`：医生模糊（先按 `id_doctor` 精确，再 `na_doctor` 模糊）
 - `dept`：科室模糊（同上）
 - `org`：机构模糊（按 `id_org` 精确 + `na_org` 模糊）
@@ -1865,6 +1963,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 1. `sourceModule` 仍保留原始编码；`displaySourceModule` 为服务端统一生成的中文展示字段，管理端列表与详情应优先展示该字段。
 2. `sourceModule` 查询兼容中文展示名和原始编码，两者都可命中同一批反馈记录。
+3. `tags` 仍保留桌面端提交的原始标签编码；管理端列表与详情按桌面端标签目录展示中文文案，未知历史标签回退展示原始值。
 
 ### 5.57 GET `/admin/api/feedbacks/{feedbackId}`
 用途：查看反馈详情。管理端将其拆分为「摘要」与「技术详情」两个 Tab，前者展示评分/说明/医生身份/标签/截图，后者展示 traceId/chainContext/sessionId 等技术字段，便于工程师排查。
@@ -1936,7 +2035,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.58 GET `/admin/api/user-activity/summary`
 
-用途：返回指定时间范围和区域下的用户活跃度汇总指标。
+用途：返回指定时间范围、区域和机构下的用户活跃度汇总指标。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -1947,7 +2046,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | dateFrom | string | 否 | 起始日期，yyyy-MM-dd |
 | dateTo | string | 否 | 截止日期，yyyy-MM-dd |
 | idRegion | string | 否 | 区域 ID，为空时统计全部 |
-| timeRange | string | 否 | 时间范围：month / lastMonth / custom |
+| idOrg | string | 否 | 机构 ID，为空时统计全部 |
+| timeRange | string | 否 | 时间范围：today / week / month / quarter / year / custom |
 
 响应 `data`：
 
@@ -1956,11 +2056,11 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "activeUsers": 128,
   "inactiveUsers": 16,
   "activityRate": "88.9",
-  "avgUsageDuration": "2.5 小时",
+  "effectiveConsultationRate": "73.5",
   "activeUsersGrowth": "8.3",
   "inactiveUsersGrowth": "1",
   "activityRateGrowth": "2.5",
-  "avgUsageDurationGrowth": "0.2 小时"
+  "effectiveConsultationRateGrowth": "5.2"
 }
 ```
 
@@ -1969,12 +2069,12 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `activeUsers`：所选时段内有问诊记录的设备数
 - `inactiveUsers`：所选时段内无问诊记录的设备数
 - `activityRate`：活跃率百分比，活跃用户数 / 总设备数 × 100
-- `avgUsageDuration`：活跃用户平均使用时长估算
+- `effectiveConsultationRate`：有效问诊率百分比，有效问诊数 / 总问诊数 × 100，其中 `status='completed'`（一键回写）计为有效问诊
 - `*Growth`：较上期增长率或变化量
 
 ### 5.59 GET `/admin/api/user-activity/region-tree`
 
-用途：返回区域层级树，每个节点包含该区域下的活跃用户数。
+用途：返回区域层级树，每个节点包含该区域下的活跃用户数。该接口保留用于兼容旧版区域树视图，当前管理端用户活跃度页面默认使用顶部区域/机构查询条件。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -2012,7 +2112,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.60 GET `/admin/api/user-activity/users`
 
-用途：返回用户活跃度明细列表，支持按活跃状态筛选和分页。
+用途：返回用户活跃度明细列表，支持按区域、机构、活跃状态筛选和分页。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -2023,6 +2123,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | dateFrom | string | 否 | 起始日期 |
 | dateTo | string | 否 | 截止日期 |
 | idRegion | string | 否 | 区域 ID |
+| idOrg | string | 否 | 机构 ID |
 | timeRange | string | 否 | 时间范围 |
 | activeStatus | string | 否 | 活跃状态筛选：active / inactive |
 | current | long | 否 | 页码，默认 1 |
@@ -2046,9 +2147,23 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
       "naRegion": "东城区",
       "activeStatus": "active",
       "consultationCount": 12,
-      "operationCount": 45,
+      "effectiveConsultationCount": 8,
       "lastActiveTime": "2026-05-15T10:30:00"
     }
   ]
 }
 ```
+
+### 5.60.1 GET `/admin/api/user-activity/export`
+
+用途：按当前用户活跃度筛选条件导出 Excel 文件，包含活跃度汇总指标和用户活跃明细。明细中的“有效问诊数”按 `status='completed'`（一键回写）统计，汇总中的“有效问诊率”按有效问诊数 / 总问诊数计算。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：同 5.60；导出忽略分页参数，默认最多导出 10000 条用户明细。
+
+响应：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+
+响应头：
+
+- `Content-Disposition: attachment; filename*=UTF-8''user-activity-*.xlsx`

@@ -160,8 +160,13 @@ public class FeedbackService {
                 .or().like("na_doctor", trimmed)
                 .or().like("na_dept", trimmed));
         }
-        if (query.getScore() != null) {
-            wrapper.eq("score", query.getScore());
+        List<Integer> scores = normalizeScores(query);
+        if (!scores.isEmpty()) {
+            if (scores.size() == 1) {
+                wrapper.eq("score", scores.get(0));
+            } else {
+                wrapper.in("score", scores);
+            }
         }
         if (StringUtils.hasText(query.getSourceModule())) {
             applySourceModuleFilter(wrapper, query.getSourceModule());
@@ -373,6 +378,20 @@ public class FeedbackService {
 
     private String asString(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    private List<Integer> normalizeScores(FeedbackListQuery query) {
+        if (query.getScores() != null && !query.getScores().isEmpty()) {
+            return query.getScores().stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(score -> score >= 1 && score <= 5)
+                .distinct()
+                .collect(Collectors.toList());
+        }
+        if (query.getScore() != null && query.getScore() >= 1 && query.getScore() <= 5) {
+            return Collections.singletonList(query.getScore());
+        }
+        return Collections.emptyList();
     }
 
     private AiFeedback findLatestFeedback(String deviceId, String scopeKey) {

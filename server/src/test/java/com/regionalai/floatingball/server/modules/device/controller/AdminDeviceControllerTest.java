@@ -23,6 +23,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -160,5 +162,35 @@ class AdminDeviceControllerTest {
             .andExpect(jsonPath("$.code").value("BIZ-001"))
             .andExpect(jsonPath("$.requestId").value("RID-device-error"))
             .andExpect(jsonPath("$.message").value("设备不存在"));
+    }
+
+    @Test
+    void businessExceptionShouldHideTechnicalDetails() throws Exception {
+        doThrow(new BusinessException("导出Excel失败：java.sql.SQLException: ORA-00942 table or view does not exist"))
+            .when(deviceService).invalidate("EXPORT-BROKEN");
+
+        mockMvc.perform(delete("/admin/api/devices/EXPORT-BROKEN")
+                .header("X-Request-Id", "RID-business-tech-error"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BIZ-001"))
+            .andExpect(jsonPath("$.requestId").value("RID-business-tech-error"))
+            .andExpect(jsonPath("$.message").value("导出Excel失败，请稍后重试；如持续出现，请联系管理员查看日志"))
+            .andExpect(jsonPath("$.message").value(not(containsString("SQLException"))))
+            .andExpect(jsonPath("$.message").value(not(containsString("ORA-00942"))));
+    }
+
+    @Test
+    void unexpectedExceptionShouldReturnFriendlyMessage() throws Exception {
+        doThrow(new RuntimeException("java.sql.SQLException: ORA-00942 table or view does not exist"))
+            .when(deviceService).invalidate("BROKEN");
+
+        mockMvc.perform(delete("/admin/api/devices/BROKEN")
+                .header("X-Request-Id", "RID-device-sys-error"))
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.code").value("SYS-500"))
+            .andExpect(jsonPath("$.requestId").value("RID-device-sys-error"))
+            .andExpect(jsonPath("$.message").value("后台服务处理失败，请稍后重试；如持续出现，请联系管理员并提供请求ID"))
+            .andExpect(jsonPath("$.message").value(not(containsString("SQLException"))))
+            .andExpect(jsonPath("$.message").value(not(containsString("ORA-00942"))));
     }
 }

@@ -8,6 +8,7 @@ public class UserActivityQueryDTO {
     private String dateFrom;
     private String dateTo;
     private String idRegion;
+    private String idOrg;
     private String timeRange;
     private String activeStatus;
 }

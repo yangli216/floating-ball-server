@@ -26,7 +26,10 @@ floating-ball:
       enabled: false
   cors:
     allowed-origins:
-      - ${FB_ADMIN_ORIGIN}
+      - ${FB_ADMIN_ORIGIN_LOCALHOST:http://localhost:5174}
+      - ${FB_ADMIN_ORIGIN_LOOPBACK:http://127.0.0.1:5174}
+      - ${FB_ADMIN_PREVIEW_ORIGIN_LOCALHOST:http://localhost:4173}
+      - ${FB_ADMIN_PREVIEW_ORIGIN_LOOPBACK:http://127.0.0.1:4173}
   ai:
     connect-timeout-ms: ${FB_AI_CONNECT_TIMEOUT_MS:30000}
     read-timeout-ms: ${FB_AI_READ_TIMEOUT_MS:120000}

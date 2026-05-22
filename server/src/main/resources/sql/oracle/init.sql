@@ -308,6 +308,55 @@ CREATE INDEX idx_c_ai_symptom_code ON c_ai_symptom_template (cd_symptom, sd_medi
 CREATE INDEX idx_c_ai_symptom_sort ON c_ai_symptom_template (sd_medical_mode, sort_order, fg_active);
 
 
+CREATE TABLE c_ai_symptom_template_change_log (
+    id_log                  VARCHAR2(32) PRIMARY KEY,
+    id_template             VARCHAR2(32),
+    cd_symptom              VARCHAR2(128),
+    na_symptom              VARCHAR2(200),
+    sd_medical_mode         VARCHAR2(16),
+    id_org                  VARCHAR2(32),
+    id_region               VARCHAR2(32),
+    operation_type          VARCHAR2(32) NOT NULL,
+    id_operator             VARCHAR2(32),
+    cd_operator             VARCHAR2(64),
+    na_operator             VARCHAR2(128),
+    change_summary          VARCHAR2(1000),
+    before_json             CLOB,
+    after_json              CLOB,
+    diff_json               CLOB,
+    operation_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fg_active               CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_symptom_template_change_log IS '症状模板修改日志表';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.id_log IS '修改日志主键ID';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.id_template IS '症状模板ID';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.cd_symptom IS '症状Key/编码';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.na_symptom IS '症状名称';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.sd_medical_mode IS '医学模式（western/tcm）';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.id_org IS '机构级作用范围ID';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.id_region IS '区域级作用范围ID';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.operation_type IS '操作类型（create/update/delete/import_builtin/import_json）';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.id_operator IS '操作者用户ID';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.cd_operator IS '操作者账号';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.na_operator IS '操作者姓名';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.change_summary IS '变更摘要';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.before_json IS '变更前模板快照';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.after_json IS '变更后模板快照';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.diff_json IS '字段级差异JSON';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.operation_time IS '操作时间';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_symptom_template_change_log.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_symptom_log_template ON c_ai_symptom_template_change_log (id_template, operation_time, fg_active);
+CREATE INDEX idx_c_ai_symptom_log_operator ON c_ai_symptom_template_change_log (id_operator, operation_time, fg_active);
+CREATE INDEX idx_c_ai_symptom_log_action ON c_ai_symptom_template_change_log (operation_type, operation_time, fg_active);
+CREATE INDEX idx_c_ai_symptom_log_scope ON c_ai_symptom_template_change_log (sd_medical_mode, id_org, id_region, fg_active);
+
+
 CREATE TABLE c_ai_op_log (
     id_log               VARCHAR2(32) PRIMARY KEY,
     id_device            VARCHAR2(32),

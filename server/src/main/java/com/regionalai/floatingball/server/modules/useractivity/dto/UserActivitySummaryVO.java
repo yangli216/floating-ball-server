@@ -8,10 +8,10 @@ public class UserActivitySummaryVO {
     private long activeUsers;
     private long inactiveUsers;
     private String activityRate;
-    private String avgUsageDuration;
+    private String effectiveConsultationRate;
 
     private String activeUsersGrowth;
     private String inactiveUsersGrowth;
     private String activityRateGrowth;
-    private String avgUsageDurationGrowth;
+    private String effectiveConsultationRateGrowth;
 }

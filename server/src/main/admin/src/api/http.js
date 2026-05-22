@@ -1,11 +1,57 @@
 import axios from 'axios'
 import { clearAdminAuth, getAdminToken } from '../utils/auth'
 
-function resolveErrorMessage(error) {
-  if (error && error.response && error.response.data && error.response.data.message) {
-    return error.response.data.message
+function withRequestId(message, requestId) {
+  return requestId ? `${message}（请求ID：${requestId}）` : message
+}
+
+function normalizeTechnicalMessage(message, fallback) {
+  const text = String(message || '').trim()
+  const lower = text.toLowerCase()
+
+  if (!text || text === 'undefined' || text === 'null') {
+    return fallback
   }
-  return (error && error.message) || '请求失败'
+  if (text === 'Network Error' || lower.includes('network error') || lower.includes('failed to fetch')) {
+    return '无法连接后台服务，请检查服务是否启动、网络或代理配置。'
+  }
+  if (lower.includes('timeout') || lower.includes('exceeded')) {
+    return '请求超时，请稍后重试；如持续出现，请检查后台服务负载。'
+  }
+  if (text === 'Internal Server Error' || lower.includes('internal server error')) {
+    return '后台服务处理失败，请稍后重试；如持续出现，请联系管理员查看日志。'
+  }
+  if (/ORA-\d{5}/i.test(text) || /(^|\s)(java|org|com)\.[\w.]+/.test(text) || lower.includes('sqlexception') || lower.includes('nullpointerexception')) {
+    return '后台服务处理失败，请稍后重试；如持续出现，请联系管理员查看日志。'
+  }
+  return text
+}
+
+function resolveErrorMessage(error) {
+  const response = error && error.response
+  const body = response && response.data
+  const requestId = body && body.requestId
+  const status = response && response.status
+
+  if (body && body.message) {
+    return withRequestId(
+      normalizeTechnicalMessage(body.message, status >= 500 ? '后台服务处理失败，请稍后重试。' : '请求失败'),
+      requestId
+    )
+  }
+  if (status === 401) {
+    return withRequestId('登录已失效，请重新登录', requestId)
+  }
+  if (status === 403) {
+    return withRequestId('当前账号没有权限执行该操作，请联系管理员确认授权范围。', requestId)
+  }
+  if (status === 404) {
+    return withRequestId('请求的管理接口不存在，请确认前后端版本是否匹配。', requestId)
+  }
+  if (status >= 500) {
+    return withRequestId('后台服务处理失败，请稍后重试；如持续出现，请联系管理员查看日志。', requestId)
+  }
+  return normalizeTechnicalMessage(error && error.message, '请求失败')
 }
 
 function isUnauthorizedCode(code) {
@@ -58,7 +104,10 @@ http.interceptors.response.use(
       if (isUnauthorizedCode(body.code)) {
         return handleUnauthorized(body.message)
       }
-      return Promise.reject(new Error(body.message || '请求失败'))
+      return Promise.reject(new Error(withRequestId(
+        normalizeTechnicalMessage(body.message, '请求失败'),
+        body.requestId
+      )))
     }
 
     return response.data

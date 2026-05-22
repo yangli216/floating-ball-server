@@ -16,6 +16,7 @@ import com.regionalai.floatingball.server.modules.symptom.dto.JsonSymptomImportR
 import com.regionalai.floatingball.server.modules.symptom.dto.SymptomTemplateVO;
 import com.regionalai.floatingball.server.modules.symptom.entity.AiSymptomTemplate;
 import com.regionalai.floatingball.server.modules.symptom.mapper.AiSymptomTemplateMapper;
+import com.regionalai.floatingball.server.security.AdminContextHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -67,15 +68,18 @@ public class SymptomTemplateService {
     private final ObjectMapper objectMapper;
     private final BuiltinTemplateSeedService builtinTemplateSeedService;
     private final DataPackageService dataPackageService;
+    private final SymptomTemplateChangeLogService changeLogService;
 
     public SymptomTemplateService(AiSymptomTemplateMapper aiSymptomTemplateMapper,
                                   ObjectMapper objectMapper,
                                   BuiltinTemplateSeedService builtinTemplateSeedService,
-                                  DataPackageService dataPackageService) {
+                                  DataPackageService dataPackageService,
+                                  SymptomTemplateChangeLogService changeLogService) {
         this.aiSymptomTemplateMapper = aiSymptomTemplateMapper;
         this.objectMapper = objectMapper;
         this.builtinTemplateSeedService = builtinTemplateSeedService;
         this.dataPackageService = dataPackageService;
+        this.changeLogService = changeLogService;
     }
 
     public PageResponse<SymptomTemplateVO> list(long current,
@@ -126,25 +130,32 @@ public class SymptomTemplateService {
         mergeRequest(entity, request, null);
         entity.setFgActive(ACTIVE_ENABLED);
         aiSymptomTemplateMapper.insert(entity);
+        SymptomTemplateVO saved = toView(entity);
+        recordChange(SymptomTemplateChangeLogService.OPERATION_CREATE, null, saved);
         log.info("symptom template saved. idTemplate={}, mode={}", entity.getIdTemplate(), entity.getSdMedicalMode());
-        return toView(aiSymptomTemplateMapper.selectById(entity.getIdTemplate()));
+        return saved;
     }
 
     @Transactional
     public SymptomTemplateVO update(String idTemplate, SymptomTemplateVO request) {
         AiSymptomTemplate existing = requireActiveTemplate(idTemplate);
+        SymptomTemplateVO before = toView(existing);
         validateRequest(request, idTemplate);
         mergeRequest(existing, request, existing);
         aiSymptomTemplateMapper.updateById(existing);
+        SymptomTemplateVO after = toView(existing);
+        recordChange(SymptomTemplateChangeLogService.OPERATION_UPDATE, before, after);
         log.info("symptom template updated. idTemplate={}", idTemplate);
-        return toView(aiSymptomTemplateMapper.selectById(idTemplate));
+        return after;
     }
 
     @Transactional
     public void invalidate(String idTemplate) {
         AiSymptomTemplate existing = requireActiveTemplate(idTemplate);
+        SymptomTemplateVO before = toView(existing);
         existing.setFgActive(ACTIVE_DISABLED);
         aiSymptomTemplateMapper.updateById(existing);
+        recordChange(SymptomTemplateChangeLogService.OPERATION_DELETE, before, null);
         log.info("symptom template invalidated. idTemplate={}", idTemplate);
     }
 
@@ -165,7 +176,8 @@ public class SymptomTemplateService {
         for (Object raw : source) {
             templates.add(objectMapper.convertValue(raw, SymptomTemplateVO.class));
         }
-        return importTemplates(templates, medicalMode, idOrg, idRegion, overwriteExisting);
+        return importTemplates(templates, medicalMode, idOrg, idRegion, overwriteExisting,
+            SymptomTemplateChangeLogService.OPERATION_IMPORT_BUILTIN);
     }
 
     @Transactional
@@ -179,7 +191,8 @@ public class SymptomTemplateService {
         String idRegion = trimToNull(request.getIdRegion());
         boolean overwriteExisting = request.getOverwriteExisting() == null || request.getOverwriteExisting().booleanValue();
         List<SymptomTemplateVO> templates = parseImportTemplates(request.getContentJson(), medicalMode);
-        return importTemplates(templates, medicalMode, idOrg, idRegion, overwriteExisting);
+        return importTemplates(templates, medicalMode, idOrg, idRegion, overwriteExisting,
+            SymptomTemplateChangeLogService.OPERATION_IMPORT_JSON);
     }
 
     public TemplateDeltaVO getClientDelta(String orgId, String regionId, String version) {
@@ -233,7 +246,8 @@ public class SymptomTemplateService {
                                                          String medicalMode,
                                                          String idOrg,
                                                          String idRegion,
-                                                         boolean overwriteExisting) {
+                                                         boolean overwriteExisting,
+                                                         String operationType) {
         if (source == null || source.isEmpty()) {
             throw new BusinessException("未读取到症状模板");
         }
@@ -250,10 +264,13 @@ public class SymptomTemplateService {
                 if (!overwriteExisting) {
                     continue;
                 }
+                SymptomTemplateVO before = toView(existing);
                 mergeRequest(existing, requestVo, existing);
                 existing.setFgActive(ACTIVE_ENABLED);
                 existing.setSdStatus(STATUS_ENABLED);
                 aiSymptomTemplateMapper.updateById(existing);
+                SymptomTemplateVO after = toView(existing);
+                recordChange(operationType, before, after);
                 updatedCount++;
                 continue;
             }
@@ -262,9 +279,15 @@ public class SymptomTemplateService {
             mergeRequest(entity, requestVo, null);
             entity.setFgActive(ACTIVE_ENABLED);
             aiSymptomTemplateMapper.insert(entity);
+            SymptomTemplateVO after = toView(entity);
+            recordChange(operationType, null, after);
             createdCount++;
         }
         return new BuiltinSymptomImportResultVO(medicalMode, createdCount, updatedCount);
+    }
+
+    private void recordChange(String operationType, SymptomTemplateVO before, SymptomTemplateVO after) {
+        changeLogService.record(operationType, before, after, AdminContextHolder.get());
     }
 
     private SymptomTemplateVO prepareImportRequest(SymptomTemplateVO source,

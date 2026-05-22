@@ -2,6 +2,8 @@ package com.regionalai.floatingball.server.modules.feedback.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class FeedbackListQuery {
     private long current = 1;
@@ -9,6 +11,7 @@ public class FeedbackListQuery {
     private Boolean includeHistory;
     private String keyword;
     private Integer score;
+    private List<Integer> scores;
     private String sourceModule;
     private String kind;
     private String severity;

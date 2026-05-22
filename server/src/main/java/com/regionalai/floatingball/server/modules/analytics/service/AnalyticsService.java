@@ -12,10 +12,19 @@ import com.regionalai.floatingball.server.modules.analytics.dto.RegionDistributi
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -181,6 +190,58 @@ public class AnalyticsService {
         vo.setRegionDistribution(regionDist);
         vo.setTotalService(totalService > 0 ? totalService : regionTotal);
         return vo;
+    }
+
+    public byte[] exportAnalyticsExcel(AnalyticsQueryDTO query) {
+        AnalyticsSummaryVO summary = getSummary(query);
+        TrendDataVO trend = getTrend(query);
+        DistributionDataVO distribution = getDistribution(query);
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            XSSFSheet summarySheet = workbook.createSheet("核心指标");
+            writeHeader(summarySheet, headerStyle, "指标", "数值", "对比变化");
+            writeRow(summarySheet, 1, "功能调用总量", summary.getAiServiceTotal(), summary.getAiServiceGrowth() + "%");
+            writeRow(summarySheet, 2, "日均功能调用量", summary.getAvgDailyAiService(), summary.getAvgDailyGrowth() + "%");
+            writeRow(summarySheet, 3, "AI诊断建议采纳率", summary.getAiAdoptionRate() + "%", summary.getAdoptionRateGrowth() + "%");
+            writeRow(summarySheet, 4, "诊断符合率", summary.getDiagnosisMatchRate() + "%", summary.getMatchRateGrowth() + "%");
+            writeRow(summarySheet, 5, "活跃医生数", summary.getActiveDoctorCount(), summary.getActiveDoctorGrowth());
+            writeRow(summarySheet, 6, "问诊总数", summary.getConsultationTotal(), summary.getConsultationGrowth() + "%");
+            autoSize(summarySheet, 3);
+
+            XSSFSheet trendSheet = workbook.createSheet("趋势明细");
+            writeHeader(trendSheet, headerStyle, "日期", "功能调用量", "问诊量");
+            List<String> days = trend.getDays() != null ? trend.getDays() : new ArrayList<String>();
+            List<Long> aiValues = trend.getAiServiceValues() != null ? trend.getAiServiceValues() : new ArrayList<Long>();
+            List<Long> consultationValues = trend.getConsultationValues() != null ? trend.getConsultationValues() : new ArrayList<Long>();
+            for (int i = 0; i < days.size(); i++) {
+                writeRow(trendSheet, i + 1, days.get(i), valueAt(aiValues, i), valueAt(consultationValues, i));
+            }
+            autoSize(trendSheet, 3);
+
+            XSSFSheet orgSheet = workbook.createSheet("机构分布");
+            writeHeader(orgSheet, headerStyle, "机构", "功能调用量");
+            List<DistributionItemVO> orgItems = distribution.getOrgDistribution() != null ? distribution.getOrgDistribution() : new ArrayList<DistributionItemVO>();
+            for (int i = 0; i < orgItems.size(); i++) {
+                DistributionItemVO item = orgItems.get(i);
+                writeRow(orgSheet, i + 1, item.getName(), safeLong(item.getValue()));
+            }
+            autoSize(orgSheet, 2);
+
+            XSSFSheet regionSheet = workbook.createSheet("区域分布");
+            writeHeader(regionSheet, headerStyle, "区域", "功能调用量", "占比");
+            List<RegionDistributionItemVO> regionItems = distribution.getRegionDistribution() != null ? distribution.getRegionDistribution() : new ArrayList<RegionDistributionItemVO>();
+            for (int i = 0; i < regionItems.size(); i++) {
+                RegionDistributionItemVO item = regionItems.get(i);
+                writeRow(regionSheet, i + 1, item.getName(), safeLong(item.getValue()), item.getPercentage() + "%");
+            }
+            autoSize(regionSheet, 3);
+
+            return writeWorkbook(workbook);
+        } catch (IOException ex) {
+            throw new BusinessException("导出Excel失败：" + ex.getMessage());
+        }
     }
 
     private long computeDays(AnalyticsQueryDTO query) {
@@ -376,6 +437,66 @@ public class AnalyticsService {
         return vo;
     }
 
+    public byte[] exportFunctionUsageExcel(FunctionUsageQueryDTO query) {
+        FunctionUsageQueryDTO exportQuery = normalizeFunctionUsageQuery(query);
+        exportQuery.setCurrent(1);
+        exportQuery.setSize(Integer.MAX_VALUE);
+        FunctionUsageResponseVO usage = getFunctionUsage(exportQuery);
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            XSSFSheet summarySheet = workbook.createSheet("汇总指标");
+            writeHeader(summarySheet, headerStyle, "指标", "数值");
+            writeRow(summarySheet, 1, "总调用次数", usage.getTotalCallCount());
+            writeRow(summarySheet, 2, "平均每日调用", usage.getAvgDailyCalls());
+            writeRow(summarySheet, 3, "功能使用率", usage.getUsageRate());
+            autoSize(summarySheet, 2);
+
+            XSSFSheet rankingSheet = workbook.createSheet("功能排行");
+            writeHeader(rankingSheet, headerStyle, "功能模块", "调用次数", "使用医生数", "人均调用", "增长率(%)");
+            List<FunctionUsageItemVO> ranking = usage.getRanking() != null ? usage.getRanking() : new ArrayList<FunctionUsageItemVO>();
+            for (int i = 0; i < ranking.size(); i++) {
+                FunctionUsageItemVO item = ranking.get(i);
+                writeRow(
+                    rankingSheet,
+                    i + 1,
+                    item.getModuleName(),
+                    item.getCallCount(),
+                    item.getDoctorCount(),
+                    item.getAvgPerDoctor(),
+                    item.getGrowthRate()
+                );
+            }
+            autoSize(rankingSheet, 5);
+
+            XSSFSheet trendSheet = workbook.createSheet("趋势明细");
+            FunctionUsageTrendVO trend = usage.getTrend();
+            List<String> modules = trend != null && trend.getModules() != null ? trend.getModules() : new ArrayList<String>();
+            List<String> days = trend != null && trend.getDays() != null ? trend.getDays() : new ArrayList<String>();
+            List<List<Long>> values = trend != null && trend.getValues() != null ? trend.getValues() : new ArrayList<List<Long>>();
+
+            Row header = trendSheet.createRow(0);
+            createCell(header, 0, "日期", headerStyle);
+            for (int i = 0; i < modules.size(); i++) {
+                createCell(header, i + 1, modules.get(i), headerStyle);
+            }
+            for (int i = 0; i < days.size(); i++) {
+                Row row = trendSheet.createRow(i + 1);
+                createCell(row, 0, days.get(i), null);
+                for (int m = 0; m < modules.size(); m++) {
+                    List<Long> moduleValues = m < values.size() ? values.get(m) : new ArrayList<Long>();
+                    createCell(row, m + 1, valueAt(moduleValues, i), null);
+                }
+            }
+            autoSize(trendSheet, modules.size() + 1);
+
+            return writeWorkbook(workbook);
+        } catch (IOException ex) {
+            throw new BusinessException("导出Excel失败：" + ex.getMessage());
+        }
+    }
+
     private long computeDaysFromFunctionQuery(FunctionUsageQueryDTO query) {
         String fromStr = query.getDateFrom();
         String toStr = query.getDateTo();
@@ -562,5 +683,62 @@ public class AnalyticsService {
             return null;
         }
         return text.toLowerCase(Locale.ROOT).replace(" ", "").replace("_", "").replace("-", "");
+    }
+
+    private static CellStyle createHeaderStyle(XSSFWorkbook workbook) {
+        CellStyle headerStyle = workbook.createCellStyle();
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerStyle.setFont(headerFont);
+        return headerStyle;
+    }
+
+    private static void writeHeader(XSSFSheet sheet, CellStyle headerStyle, String... headers) {
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            createCell(headerRow, i, headers[i], headerStyle);
+        }
+    }
+
+    private static void writeRow(XSSFSheet sheet, int rowIndex, Object... values) {
+        Row row = sheet.createRow(rowIndex);
+        for (int i = 0; i < values.length; i++) {
+            createCell(row, i, values[i], null);
+        }
+    }
+
+    private static void createCell(Row row, int columnIndex, Object value, CellStyle style) {
+        Cell cell = row.createCell(columnIndex);
+        if (value instanceof Number) {
+            cell.setCellValue(((Number) value).doubleValue());
+        } else {
+            cell.setCellValue(value != null ? String.valueOf(value) : "");
+        }
+        if (style != null) {
+            cell.setCellStyle(style);
+        }
+    }
+
+    private static void autoSize(XSSFSheet sheet, int columns) {
+        for (int i = 0; i < columns; i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+
+    private static long valueAt(List<Long> values, int index) {
+        if (values == null || index < 0 || index >= values.size() || values.get(index) == null) {
+            return 0L;
+        }
+        return values.get(index);
+    }
+
+    private static long safeLong(Long value) {
+        return value != null ? value : 0L;
+    }
+
+    private static byte[] writeWorkbook(XSSFWorkbook workbook) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        workbook.write(out);
+        return out.toByteArray();
     }
 }

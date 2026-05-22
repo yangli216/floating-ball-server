@@ -8,12 +8,19 @@ import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityI
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityQueryDTO;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivitySummaryVO;
 import com.regionalai.floatingball.server.modules.useractivity.service.UserActivityService;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -42,5 +49,20 @@ public class AdminUserActivityController {
                                                                @RequestParam(defaultValue = "10") long size,
                                                                HttpServletRequest request) {
         return ApiResponse.success(userActivityService.getUserList(query, current, size), RequestIdUtils.resolve(request));
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<Resource> export(UserActivityQueryDTO query) {
+        byte[] data = userActivityService.exportExcel(query);
+        String fileName = "user-activity-" + System.currentTimeMillis() + ".xlsx";
+        ByteArrayResource resource = new ByteArrayResource(data);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                .filename(fileName, StandardCharsets.UTF_8)
+                .build()
+                .toString())
+            .contentLength(data.length)
+            .body(resource);
     }
 }

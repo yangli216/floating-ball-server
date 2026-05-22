@@ -61,7 +61,7 @@
         </div>
       </div>
       <div class="export-bar">
-        <el-button size="small" icon="el-icon-download" @click="exportData">导出数据</el-button>
+        <el-button size="small" icon="el-icon-download" :loading="exporting" @click="exportData">导出数据</el-button>
       </div>
     </div>
 
@@ -160,6 +160,7 @@ export default {
       distribution: { orgDistribution: [], regionDistribution: [], totalService: 0 },
       regionOptions: [],
       orgOptions: [],
+      exporting: false,
       trendMetric: 'ai',
       trendChart: null,
       orgChart: null,
@@ -332,8 +333,29 @@ export default {
       this.initDateRange()
       this.search()
     },
-    exportData() {
-      this.$message.info('导出功能开发中')
+    async exportData() {
+      this.exporting = true
+      try {
+        const params = { ...this.query, timeRange: this.timeRange }
+        if (!params.idRegion) delete params.idRegion
+        if (!params.idOrg) delete params.idOrg
+        const blob = await http.get('/admin/api/analytics/export', { params, responseType: 'blob' })
+        this.downloadBlob(blob, '统计分析_' + new Date().toISOString().slice(0, 10) + '.xlsx')
+      } catch (error) {
+        this.$message.error((error && error.message) || '导出失败')
+      } finally {
+        this.exporting = false
+      }
+    },
+    downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     },
     disposeCharts() {
       if (this.trendChart) { this.trendChart.dispose(); this.trendChart = null }

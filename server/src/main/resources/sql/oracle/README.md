@@ -105,10 +105,11 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 
 说明：
 
-1. 该脚本会补建 `c_ai_symptom_template` 及相关索引
+1. 该脚本会补建 `c_ai_symptom_template`、`c_ai_symptom_template_change_log` 及相关索引
 2. `c_ai_symptom_template` 采用“一条症状一条记录”的结构，承接桌面端 disease editor 的后台化改造
 3. 模板的复杂字段（`config`、`applicablePopulation`、`tcmMetadata`、系统分类/部位数组）会以 JSON 片段方式存入表字段
-4. 表结构创建完成后，可在管理端“症状模板”页面使用“导入内置模板”把 `template-seeds` 的西医/中医基线导入指定作用域
+4. `c_ai_symptom_template_change_log` 记录症状模板新增、修改、删除、内置导入和 JSON 导入的操作者、时间、前后快照和字段级差异
+5. 表结构创建完成后，可在管理端“症状模板”页面使用“导入内置模板”把 `template-seeds` 的西医/中医基线导入指定作用域
 
 ## 语音代理日志录音路径升级
 

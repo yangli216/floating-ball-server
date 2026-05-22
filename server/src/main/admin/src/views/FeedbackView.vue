@@ -12,7 +12,14 @@
         <el-select v-model="filters.kind" clearable placeholder="反馈类型" class="filter-select">
           <el-option v-for="item in KIND_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="filters.score" clearable placeholder="评分" class="filter-select">
+        <el-select
+          v-model="filters.scores"
+          multiple
+          clearable
+          collapse-tags
+          placeholder="评分"
+          class="filter-select"
+        >
           <el-option v-for="value in scoreOptions" :key="value" :label="`${value} 分`" :value="value" />
         </el-select>
         <el-input v-model.trim="filters.doctor" clearable placeholder="医生" class="filter-narrow" />
@@ -90,7 +97,7 @@
             size="mini"
             class="tag-chip"
             type="info"
-          >{{ tag }}</el-tag>
+          >{{ feedbackTagLabel(tag) }}</el-tag>
           <span v-if="!row.tags || !row.tags.length" class="text-muted">--</span>
         </template>
       </el-table-column>
@@ -191,7 +198,7 @@
             </div>
             <div class="tag-row" v-if="detailData.feedback.tags && detailData.feedback.tags.length">
               <span class="tag-row__label">问题标签：</span>
-              <el-tag v-for="tag in detailData.feedback.tags" :key="tag" size="small" type="warning" class="tag-chip">{{ tag }}</el-tag>
+              <el-tag v-for="tag in detailData.feedback.tags" :key="tag" size="small" type="warning" class="tag-chip">{{ feedbackTagLabel(tag) }}</el-tag>
             </div>
           </div>
 
@@ -357,6 +364,29 @@ const SEVERITY_OPTIONS = [
   { value: 'high', label: '严重' }
 ]
 
+const FEEDBACK_TAG_LABELS = {
+  recommendation_quality: '推荐质量',
+  data_accuracy: '数据准确性',
+  workflow: '操作流程',
+  stability: '系统稳定性',
+  ui: '界面体验',
+  other: '其他',
+  irrelevant: '推荐不贴合当前病情',
+  unsafe: '存在安全或禁忌风险',
+  missing_context: '忽略了关键病史或上下文',
+  catalog_mismatch: '标准库匹配不准确',
+  writeback_unusable: '不便直接回写到 HIS',
+  diagnosis_quality: '诊断建议质量一般',
+  treatment_quality: '治疗建议质量一般',
+  missing_information: '结果缺失关键信息',
+  too_much_noise: '输出噪音较多',
+  workflow_friction: '操作流程不顺手',
+  inaccurate_expression: '表述不够准确',
+  timeline_conflict: '病程时序不清晰',
+  history_confusion: '病史归类不准确',
+  unsupported_inference: '存在不可靠推断'
+}
+
 const SOURCE_MODULE_OPTIONS = Object.entries(MODULE_LABELS).map(([value, label]) => ({ value, label }))
 
 function createDefaultFilters() {
@@ -364,7 +394,7 @@ function createDefaultFilters() {
     keyword: '',
     kind: '',
     severity: '',
-    score: '',
+    scores: [],
     doctor: '',
     dept: '',
     org: '',
@@ -426,7 +456,7 @@ export default {
           keyword: this.filters.keyword || undefined,
           kind: this.filters.kind || undefined,
           severity: this.filters.severity || undefined,
-          score: this.filters.score || undefined,
+          scores: this.buildScoreParam(),
           doctor: this.filters.doctor || undefined,
           dept: this.filters.dept || undefined,
           org: this.filters.org || undefined,
@@ -458,6 +488,11 @@ export default {
       this.filters = createDefaultFilters()
       this.current = 1
       this.loadData()
+    },
+    buildScoreParam() {
+      const scores = Array.isArray(this.filters.scores) ? this.filters.scores : []
+      if (!scores.length) return undefined
+      return scores.join(',')
     },
     async openDetail(row) {
       this.detailLoading = true
@@ -514,6 +549,11 @@ export default {
     severityLabel(value) {
       const found = SEVERITY_OPTIONS.find(item => item.value === value)
       return found ? found.label : (value || '一般')
+    },
+    feedbackTagLabel(value) {
+      const text = this.normalizeText(value)
+      if (!text) return '--'
+      return FEEDBACK_TAG_LABELS[text] || text
     },
     targetTypeLabel(value) {
       switch (value) {

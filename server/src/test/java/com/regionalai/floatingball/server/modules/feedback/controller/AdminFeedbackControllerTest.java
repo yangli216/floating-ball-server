@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,6 +59,7 @@ class AdminFeedbackControllerTest {
         mockMvc.perform(get("/admin/api/feedbacks")
                 .param("current", "0")
                 .param("size", "-1")
+                .param("scores", "1,3,5")
                 .param("sourceModule", "语音问诊")
                 .param("includeHistory", "true")
                 .header("X-Request-Id", "RID-feedback-list"))
@@ -74,6 +76,7 @@ class AdminFeedbackControllerTest {
         verify(feedbackService).list(queryCaptor.capture());
         assertEquals(1, queryCaptor.getValue().getCurrent());
         assertEquals(10, queryCaptor.getValue().getSize());
+        assertEquals(Arrays.asList(1, 3, 5), queryCaptor.getValue().getScores());
         assertEquals("语音问诊", queryCaptor.getValue().getSourceModule());
         assertEquals(Boolean.TRUE, queryCaptor.getValue().getIncludeHistory());
     }

@@ -20,6 +20,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -68,6 +69,11 @@ class DeviceAuthFilterTest {
         filter.doFilter(request, response, new MockFilterChain());
 
         assertEquals(401, response.getStatus());
+        assertEquals(
+            "请求签名验证失败，请重新连接后台；如仍失败，请联系管理员重新注册设备",
+            new ObjectMapper().readTree(response.getContentAsString()).get("message").asText()
+        );
+        assertFalse(response.getContentAsString().contains("摘要不匹配"));
         verify(rejectionLogService).logRejection(any());
     }
 

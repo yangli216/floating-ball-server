@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.ApiResponse;
+import com.regionalai.floatingball.server.common.util.RequestIdUtils;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
@@ -263,9 +264,12 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        String requestId = request.getHeader("X-Request-Id");
         response.getWriter().write(objectMapper.writeValueAsString(
-            ApiResponse.error("SIG-401", "请求签名验证失败: " + message, requestId == null ? "N/A" : requestId)
+            ApiResponse.error(
+                "SIG-401",
+                "请求签名验证失败，请重新连接后台；如仍失败，请联系管理员重新注册设备",
+                RequestIdUtils.resolve(request)
+            )
         ));
     }
 

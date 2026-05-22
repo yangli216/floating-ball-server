@@ -16,6 +16,6 @@ public class UserActivityItemVO {
     private String naDoctor;
     private String activeStatus;
     private long consultationCount;
-    private long operationCount;
+    private long effectiveConsultationCount;
     private String lastActiveTime;
 }
