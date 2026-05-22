@@ -1,9 +1,7 @@
 package com.regionalai.floatingball.server.modules.datapackage.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
-import com.regionalai.floatingball.server.modules.datapackage.entity.AiDataPackage;
 import com.regionalai.floatingball.server.modules.datapackage.mapper.AiDataPackageMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,11 +9,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collections;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DataPackageServiceTest {
@@ -33,6 +32,8 @@ class DataPackageServiceTest {
 
     @Test
     void getTemplateDeltaShouldFallbackToBuiltinTemplatesWhenNoPublishedPackage() {
+        when(aiDataPackageMapper.selectList(any())).thenReturn(Collections.emptyList());
+
         TemplateDeltaVO delta = dataPackageService.getTemplateDelta("ORG001", "REG001", "0");
 
         assertFalse(delta.getWestern().isEmpty());
@@ -41,36 +42,10 @@ class DataPackageServiceTest {
 
     @Test
     void latestVisibleVersionShouldUseBuiltinTemplateVersionWhenNoPublishedPackage() {
+        when(aiDataPackageMapper.selectList(any())).thenReturn(Collections.emptyList());
+
         String version = dataPackageService.latestVisibleVersion("template", "ORG001", "REG001");
 
-        assertEquals(dataPackageService.getBuiltinTemplateSnapshot().getVersion(), version);
-    }
-
-    @Test
-    void saveShouldRejectUnsupportedPackageType() {
-        AiDataPackage dataPackage = new AiDataPackage();
-        dataPackage.setNaPackage("invalid");
-        dataPackage.setSdPackageType("unknown");
-        dataPackage.setVersionNum("2026.04.20.1");
-        dataPackage.setContentJson("{}");
-
-        BusinessException ex = assertThrows(BusinessException.class, () -> dataPackageService.save(dataPackage));
-
-        assertEquals("仅支持 template 或 mapping 类型的数据包", ex.getMessage());
-        verify(aiDataPackageMapper, never()).insert(dataPackage);
-    }
-
-    @Test
-    void saveShouldRejectTemplateContentWithoutWesternOrTcm() {
-        AiDataPackage dataPackage = new AiDataPackage();
-        dataPackage.setNaPackage("template");
-        dataPackage.setSdPackageType("template");
-        dataPackage.setVersionNum("2026.04.20.1");
-        dataPackage.setContentJson("{\"foo\":[]}");
-
-        BusinessException ex = assertThrows(BusinessException.class, () -> dataPackageService.save(dataPackage));
-
-        assertEquals("template 类型至少需要包含 western 或 tcm 字段", ex.getMessage());
-        verify(aiDataPackageMapper, never()).insert(dataPackage);
+        assertEquals(dataPackageService.getTemplateDelta("ORG001", "REG001", null).getVersion(), version);
     }
 }

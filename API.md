@@ -1044,8 +1044,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "orgCount": 1,
   "deviceCount": 1,
   "configCount": 1,
-  "promptCount": 1,
-  "dataPackageCount": 1,
+  "symptomTemplateCount": 1,
   "logCount": 1,
   "userCount": 1,
   "roleCount": 1
@@ -1354,7 +1353,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 用途：逻辑停用机构。
 
 ### 5.26 GET `/admin/api/devices`
-用途：分页查询设备列表。
+用途：分页查询令牌列表。接口路径保持 `/devices` 以兼容既有管理端调用，页面呈现为“令牌管理”。
 
 请求参数：
 
@@ -1388,7 +1387,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ```
 
 ### 5.27 POST `/admin/api/devices`
-用途：手工创建设备记录。
+用途：手工创建令牌记录。服务端会生成 `deviceToken`，列表仅返回脱敏值。
 
 请求：
 
@@ -1404,10 +1403,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ```
 
 ### 5.28 PUT `/admin/api/devices/{idDevice}`
-用途：修改设备名称、机构、状态和客户端信息。
+用途：修改令牌对应终端名称、机构、状态和客户端信息。
 
 ### 5.29 DELETE `/admin/api/devices/{idDevice}`
-用途：逻辑停用设备。
+用途：逻辑停用令牌。
 
 ### 5.30 GET `/admin/api/configs`
 用途：分页查询 AI 配置列表。
@@ -1471,101 +1470,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ### 5.33 DELETE `/admin/api/configs/{idConfig}`
 用途：逻辑停用配置。
 
-### 5.34 GET `/admin/api/prompts`
-用途：分页查询 Prompt 列表。
-
-### 5.35 POST `/admin/api/prompts`
-用途：新增 Prompt。
-
-请求：
-
-```json
-{
-  "cdPrompt": "medicalRecordGeneration",
-  "naPrompt": "病历生成",
-  "sysPrompt": "你是一名全科辅助诊疗助手",
-  "userTemplate": "请根据{{chiefComplaint}}生成病历",
-  "versionNum": "2026.04.20.1",
-  "sdPromptType": "consultation",
-  "sdStatus": "0",
-  "idOrg": "ORG001",
-  "idRegion": "REGION001"
-}
-```
-
-### 5.36 PUT `/admin/api/prompts/{idPrompt}`
-用途：修改 Prompt 内容与可见范围。
-
-### 5.37 POST `/admin/api/prompts/{idPrompt}/publish`
-用途：发布 Prompt；同场景下其他已发布版本自动转归归档态。
-
-### 5.38 POST `/admin/api/prompts/{idPrompt}/archive`
-用途：归档 Prompt。
-
-### 5.39 DELETE `/admin/api/prompts/{idPrompt}`
-用途：逻辑删除 Prompt。
-
-### 5.40 GET `/admin/api/data-packages`
-用途：分页查询数据包列表。
-
-请求参数：
-
-- `current`
-- `size`
-- `keyword`
-- `sdPackageType`
-- `sdStatus`
-- `idRegion`
-- `idOrg`
-
-### 5.41 POST `/admin/api/data-packages`
-用途：新增数据包。
-
-请求：
-
-```json
-{
-  "cdPackage": "mapping-default",
-  "naPackage": "默认映射包",
-  "sdPackageType": "mapping",
-  "versionNum": "2026.04.20.1",
-  "contentJson": "{\"diagnoses\":\"id,code,name\\n1,J00,感冒\"}",
-  "sdStatus": "0",
-  "idOrg": "ORG001",
-  "idRegion": "REGION001"
-}
-```
-
-### 5.42 PUT `/admin/api/data-packages/{idPackage}`
-用途：修改数据包内容、版本和可见范围。
-
-### 5.43 POST `/admin/api/data-packages/{idPackage}/publish`
-用途：发布数据包。
-
-约束：
-
-- 同类型、同作用域的其他已发布版本需自动转归归档态
-
-### 5.44 POST `/admin/api/data-packages/{idPackage}/archive`
-用途：归档数据包。
-
-### 5.45 DELETE `/admin/api/data-packages/{idPackage}`
-用途：逻辑删除数据包。
-
-### 5.46 GET `/admin/api/data-packages/template-default`
-用途：获取服务端内置症状模板基线，供 legacy `template` 数据包编辑或症状模板初始化导入时参考。
-
-响应 `data`：
-
-```json
-{
-  "version": "builtin-1a2b3c4d",
-  "western": [],
-  "tcm": []
-}
-```
-
-### 5.47 GET `/admin/api/symptom-templates`
+### 5.34 GET `/admin/api/symptom-templates`
 用途：分页查询症状模板列表，返回完整模板结构，供后台 disease editor 直接编辑。
 
 请求参数：
@@ -1612,7 +1517,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 }
 ```
 
-### 5.48 POST `/admin/api/symptom-templates`
+### 5.35 POST `/admin/api/symptom-templates`
 用途：新增症状模板。
 
 说明：
@@ -1621,7 +1526,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `medicalMode` 仅支持 `western`、`tcm`
 - 成功后写入症状模板修改日志，`operationType=create`
 
-### 5.49 PUT `/admin/api/symptom-templates/{id}`
+### 5.36 PUT `/admin/api/symptom-templates/{id}`
 用途：修改症状模板。
 
 说明：
@@ -1629,7 +1534,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - 成功后写入症状模板修改日志，`operationType=update`
 - 日志记录修改前后完整模板快照，并在 `diff` 中输出字段级 before/after
 
-### 5.50 DELETE `/admin/api/symptom-templates/{id}`
+### 5.37 DELETE `/admin/api/symptom-templates/{id}`
 用途：逻辑删除症状模板。
 
 说明：
@@ -1637,7 +1542,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - 成功后写入症状模板修改日志，`operationType=delete`
 - 日志保留删除前模板快照，`afterSnapshot` 为空
 
-### 5.51 POST `/admin/api/symptom-templates/import-builtin`
+### 5.38 POST `/admin/api/symptom-templates/import-builtin`
 用途：将服务端内置 `template-seeds` 症状模板按指定作用域导入 `c_ai_symptom_template`。
 
 请求：
@@ -1665,7 +1570,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 - 每条实际新增 / 覆盖更新的模板都会写入症状模板修改日志，`operationType=import_builtin`
 
-### 5.52 POST `/admin/api/symptom-templates/import-json`
+### 5.39 POST `/admin/api/symptom-templates/import-json`
 用途：将桌面端已有症状模板 JSON 文件写入 `c_ai_symptom_template`，支持 `templates.json`、`tcm-templates.json` 以及后台导出的当前模式症状数组。
 
 请求：
@@ -1700,7 +1605,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 - 每条实际新增 / 覆盖更新的模板都会写入症状模板修改日志，`operationType=import_json`
 
-### 5.52.1 GET `/admin/api/symptom-templates/change-logs`
+### 5.40 GET `/admin/api/symptom-templates/change-logs`
 用途：分页查询症状模板修改日志，用于审计追踪“谁在什么时候改了什么”。
 
 请求参数：
@@ -1745,7 +1650,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 }
 ```
 
-### 5.53 GET `/admin/api/logs`
+### 5.41 GET `/admin/api/logs`
 用途：分页查询操作日志。
 
 请求参数：
@@ -2021,17 +1926,18 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 1. 区域管理
 2. 机构管理
-3. 设备管理
+3. 令牌管理
 4. AI 配置
-5. Prompt 管理
-6. 数据包管理
+5. 症状模板管理
+6. 客户端版本发布
 7. 操作日志查询
 8. 管理员登录
 9. 用户管理
 10. 角色管理
 11. 概览统计
+12. 反馈、用户日志、统计分析与活跃度查询
 
-这些接口在第一轮脚手架阶段优先保证 CRUD 结构和分页查询能力，细节以实现文档和代码为准。
+这些接口在第一轮脚手架阶段优先保证 CRUD 结构和分页查询能力，细节以实现文档和代码为准。Prompt 与数据包仍服务桌面端 delta 链路，但不再作为管理端维护资源暴露。
 
 ### 5.58 GET `/admin/api/user-activity/summary`
 

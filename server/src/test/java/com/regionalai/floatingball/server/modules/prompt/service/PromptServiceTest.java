@@ -6,18 +6,14 @@ import com.regionalai.floatingball.server.modules.prompt.mapper.AiPromptMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,26 +56,6 @@ class PromptServiceTest {
 
         assertEquals("3.0.0", delta.getVersion());
         assertTrue(delta.getPrompts().isEmpty());
-    }
-
-    @Test
-    void publishShouldArchiveOtherPublishedPromptsInSameScene() {
-        AiPrompt target = buildPrompt("P1", "diagnosis", "draft", "3.0.0", "ORG001", null, "0");
-        AiPrompt published = buildPrompt("P2", "diagnosis", "published", "2.0.0", "ORG001", null, "1");
-        AiPrompt otherOrg = buildPrompt("P3", "diagnosis", "other-org", "2.0.0", "ORG002", null, "1");
-        AiPrompt global = buildPrompt("P4", "diagnosis", "global", "1.0.0", null, null, "1");
-        when(aiPromptMapper.selectById("P1")).thenReturn(target);
-        when(aiPromptMapper.selectList(any())).thenReturn(Arrays.asList(target, published, otherOrg, global));
-
-        promptService.publish("P1");
-
-        ArgumentCaptor<AiPrompt> captor = ArgumentCaptor.forClass(AiPrompt.class);
-        verify(aiPromptMapper, times(2)).updateById(captor.capture());
-        List<AiPrompt> updated = captor.getAllValues();
-        assertEquals("P2", updated.get(0).getIdPrompt());
-        assertEquals("2", updated.get(0).getSdStatus());
-        assertEquals("P1", updated.get(1).getIdPrompt());
-        assertEquals("1", updated.get(1).getSdStatus());
     }
 
     private AiPrompt buildPrompt(String idPrompt,

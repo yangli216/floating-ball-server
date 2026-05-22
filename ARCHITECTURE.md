@@ -6,8 +6,8 @@
 
 `floating-ball-server` 是 `floating-ball` 的配套后台，承担两类职责：
 
-1. 面向桌面端的远端客户端能力：设备注册、配置引导、数据包增量下发、AI 代理、审计上报
-2. 面向管理员的后台管理能力：区域、机构、设备、AI 配置、Prompt、数据包、客户端版本发布、日志
+1. 面向桌面端的远端客户端能力：设备注册、配置引导、Prompt / 数据包增量下发、AI 代理、审计上报
+2. 面向管理员的后台管理能力：区域、机构、令牌、AI 配置、症状模板、客户端版本发布、日志
 3. 面向平台管理员的基础治理能力：管理员登录、用户、角色、概览统计
 
 本项目不承接 `floating-ball` 的本地 HIS 桥接，不替代 `floating-ball/api.md` 中的 `/api/consultation/*`。
@@ -51,7 +51,7 @@ floating-ball-server/
         │   │   ├── exception/      # 全局异常
         │   │   └── model/          # 基础模型
         │   ├── security/           # deviceToken + ECDSA 请求签名 / adminToken 鉴权
-        │   ├── modules/device/     # 注册、心跳、设备管理
+        │   ├── modules/device/     # 注册、心跳、令牌管理
         │   ├── modules/org/        # 机构管理
         │   ├── modules/region/     # 区域管理
         │   ├── modules/config/     # AI 配置、bootstrap
@@ -102,7 +102,7 @@ floating-ball-server/
 - `ClientController`：设备注册、心跳、bootstrap、delta、审计上报
 - `AiProxyController`：聊天代理、语音转写、实时语音
 - `PmphaiProxyController`：PMPHAI 搜索、详情、列表浏览、签名跳转
-- `Admin*Controller`：区域、机构、设备、配置、Prompt、症状模板、数据包、客户端版本发布、日志、用户日志
+- `Admin*Controller`：区域、机构、令牌、配置、症状模板、客户端版本发布、日志、用户日志
 
 ### 4.2 服务层
 
@@ -110,7 +110,8 @@ floating-ball-server/
 - 封装“机构级 > 区域级 > 全局级”的配置查找优先级
 - `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管 `chatFast` 独立模型、`enableThinking` 开关、独立审查 AI、`check_examination` 审查开关与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
 - `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并、客户端 `templates/delta` 聚合与症状模板修改日志，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
-- `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源
+- `modules/prompt` 只保留桌面端 Prompt delta 读取链路，管理端不再提供 Prompt 维护入口
+- `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源，管理端不再提供数据包维护入口
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
 
 ### 4.2.1 内网客户端版本发布
@@ -284,8 +285,7 @@ floating-ball-server/
 14. `/v1/knowledge/pmphai/list`
 15. `/v1/knowledge/pmphai/page-url`
 16. 管理端最小 CRUD：
-   - 完整 CRUD：区域、机构、设备、AI 配置、Prompt
-   - 完整维护闭环：数据包
+   - 完整 CRUD：区域、机构、令牌、AI 配置、症状模板
    - 查询增强：日志
 
 ### 6.2 第二阶段
@@ -313,7 +313,7 @@ floating-ball-server/
 3. 角色管理：
    - 角色分页查询、新增、修改、停用
 4. 概览统计：
-   - 首页汇总区域、机构、设备、配置、Prompt、数据包、日志、用户、角色数量
+   - 首页汇总区域、机构、令牌、配置、症状模板、日志、用户、角色数量
 5. 综合概况统计分析（`modules/analytics`）：
    - 核心指标卡片：功能调用总量、日均功能调用量、AI诊断建议采纳率、诊断符合率、活跃医生数、问诊总数
    - 服务趋势折线图：按日聚合功能调用量与问诊量趋势

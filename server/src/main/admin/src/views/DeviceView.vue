@@ -5,20 +5,20 @@
         <el-input
           v-model="keyword"
           clearable
-          placeholder="输入设备编码或名称"
+          placeholder="输入终端编码或名称"
           class="search-input"
           @keyup.enter.native="loadData"
         />
         <el-button type="primary" icon="el-icon-search" @click="loadData">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
-      <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增设备</el-button>
+      <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增令牌</el-button>
     </div>
 
     <div class="page-card">
       <el-table :data="records" v-loading="loading">
-      <el-table-column label="设备编码" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.cdDevice || '--' }}</code></template></el-table-column>
-      <el-table-column prop="naDevice" label="设备名称" min-width="160" />
+      <el-table-column label="终端编码" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.cdDevice || '--' }}</code></template></el-table-column>
+      <el-table-column prop="naDevice" label="终端名称" min-width="160" />
       <el-table-column prop="naOrg" label="所属机构" min-width="160" />
       <el-table-column prop="naRegion" label="所属区域" min-width="140" />
       <el-table-column label="状态" width="100">
@@ -26,7 +26,7 @@
           <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="设备令牌" min-width="160"><template slot-scope="{ row }"><code class="code-tag">{{ row.deviceTokenMasked || '--' }}</code></template></el-table-column>
+      <el-table-column label="访问令牌" min-width="160"><template slot-scope="{ row }"><code class="code-tag">{{ row.deviceTokenMasked || '--' }}</code></template></el-table-column>
       <el-table-column label="客户端版本" width="120"><template slot-scope="{ row }"><code class="code-tag">{{ row.clientVersion || '--' }}</code></template></el-table-column>
       <el-table-column label="最后心跳" min-width="160">
         <template slot-scope="{ row }">
@@ -63,10 +63,10 @@
     <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="720px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
-          <el-form-item label="设备编码" prop="cdDevice">
+          <el-form-item label="终端编码" prop="cdDevice">
             <el-input v-model.trim="form.cdDevice" maxlength="128" />
           </el-form-item>
-          <el-form-item label="设备名称" prop="naDevice">
+          <el-form-item label="终端名称" prop="naDevice">
             <el-input v-model.trim="form.naDevice" maxlength="128" />
           </el-form-item>
           <el-form-item label="所属机构" prop="idOrg">
@@ -130,14 +130,14 @@ export default {
       orgOptions: [],
       form: createDefaultForm(),
       rules: {
-        cdDevice: [{ required: true, message: '请输入设备编码', trigger: 'blur' }],
+        cdDevice: [{ required: true, message: '请输入终端编码', trigger: 'blur' }],
         idOrg: [{ required: true, message: '请选择所属机构', trigger: 'change' }]
       }
     }
   },
   computed: {
     dialogTitle() {
-      return this.dialogMode === 'create' ? '新增设备' : '编辑设备'
+      return this.dialogMode === 'create' ? '新增令牌' : '编辑令牌'
     },
     currentRegionName() {
       const org = this.orgOptions.find(item => item.idOrg === this.form.idOrg)
@@ -248,7 +248,7 @@ export default {
       })
     },
     removeRecord(row) {
-      this.$confirm(`确认停用设备「${row.naDevice || row.cdDevice}」吗？`, '提示', {
+      this.$confirm(`确认停用令牌「${row.naDevice || row.cdDevice}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {

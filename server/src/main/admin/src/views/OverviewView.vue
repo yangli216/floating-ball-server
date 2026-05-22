@@ -42,7 +42,7 @@ import http from '../api/http'
 const statDefinitions = [
   { key: 'regionCount', label: '区域', path: '/regions' },
   { key: 'orgCount', label: '机构', path: '/orgs' },
-  { key: 'deviceCount', label: '设备', path: '/devices' },
+  { key: 'deviceCount', label: '令牌', path: '/devices' },
   { key: 'configCount', label: '配置', path: '/configs' },
   { key: 'symptomTemplateCount', label: '症状模板', path: '/symptom-templates' },
   { key: 'logCount', label: '日志', path: '/logs' }

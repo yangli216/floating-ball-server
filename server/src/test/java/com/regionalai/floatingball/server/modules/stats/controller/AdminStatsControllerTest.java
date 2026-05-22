@@ -38,9 +38,7 @@ class AdminStatsControllerTest {
         overview.setOrgCount(3L);
         overview.setDeviceCount(5L);
         overview.setConfigCount(7L);
-        overview.setPromptCount(11L);
         overview.setSymptomTemplateCount(12L);
-        overview.setDataPackageCount(13L);
         overview.setLogCount(17L);
         overview.setUserCount(19L);
         overview.setRoleCount(23L);

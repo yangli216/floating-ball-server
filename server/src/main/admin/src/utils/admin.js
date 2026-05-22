@@ -8,12 +8,6 @@ export const configStatusOptions = [
   { value: '1', label: '启用', type: 'success' }
 ]
 
-export const promptStatusOptions = [
-  { value: '0', label: '草稿', type: 'info' },
-  { value: '1', label: '已发布', type: 'success' },
-  { value: '2', label: '已归档', type: 'warning' }
-]
-
 export function buildLabelMap(list, keyField, labelField) {
   return (list || []).reduce((result, item) => {
     result[item[keyField]] = item[labelField]

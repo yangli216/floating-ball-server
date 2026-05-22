@@ -33,9 +33,7 @@ class OverviewStatsServiceTest {
         mapperResult.setOrgCount(3L);
         mapperResult.setDeviceCount(5L);
         mapperResult.setConfigCount(7L);
-        mapperResult.setPromptCount(11L);
         mapperResult.setSymptomTemplateCount(12L);
-        mapperResult.setDataPackageCount(13L);
         mapperResult.setLogCount(17L);
         mapperResult.setUserCount(19L);
         mapperResult.setRoleCount(23L);
@@ -47,9 +45,7 @@ class OverviewStatsServiceTest {
         assertEquals(3L, result.getOrgCount());
         assertEquals(5L, result.getDeviceCount());
         assertEquals(7L, result.getConfigCount());
-        assertEquals(11L, result.getPromptCount());
         assertEquals(12L, result.getSymptomTemplateCount());
-        assertEquals(13L, result.getDataPackageCount());
         assertEquals(17L, result.getLogCount());
         assertEquals(19L, result.getUserCount());
         assertEquals(23L, result.getRoleCount());
@@ -67,9 +63,7 @@ class OverviewStatsServiceTest {
         assertEquals(0L, result.getOrgCount());
         assertEquals(0L, result.getDeviceCount());
         assertEquals(0L, result.getConfigCount());
-        assertEquals(0L, result.getPromptCount());
         assertEquals(0L, result.getSymptomTemplateCount());
-        assertEquals(0L, result.getDataPackageCount());
         assertEquals(0L, result.getLogCount());
         assertEquals(0L, result.getUserCount());
         assertEquals(0L, result.getRoleCount());
