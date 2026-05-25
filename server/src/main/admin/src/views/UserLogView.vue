@@ -1,11 +1,12 @@
 <template>
-  <div class="page-card">
+  <div class="page-surface">
+    <section class="page-section page-section--padded">
     <div class="page-toolbar">
       <div class="page-toolbar__filters">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索机构、医生、患者、问诊ID"
+          placeholder="搜索机构、医生、患者、问诊 ID…"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
@@ -50,8 +51,10 @@
         <el-button icon="el-icon-download" :loading="exporting" @click="handleExport">导出</el-button>
       </div>
     </div>
+    </section>
 
-    <el-table :data="records" border stripe v-loading="loading">
+    <section class="page-section page-section--table">
+    <el-table :data="records" v-loading="loading">
       <el-table-column label="机构" min-width="150" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ displayText(row.naOrg || row.idOrg) }}</template>
       </el-table-column>
@@ -113,6 +116,7 @@
         @current-change="loadData"
       />
     </div>
+    </section>
 
     <el-dialog title="用户日志详情" :visible.sync="detailDialogVisible" width="1120px" @closed="handleDetailClosed">
       <div v-if="detailRecord" v-loading="detailLoading">
@@ -158,7 +162,7 @@
                   {{ displayText(detailRecord.audioFileName) }}
                   <span v-if="detailRecord.audioSize"> / {{ formatBytes(detailRecord.audioSize) }}</span>
                 </div>
-                <div v-if="audioLoading" class="empty-inline">录音加载中...</div>
+                <div v-if="audioLoading" class="empty-inline">录音加载中…</div>
                 <audio v-else-if="audioObjectUrl" class="audio-player" :src="audioObjectUrl" controls preload="metadata" />
                 <div v-else class="audio-error">{{ audioLoadError || '录音暂不可播放' }}</div>
               </div>

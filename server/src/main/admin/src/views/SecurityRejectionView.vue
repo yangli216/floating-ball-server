@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="filter-bar">
+  <div class="page-surface">
+    <section class="page-section page-section--padded">
       <div class="page-toolbar__filters sec-filter-grid">
         <el-select
           v-model="filters.rejectionType"
@@ -57,9 +57,9 @@
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
-    </div>
+    </section>
 
-    <div class="page-card">
+    <section class="page-section page-section--table">
       <el-table :data="records" v-loading="loading">
         <el-table-column label="拦截类型" width="160">
           <template slot-scope="{ row }">
@@ -91,8 +91,8 @@
         </el-table-column>
         <el-table-column label="签名" width="70" align="center">
           <template slot-scope="{ row }">
-            <el-tag v-if="row.hasSignature === '1'" size="mini" type="warning">有</el-tag>
-            <el-tag v-else size="mini" type="info">无</el-tag>
+            <status-pill v-if="row.hasSignature === '1'" tone="warning" label="有" />
+            <status-pill v-else tone="muted" label="无" />
           </template>
         </el-table-column>
         <el-table-column label="时间" width="168">
@@ -102,7 +102,7 @@
         </el-table-column>
         <el-table-column label="操作" width="70" fixed="right">
           <template slot-scope="{ row }">
-            <a class="table-action" @click="openDetail(row)">详情</a>
+            <table-action @click="openDetail(row)">详情</table-action>
           </template>
         </el-table-column>
       </el-table>
@@ -117,7 +117,7 @@
           @current-change="loadData"
         />
       </div>
-    </div>
+    </section>
 
     <el-dialog v-if="detailVisible" title="拦截详情" :visible.sync="detailVisible" width="720px">
       <div v-if="detailRecord" class="detail-grid">
@@ -131,11 +131,11 @@
         </div>
         <div class="detail-card">
           <div class="detail-card__label">请求方法</div>
-          <div class="detail-card__value">{{ detailRecord.requestMethod || '--' }}</div>
+          <div class="detail-card__value"><code-tag :value="detailRecord.requestMethod" /></div>
         </div>
         <div class="detail-card detail-card--full">
           <div class="detail-card__label">请求路径</div>
-          <div class="detail-card__value sec-path">{{ detailRecord.requestPath || '--' }}</div>
+          <div class="detail-card__value sec-path"><code-tag :value="detailRecord.requestPath" /></div>
         </div>
         <div class="detail-card">
           <div class="detail-card__label">客户端 IP</div>
@@ -168,8 +168,8 @@
         <div class="detail-card">
           <div class="detail-card__label">是否携带签名</div>
           <div class="detail-card__value">
-            <el-tag v-if="detailRecord.hasSignature === '1'" size="mini" type="warning">是</el-tag>
-            <el-tag v-else size="mini" type="info">否</el-tag>
+            <status-pill v-if="detailRecord.hasSignature === '1'" tone="warning" label="是" />
+            <status-pill v-else tone="muted" label="否" />
           </div>
         </div>
         <div class="detail-card">
@@ -202,6 +202,7 @@
 
 <script>
 import http from '../api/http'
+import { CodeTag, StatusPill, TableAction } from '../components/ui'
 
 const REJECTION_TYPE_MAP = {
   AUTH_MISSING_TOKEN: { label: '缺少令牌', type: 'danger', group: 'auth' },
@@ -229,6 +230,11 @@ function createDefaultFilters() {
 }
 
 export default {
+  components: {
+    CodeTag,
+    StatusPill,
+    TableAction
+  },
   data() {
     return {
       loading: false,

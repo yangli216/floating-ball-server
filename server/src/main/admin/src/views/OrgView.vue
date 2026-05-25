@@ -1,11 +1,11 @@
 <template>
-  <div>
-    <div class="filter-bar">
+  <div class="page-surface">
+    <section class="page-section page-section--padded page-section--toolbar">
       <div class="page-toolbar__filters">
         <el-input
           v-model="keyword"
           clearable
-          placeholder="输入机构编码或名称"
+          placeholder="输入机构编码或名称…"
           class="search-input"
           @keyup.enter.native="search"
         />
@@ -13,11 +13,11 @@
         <el-button @click="reset">重置</el-button>
       </div>
       <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增机构</el-button>
-    </div>
+    </section>
 
-    <div class="page-card">
+    <section class="page-section page-section--table">
       <el-table :data="records" v-loading="loading">
-      <el-table-column label="机构编码" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.cdOrg || '--' }}</code></template></el-table-column>
+      <el-table-column label="机构编码" min-width="140"><template slot-scope="{ row }"><code-tag :value="row.cdOrg" /></template></el-table-column>
       <el-table-column prop="naOrg" label="机构名称" min-width="160" />
       <el-table-column label="所属区域" min-width="160">
         <template slot-scope="{ row }">
@@ -32,7 +32,7 @@
       <el-table-column prop="sdOrgType" label="机构类型" min-width="120" />
       <el-table-column label="状态" width="90">
         <template slot-scope="{ row }">
-          <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
+          <status-pill :tone="statusTone(statusMeta(row.sdStatus).type)" :label="statusMeta(row.sdStatus).label" />
         </template>
       </el-table-column>
       <el-table-column prop="sortOrder" label="排序" width="90" />
@@ -49,8 +49,8 @@
       <el-table-column label="操作" width="180" fixed="right">
         <template slot-scope="{ row }">
           <div class="table-actions">
-            <a class="table-action" @click="openEdit(row)">编辑</a>
-            <a class="table-action table-action--danger" @click="removeRecord(row)">停用</a>
+            <table-action @click="openEdit(row)">编辑</table-action>
+            <table-action danger @click="removeRecord(row)">停用</table-action>
           </div>
         </template>
       </el-table-column>
@@ -66,7 +66,7 @@
         @current-change="loadData"
       />
     </div>
-    </div>
+    </section>
 
     <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="820px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
@@ -78,12 +78,12 @@
             <el-input v-model.trim="form.naOrg" maxlength="128" />
           </el-form-item>
           <el-form-item label="所属区域">
-            <el-select v-model="form.idRegion" clearable filterable placeholder="请选择区域" @change="handleRegionChange">
+            <el-select v-model="form.idRegion" clearable filterable placeholder="请选择区域…" @change="handleRegionChange">
               <el-option v-for="item in regionOptions" :key="item.idRegion" :label="item.naRegion" :value="item.idRegion" />
             </el-select>
           </el-form-item>
           <el-form-item label="上级机构">
-            <el-select v-model="form.idParent" clearable filterable placeholder="可选">
+            <el-select v-model="form.idParent" clearable filterable placeholder="可选…">
               <el-option v-for="item in parentOrgOptions" :key="item.idOrg" :label="item.naOrg" :value="item.idOrg" />
             </el-select>
           </el-form-item>
@@ -91,7 +91,7 @@
             <el-input v-model.trim="form.sdOrgType" maxlength="32" placeholder="如 community" />
           </el-form-item>
           <el-form-item label="状态" prop="sdStatus">
-            <div class="segmented"><button type="button" :class="{ active: form.sdStatus === '1' }" @click="form.sdStatus = '1'">启用</button><button type="button" :class="{ active: form.sdStatus === '0' }" @click="form.sdStatus = '0'">停用</button></div>
+            <segmented-switch v-model="form.sdStatus" :options="statusOptions" />
           </el-form-item>
           <el-form-item label="排序">
             <el-input-number
@@ -118,7 +118,8 @@
 <script>
 import { fetchOrgs, fetchRegions } from '../api/reference'
 import http from '../api/http'
-import { buildLabelMap, configStatusOptions, findStatusMeta, formatDateTime } from '../utils/admin'
+import { buildLabelMap, configStatusOptions, findStatusMeta, formatDateTime, statusTone } from '../utils/admin'
+import { CodeTag, SegmentedSwitch, StatusPill, TableAction } from '../components/ui'
 
 function createDefaultForm() {
   return {
@@ -135,6 +136,12 @@ function createDefaultForm() {
 }
 
 export default {
+  components: {
+    CodeTag,
+    SegmentedSwitch,
+    StatusPill,
+    TableAction
+  },
   data() {
     return {
       loading: false,
@@ -150,6 +157,7 @@ export default {
       orgOptions: [],
       regionMap: {},
       orgMap: {},
+      statusOptions: configStatusOptions,
       form: createDefaultForm(),
       rules: {
         naOrg: [{ required: true, message: '请输入机构名称', trigger: 'blur' }]
@@ -178,15 +186,9 @@ export default {
   },
   methods: {
     formatDateTime,
+    statusTone,
     statusMeta(value) {
       return findStatusMeta(configStatusOptions, value)
-    },
-    statusPillClass(value) {
-      const type = this.statusMeta(value).type
-      if (type === 'success') return 'status-pill--success'
-      if (type === 'warning') return 'status-pill--warning'
-      if (type === 'danger') return 'status-pill--danger'
-      return 'status-pill--muted'
     },
     resolveRegionName(idRegion) {
       return idRegion ? this.regionMap[idRegion] || idRegion : '--'

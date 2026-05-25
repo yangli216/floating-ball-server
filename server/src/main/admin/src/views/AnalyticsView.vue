@@ -1,37 +1,17 @@
 <template>
-  <div class="analytics-page" v-loading="loading">
-    <div class="filter-bar">
+  <div class="page-surface analytics-page" v-loading="loading">
+    <admin-filter-bar>
       <div class="filter-row">
         <div class="filter-item">
           <div class="filter-label">时间范围</div>
-          <div class="time-tabs">
-            <button
-              v-for="opt in timeRangeOptions"
-              :key="opt.value"
-              type="button"
-              :class="['time-tab', { 'is-active': timeRange === opt.value }]"
-              @click="setTimeRange(opt.value)"
-            >{{ opt.label }}</button>
-          </div>
-          <div v-if="timeRange === 'custom'" class="custom-date-row">
-            <el-date-picker
-              v-model="query.dateFrom"
-              type="date"
-              placeholder="开始日期"
-              size="small"
-              value-format="yyyy-MM-dd"
-              @change="onCustomDateChange"
-            />
-            <span class="date-sep">至</span>
-            <el-date-picker
-              v-model="query.dateTo"
-              type="date"
-              placeholder="结束日期"
-              size="small"
-              value-format="yyyy-MM-dd"
-              @change="onCustomDateChange"
-            />
-          </div>
+          <time-range-filter
+            v-model="timeRange"
+            :options="timeRangeOptions"
+            :date-from.sync="query.dateFrom"
+            :date-to.sync="query.dateTo"
+            @input="setTimeRange"
+            @custom-change="onCustomDateChange"
+          />
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
@@ -60,53 +40,40 @@
           <el-button size="small" @click="reset">重置</el-button>
         </div>
       </div>
-      <div class="export-bar">
+      <template #actions>
         <el-button size="small" icon="el-icon-download" :loading="exporting" @click="exportData">导出数据</el-button>
-      </div>
-    </div>
+      </template>
+    </admin-filter-bar>
 
-    <div class="card-grid">
-      <div
+    <div class="metric-grid analytics-metrics">
+      <metric-card
         v-for="card in cards"
         :key="card.key"
-        class="stat-card"
-      >
-        <div class="stat-card__label">{{ card.label }}</div>
-        <div class="stat-card__value">{{ card.value }}</div>
-        <div :class="['stat-card__growth', card.growthUp ? 'is-up' : 'is-down']">
-          <span class="growth-icon">{{ card.growthUp ? '▲' : '▼' }}</span>
-          <span>{{ card.growthText }}</span>
-        </div>
-        <div class="stat-card__desc">{{ card.desc }}</div>
-      </div>
+        :label="card.label"
+        :value="card.value"
+        :growth-text="card.growthText"
+        :growth-up="card.growthUp"
+        :desc="card.desc"
+      />
     </div>
 
-    <div class="chart-section">
-      <div class="chart-card">
-        <div class="chart-card__header">
-          <span class="chart-card__title">服务趋势分析</span>
+    <div class="chart-grid">
+      <chart-panel title="服务趋势分析">
+        <template #actions>
           <el-select v-model="trendMetric" size="small" class="trend-select">
             <el-option label="功能调用量" value="ai" />
             <el-option label="问诊量" value="consultation" />
           </el-select>
-        </div>
+        </template>
         <div ref="trendChartRef" class="chart-body"></div>
-      </div>
+      </chart-panel>
     </div>
 
-    <div class="chart-section chart-section--double">
-      <div class="chart-card">
-        <div class="chart-card__header">
-          <span class="chart-card__title">功能调用量按机构分布</span>
-          <span class="chart-card__subtitle">Top 10 医疗机构</span>
-        </div>
+    <div class="chart-grid chart-grid--double">
+      <chart-panel title="功能调用量按机构分布" subtitle="Top 10 医疗机构">
         <div ref="orgChartRef" class="chart-body"></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card__header">
-          <span class="chart-card__title">功能调用量按区域分布</span>
-          <span class="chart-card__subtitle">各区县占比情况</span>
-        </div>
+      </chart-panel>
+      <chart-panel title="功能调用量按区域分布" subtitle="各区县占比情况">
         <div ref="regionChartRef" class="chart-body"></div>
         <div class="pie-legend">
           <span
@@ -118,7 +85,7 @@
             {{ item.name }} ({{ item.pct }}%)
           </span>
         </div>
-      </div>
+      </chart-panel>
     </div>
   </div>
 </template>
@@ -127,6 +94,7 @@
 import * as echarts from 'echarts'
 import http from '../api/http'
 import { refOptions } from '../api/reference'
+import { AdminFilterBar, ChartPanel, MetricCard, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
   { value: 'today', label: '今日' },
@@ -149,6 +117,12 @@ const CARD_DEFS = [
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#EC4899']
 
 export default {
+  components: {
+    AdminFilterBar,
+    ChartPanel,
+    MetricCard,
+    TimeRangeFilter
+  },
   data() {
     return {
       loading: false,
@@ -519,193 +493,12 @@ export default {
 </script>
 
 <style scoped>
-.analytics-page {
-  display: grid;
-  gap: 16px;
-}
-
-.filter-bar {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px 24px;
-  border: 0.5px solid #E8EEEC;
-}
-
-.filter-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.filter-item {
-  display: grid;
-  gap: 6px;
-}
-
-.filter-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4B5563;
-}
-
-.time-tabs {
-  display: flex;
-  border: 0.8px solid #E2E8F0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.time-tab {
-  height: 38px;
-  padding: 0 16px;
-  border: none;
-  background: #fff;
-  color: #64748B;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.time-tab.is-active {
-  background: #EFF6FF;
-  color: #1E40AF;
-  font-weight: 500;
-}
-
-.custom-date-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.custom-date-row .el-date-editor {
-  width: 150px;
-}
-
-.date-sep {
-  color: #94A3B8;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.filter-select {
-  width: 200px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-}
-
-.export-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 0.5px solid #F1F5F9;
-}
-
-.card-grid {
-  display: grid;
+.analytics-metrics {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.stat-card {
-  padding: 20px;
-  background: #fff;
-  border: 0.8px solid #F1F5F9;
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  display: grid;
-  gap: 4px;
-}
-
-.stat-card__label {
-  font-size: 14px;
-  color: #64748B;
-}
-
-.stat-card__value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #1E293B;
-  line-height: 1.2;
-  padding: 4px 0;
-}
-
-.stat-card__growth {
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-card__growth.is-up {
-  color: #10B981;
-}
-
-.stat-card__growth.is-down {
-  color: #EF4444;
-}
-
-.growth-icon {
-  font-size: 10px;
-}
-
-.stat-card__desc {
-  font-size: 12px;
-  color: #94A3B8;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 0.5px solid #F1F5F9;
-}
-
-.chart-section {
-  display: grid;
-}
-
-.chart-section--double {
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-.chart-card {
-  background: #fff;
-  border: 0.8px solid #F1F5F9;
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  padding: 20px;
-}
-
-.chart-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.chart-card__title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1E293B;
-}
-
-.chart-card__subtitle {
-  font-size: 14px;
-  color: #94A3B8;
-  margin-left: 10px;
 }
 
 .trend-select {
   width: 160px;
-}
-
-.chart-body {
-  width: 100%;
-  height: 320px;
 }
 
 .pie-legend {
@@ -732,24 +525,17 @@ export default {
 }
 
 @media (max-width: 1280px) {
-  .card-grid {
+  .analytics-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .chart-section--double {
+  .chart-grid--double {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .card-grid {
+  .analytics-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .filter-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .filter-select {
-    width: 100%;
   }
 }
 </style>

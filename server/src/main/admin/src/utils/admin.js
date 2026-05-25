@@ -19,6 +19,13 @@ export function findStatusMeta(options, value) {
   return options.find(item => item.value === value) || { label: value || '--', type: 'info' }
 }
 
+export function statusTone(type) {
+  if (type === 'success') return 'success'
+  if (type === 'warning') return 'warning'
+  if (type === 'danger') return 'danger'
+  return 'muted'
+}
+
 export function flagToBoolean(value) {
   return value === true || value === '1' || value === 1
 }
@@ -37,7 +44,7 @@ export function truncate(value, maxLength = 48) {
   if (!value) {
     return '--'
   }
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value
 }
 
 export function resolveScopeLabel(row, orgMap, regionMap) {

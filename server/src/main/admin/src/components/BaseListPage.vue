@@ -1,39 +1,39 @@
 <template>
-  <div>
-    <div class="filter-bar">
+  <div class="page-surface">
+    <section class="page-section page-section--padded page-section--toolbar">
       <el-input
         v-model="keyword"
         clearable
-        placeholder="请输入关键字"
+        placeholder="请输入关键字…"
         class="search-input"
         @keyup.enter.native="loadData"
       />
       <el-button type="primary" @click="loadData">查询</el-button>
       <el-button @click="reset">重置</el-button>
-    </div>
+    </section>
 
-    <div class="page-card">
-      <el-table :data="records" v-loading="loading">
-      <el-table-column
-        v-for="column in columns"
-        :key="column.prop"
-        :prop="column.prop"
-        :label="column.label"
-        :min-width="column.minWidth || 120"
-      />
-    </el-table>
+    <section class="page-section page-section--table">
+      <el-table :data="records" v-loading="loading" class="admin-table">
+        <el-table-column
+          v-for="column in columns"
+          :key="column.prop"
+          :prop="column.prop"
+          :label="column.label"
+          :min-width="column.minWidth || 120"
+        />
+      </el-table>
 
-    <div class="footer">
-      <el-pagination
-        background
-        layout="total, prev, pager, next"
-        :current-page.sync="current"
-        :page-size="size"
-        :total="total"
-        @current-change="loadData"
-      />
-    </div>
-    </div>
+      <div class="footer">
+        <el-pagination
+          background
+          layout="total, prev, pager, next"
+          :current-page.sync="current"
+          :page-size="size"
+          :total="total"
+          @current-change="loadData"
+        />
+      </div>
+    </section>
   </div>
 </template>
 
@@ -98,18 +98,6 @@ export default {
 </script>
 
 <style scoped>
-.page-card {
-  background: #fff;
-  padding: 20px;
-  border-radius: 12px;
-}
-
-.toolbar {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
 .search-input {
   width: 320px;
 }

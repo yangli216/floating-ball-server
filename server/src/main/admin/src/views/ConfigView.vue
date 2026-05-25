@@ -1,11 +1,11 @@
 <template>
-  <div>
-    <div class="filter-bar">
+  <div class="page-surface">
+    <section class="page-section page-section--padded page-section--toolbar">
       <div class="page-toolbar__filters">
         <el-input
           v-model="keyword"
           clearable
-          placeholder="输入配置编码或名称"
+          placeholder="输入配置编码或名称…"
           class="search-input"
           @keyup.enter.native="loadData"
         />
@@ -13,11 +13,11 @@
         <el-button @click="reset">重置</el-button>
       </div>
       <el-button type="primary" icon="el-icon-plus" @click="openCreate">新增配置</el-button>
-    </div>
+    </section>
 
-    <div class="page-card">
+    <section class="page-section page-section--table">
       <el-table :data="records" v-loading="loading">
-      <el-table-column label="配置编码" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.cdConfig || '--' }}</code></template></el-table-column>
+      <el-table-column label="配置编码" min-width="140"><template slot-scope="{ row }"><code-tag :value="row.cdConfig" /></template></el-table-column>
       <el-table-column prop="naConfig" label="配置名称" min-width="160" />
       <el-table-column prop="provider" label="提供商" width="120" />
       <el-table-column prop="modelName" label="模型" min-width="140" />
@@ -28,11 +28,11 @@
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template slot-scope="{ row }">
-          <span :class="['status-pill', statusPillClass(row.sdStatus)]"><i class="dot"></i>{{ statusMeta(row.sdStatus).label }}</span>
+          <status-pill :tone="statusTone(statusMeta(row.sdStatus).type)" :label="statusMeta(row.sdStatus).label" />
         </template>
       </el-table-column>
-      <el-table-column label="接口密钥" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.apiKeyMasked || '--' }}</code></template></el-table-column>
-      <el-table-column label="语音密钥" min-width="140"><template slot-scope="{ row }"><code class="code-tag">{{ row.audioApiKeyMasked || '复用主密钥' }}</code></template></el-table-column>
+      <el-table-column label="接口密钥" min-width="140"><template slot-scope="{ row }"><code-tag :value="row.apiKeyMasked" /></template></el-table-column>
+      <el-table-column label="语音密钥" min-width="140"><template slot-scope="{ row }"><code-tag :value="row.audioApiKeyMasked" placeholder="复用主密钥" /></template></el-table-column>
       <el-table-column label="功能开关" min-width="220">
         <template slot-scope="{ row }">
           {{ truncate(row.featuresJson) }}
@@ -41,8 +41,8 @@
       <el-table-column label="操作" width="160" fixed="right">
         <template slot-scope="{ row }">
           <div class="table-actions">
-            <a class="table-action" @click="openEdit(row)">编辑</a>
-            <a class="table-action table-action--danger" @click="removeRecord(row)">停用</a>
+            <table-action @click="openEdit(row)">编辑</table-action>
+            <table-action danger @click="removeRecord(row)">停用</table-action>
           </div>
         </template>
       </el-table-column>
@@ -58,7 +58,7 @@
         @current-change="loadData"
       />
     </div>
-    </div>
+    </section>
 
     <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="1080px" custom-class="config-dialog" @closed="resetForm">
       <div class="config-dialog__body">
@@ -70,13 +70,13 @@
                 <el-input v-model.trim="form.cdConfig" maxlength="64" placeholder="例如 default / org001-main" />
               </el-form-item>
               <el-form-item label="配置名称" prop="naConfig">
-                <el-input v-model.trim="form.naConfig" maxlength="128" placeholder="输入便于识别的配置名称" />
+                <el-input v-model.trim="form.naConfig" maxlength="128" placeholder="输入便于识别的配置名称…" />
               </el-form-item>
               <el-form-item label="提供商">
                 <el-input v-model.trim="form.provider" maxlength="32" placeholder="例如 openai-compatible" />
               </el-form-item>
               <el-form-item label="状态" prop="sdStatus">
-                <div class="segmented"><button type="button" :class="{ active: form.sdStatus === '1' }" @click="form.sdStatus = '1'">启用</button><button type="button" :class="{ active: form.sdStatus === '0' }" @click="form.sdStatus = '0'">停用</button></div>
+                <segmented-switch v-model="form.sdStatus" :options="statusOptions" />
               </el-form-item>
             </div>
           </section>
@@ -94,7 +94,7 @@
                 <el-input v-model.trim="form.modelName" maxlength="128" placeholder="例如 gpt-4o-mini" />
               </el-form-item>
               <el-form-item label="chatFast 模型名称">
-                <el-input v-model.trim="form.fastModelName" maxlength="128" placeholder="留空则回退主模型" />
+                <el-input v-model.trim="form.fastModelName" maxlength="128" placeholder="留空则回退主模型…" />
                 <p class="form-hint">仅区域化 `chatFast()` 使用；留空时服务端自动回退 `modelName`。</p>
               </el-form-item>
               <el-form-item label="思考模式">
@@ -104,7 +104,7 @@
             </div>
             <div class="test-connection-row">
               <el-button type="primary" plain :loading="testingConnection" @click="testConnection">
-                {{ testingConnection ? '测试中...' : '测试连接' }}
+                {{ testingConnection ? '测试中…' : '测试连接' }}
               </el-button>
               <span v-if="testResult" :class="['test-connection-result', testResult.success ? 'success' : 'error']">
                 {{ testResult.message }}
@@ -116,11 +116,11 @@
             <h3>语音配置</h3>
             <div class="form-grid">
               <el-form-item label="转写服务地址">
-                <el-input v-model.trim="form.audioBaseUrl" maxlength="500" placeholder="留空则复用主模型服务地址" />
+                <el-input v-model.trim="form.audioBaseUrl" maxlength="500" placeholder="留空则复用主模型服务地址…" />
                 <p class="form-hint">服务端实际语音上游 Base URL；OpenAI 兼容走 /audio/transcriptions，DashScope 走 /chat/completions。</p>
               </el-form-item>
               <el-form-item label="语音接口密钥">
-                <el-input v-model.trim="form.audioApiKey" show-password maxlength="1000" placeholder="留空则复用主模型接口密钥" />
+                <el-input v-model.trim="form.audioApiKey" show-password maxlength="1000" placeholder="留空则复用主模型接口密钥…" />
                 <p class="form-hint">语音供应商或账号与主模型不一致时必须填写。</p>
               </el-form-item>
               <el-form-item label="转写模型">
@@ -128,7 +128,7 @@
                 <p class="form-hint">服务端实际提交给上游的语音转写模型；留空默认 whisper-1。</p>
               </el-form-item>
               <el-form-item label="桌面端提供方">
-                <el-select v-model="form.speechProvider" placeholder="选择桌面端语音提供方" @change="handleSpeechProviderChange">
+                <el-select v-model="form.speechProvider" placeholder="选择桌面端语音提供方…" @change="handleSpeechProviderChange">
                   <el-option
                     v-for="item in speechProviderOptions"
                     :key="item.value"
@@ -245,8 +245,10 @@ import {
   findStatusMeta,
   flagToBoolean,
   resolveScopeLabel,
+  statusTone,
   truncate
 } from '../utils/admin'
+import { CodeTag, SegmentedSwitch, StatusPill, TableAction } from '../components/ui'
 
 const DEFAULT_AUDIO_MODEL = 'whisper-1'
 const DEFAULT_DASHSCOPE_AUDIO_MODEL = 'qwen3-asr-flash'
@@ -332,6 +334,12 @@ function createDefaultForm() {
 }
 
 export default {
+  components: {
+    CodeTag,
+    SegmentedSwitch,
+    StatusPill,
+    TableAction
+  },
   data() {
     return {
       loading: false,
@@ -350,6 +358,7 @@ export default {
       orgMap: {},
       testResult: null,
       speechProviderOptions: SPEECH_PROVIDER_OPTIONS,
+      statusOptions: configStatusOptions,
       form: createDefaultForm(),
       rules: {
         naConfig: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
@@ -379,15 +388,9 @@ export default {
   },
   methods: {
     truncate,
+    statusTone,
     statusMeta(value) {
       return findStatusMeta(configStatusOptions, value)
-    },
-    statusPillClass(value) {
-      const type = this.statusMeta(value).type
-      if (type === 'success') return 'status-pill--success'
-      if (type === 'warning') return 'status-pill--warning'
-      if (type === 'danger') return 'status-pill--danger'
-      return 'status-pill--muted'
     },
     resolveScope(row) {
       return resolveScopeLabel(row, this.orgMap, this.regionMap)

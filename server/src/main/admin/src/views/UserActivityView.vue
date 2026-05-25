@@ -1,37 +1,17 @@
 <template>
-  <div class="user-activity-page" v-loading="loading">
-    <div class="filter-bar">
+  <div class="page-surface user-activity-page" v-loading="loading">
+    <admin-filter-bar>
       <div class="filter-row">
         <div class="filter-item">
           <div class="filter-label">时间范围</div>
-          <div class="time-tabs">
-            <button
-              v-for="opt in timeRangeOptions"
-              :key="opt.value"
-              type="button"
-              :class="['time-tab', { 'is-active': timeRange === opt.value }]"
-              @click="setTimeRange(opt.value)"
-            >{{ opt.label }}</button>
-          </div>
-          <div v-if="timeRange === 'custom'" class="custom-date-row">
-            <el-date-picker
-              v-model="query.dateFrom"
-              type="date"
-              placeholder="开始日期"
-              size="small"
-              value-format="yyyy-MM-dd"
-              @change="onCustomDateChange"
-            />
-            <span class="date-sep">至</span>
-            <el-date-picker
-              v-model="query.dateTo"
-              type="date"
-              placeholder="结束日期"
-              size="small"
-              value-format="yyyy-MM-dd"
-              @change="onCustomDateChange"
-            />
-          </div>
+          <time-range-filter
+            v-model="timeRange"
+            :options="timeRangeOptions"
+            :date-from.sync="query.dateFrom"
+            :date-to.sync="query.dateTo"
+            @input="setTimeRange"
+            @custom-change="onCustomDateChange"
+          />
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
@@ -67,38 +47,35 @@
           <el-button size="small" @click="reset">重置</el-button>
         </div>
       </div>
-      <div class="export-bar">
+      <template #actions>
         <el-button size="small" icon="el-icon-download" :loading="exporting" @click="exportData">导出数据</el-button>
-      </div>
-    </div>
+      </template>
+    </admin-filter-bar>
 
-    <div class="card-grid">
-      <div
+    <div class="metric-grid user-activity-metrics">
+      <metric-card
         v-for="card in cards"
         :key="card.key"
-        class="stat-card"
-      >
-        <div class="stat-card__label">{{ card.label }}</div>
-        <div class="stat-card__value">{{ card.value }}</div>
-        <div :class="['stat-card__growth', card.growthUp ? 'is-up' : 'is-down']">
-          <span class="growth-icon">{{ card.growthUp ? '▲' : '▼' }}</span>
-          <span>{{ card.growthText }}</span>
-        </div>
-        <div class="stat-card__desc">{{ card.desc }}</div>
-      </div>
+        :label="card.label"
+        :value="card.value"
+        :growth-text="card.growthText"
+        :growth-up="card.growthUp"
+        :desc="card.desc"
+      />
     </div>
 
-    <div class="user-table-card">
-      <el-table :data="userList" size="small" style="width: 100%">
+    <section class="page-section page-section--table user-table-card">
+      <el-table :data="userList" size="small" class="admin-table">
         <el-table-column prop="naDoctor" label="医生姓名" min-width="120" />
         <el-table-column prop="cdDevice" label="设备编码" min-width="120" />
         <el-table-column prop="naOrg" label="所属机构" min-width="140" />
         <el-table-column prop="naRegion" label="所属区域" min-width="100" />
         <el-table-column label="活跃状态" width="100">
           <template slot-scope="{ row }">
-            <span :class="['status-pill', row.activeStatus === 'active' ? 'is-active' : 'is-inactive']">
-              {{ row.activeStatus === 'active' ? '活跃' : '不活跃' }}
-            </span>
+            <status-pill
+              :tone="row.activeStatus === 'active' ? 'success' : 'danger'"
+              :label="row.activeStatus === 'active' ? '活跃' : '不活跃'"
+            />
           </template>
         </el-table-column>
         <el-table-column prop="consultationCount" label="问诊次数" width="100" />
@@ -118,13 +95,14 @@
           @current-change="onPageChange"
         />
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <script>
 import http from '../api/http'
 import { refOptions } from '../api/reference'
+import { AdminFilterBar, MetricCard, StatusPill, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
   { value: 'today', label: '今日' },
@@ -143,6 +121,12 @@ const CARD_DEFS = [
 ]
 
 export default {
+  components: {
+    AdminFilterBar,
+    MetricCard,
+    StatusPill,
+    TimeRangeFilter
+  },
   data() {
     return {
       loading: false,
@@ -351,190 +335,20 @@ export default {
 </script>
 
 <style scoped>
-.user-activity-page {
-  display: grid;
-  gap: 16px;
-}
-
-.filter-bar {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px 24px;
-  border: 0.5px solid #E8EEEC;
-}
-
-.filter-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.filter-item {
-  display: grid;
-  gap: 6px;
-}
-
-.filter-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4B5563;
-}
-
-.time-tabs {
-  display: flex;
-  border: 0.8px solid #E2E8F0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.time-tab {
-  height: 38px;
-  padding: 0 16px;
-  border: none;
-  background: #fff;
-  color: #64748B;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.time-tab.is-active {
-  background: #EFF6FF;
-  color: #1E40AF;
-  font-weight: 500;
-}
-
-.custom-date-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.custom-date-row .el-date-editor {
-  width: 150px;
-}
-
-.date-sep {
-  color: #94A3B8;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.filter-select {
-  width: 200px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-}
-
-.export-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 0.5px solid #F1F5F9;
-}
-
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.stat-card {
-  padding: 20px;
-  background: #fff;
-  border: 0.8px solid #F1F5F9;
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  display: grid;
-  gap: 4px;
-}
-
-.stat-card__label {
-  font-size: 14px;
-  color: #64748B;
-}
-
-.stat-card__value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #1E293B;
-  line-height: 1.2;
-  padding: 4px 0;
-}
-
-.stat-card__growth {
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-card__growth.is-up {
-  color: #10B981;
-}
-
-.stat-card__growth.is-down {
-  color: #EF4444;
-}
-
-.growth-icon {
-  font-size: 10px;
-}
-
-.stat-card__desc {
-  font-size: 12px;
-  color: #94A3B8;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 0.5px solid #F1F5F9;
-}
-
-.user-table-card {
-  background: #fff;
-  border: 0.8px solid #F1F5F9;
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  padding: 20px;
-}
-
 .pagination-bar {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
 }
 
-.status-pill {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.status-pill.is-active {
-  background: #D1FAE5;
-  color: #065F46;
-}
-
-.status-pill.is-inactive {
-  background: #FEE2E2;
-  color: #991B1B;
-}
-
 @media (max-width: 1280px) {
-  .card-grid {
+  .user-activity-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
-  .card-grid {
+  .user-activity-metrics {
     grid-template-columns: 1fr 1fr;
   }
 }

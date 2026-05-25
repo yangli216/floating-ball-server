@@ -1,11 +1,12 @@
 <template>
-  <div class="page-card">
+  <div class="page-surface">
+    <section class="page-section page-section--padded">
     <div class="page-toolbar">
       <div class="page-toolbar__filters">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索反馈内容、医生、科室、机构"
+          placeholder="搜索反馈内容、医生、科室、机构…"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
@@ -63,8 +64,10 @@
         <el-checkbox v-model="filters.includeHistory">包含历史修订</el-checkbox>
       </div>
     </div>
+    </section>
 
-    <el-table :data="records" border stripe v-loading="loading">
+    <section class="page-section page-section--table">
+    <el-table :data="records" v-loading="loading">
       <el-table-column label="评分" width="80">
         <template slot-scope="{ row }">
           <el-tag size="mini" :type="scoreTagType(row.score)">{{ row.score || '--' }} 分</el-tag>
@@ -142,6 +145,7 @@
         @current-change="loadData"
       />
     </div>
+    </section>
 
     <el-dialog title="反馈详情" :visible.sync="detailDialogVisible" width="1100px">
       <el-tabs v-if="detailData" v-model="detailTab" type="border-card">

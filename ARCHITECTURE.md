@@ -31,7 +31,7 @@
 - Vue Router
 - npm
 - 与 Spring Boot 同仓构建、同进程发布
-- 视觉风格采用克制医疗青绿主题：主色 `#1D9E75`，浅色侧边栏，白色卡片承载筛选与内容
+- 视觉风格采用医疗 IT 后台设计语言：中性浅灰工作区、深色固定导航、白色数据承载面、医疗青绿主操作、蓝/黄/红独立语义状态
 
 ## 3. 目录规划
 
@@ -143,9 +143,17 @@ floating-ball-server/
 - 管理端接口继续使用 `/admin/api/*`，但页面与接口默认同源，不再依赖独立部署
 - 如需单独前端调试，仍可在 `server/src/main/admin` 内运行 Vite dev server；此时后端 CORS 仅作为本地开发补充能力
 - 管理端请求错误统一由 `server/src/main/admin/src/api/http.js` 归一化：业务校验展示服务端友好 `message`，网络不可达、超时、5xx、非 JSON 响应等场景转换为可操作提示；存在 `requestId` 时带出请求 ID，避免把 Axios、HTTP statusText 或后端底层异常原样弹给管理员
-- 管理端 UI 采用 vue-admin 类后台骨架：深色固定侧栏、顶部导航栏、tags-view、浅灰内容区；仍避免页面副标题、说明型提示文案、列表页默认统计卡片或 Element UI 默认蓝色主题
+- 管理端 UI 采用 vue-admin 类后台骨架：深色固定侧栏、顶部导航栏、tags-view、浅灰内容区；仍避免页面副标题、说明型提示文案、列表页默认统计卡片、营销式登录首屏或 Element UI 默认蓝色主题
 - 管理端表格统一使用弱分隔线、无竖线、无 `border/stripe` 网格样式；状态、编码、ID 使用 pill 或 code tag 表达
 - 管理端详情/编辑弹窗默认销毁隐藏 DOM，避免隐藏表单进入可访问树；表单采用 `label-position="top"` 与分组式结构
+- 管理端 UED 以医疗 IT 后台为基准：保持高信息密度、稳定导航、明确状态语义和低干扰视觉层级；主色继续使用医疗青绿 `#1D9E75`，风险/警示/停用分别使用独立语义色，避免单一色系覆盖所有状态
+- 管理端所有自定义交互元素必须使用语义元素：动作使用 `button`，导航使用 `router-link`；图标按钮必须提供 `aria-label`，可点击卡片必须支持键盘焦点和回车/空格触发
+- 管理端全局交互态必须包含 hover、active 与 `:focus-visible` 样式；表单占位文案统一使用中文省略号 `…`，数字/时间/编码列使用等宽或 tabular number 表达，长文本必须可折行或截断
+- 管理端公共组件按 `server/src/main/admin/src/components/layout` 与 `server/src/main/admin/src/components/ui` 分层：`layout` 只承载后台壳、侧栏、顶栏、tags-view 与账号菜单，`ui` 承载筛选条、指标卡、图表面板、状态 pill、code tag、分段开关等页面无关组件
+- 管理端壳层 div 分配固定为 `admin-shell -> admin-shell__sidebar + admin-shell__main -> admin-shell__topbar + admin-shell__tabs + admin-shell__content`；`AdminLayout` 只做组合编排，侧栏、顶栏、页签栏分别由 `AdminSidebar`、`AdminTopbar`、`AdminTabBar` 承载，业务页面不得重新定义外层导航/内容容器
+- 管理端内容区统一由 `admin-shell__content` 提供滚动和页面留白，业务页面只提供页面内的筛选、指标、图表、表格区块，避免每个页面重复定义顶层灰底、横向滚动条或额外外框
+- 统计分析、活跃度、安全分析等运营看板统一使用 `MetricCard`、`ChartPanel`、`AdminFilterBar` 与 `TimeRangeFilter`，保证筛选、指标、图表标题、导出入口和移动端折行行为一致
+- 列表 CRUD 页新增状态、编码、分段开关时优先复用 `StatusPill`、`CodeTag`、`SegmentedSwitch`；确有复杂交互时可在页面内组合，但不得重新定义同义状态样式
 - 远端 `/v1/*` 默认 CORS 需要兼容 `floating-ball` 的 Tauri dev / desktop WebView origin，且 `OPTIONS` 预检请求不能被设备鉴权拦截
 - `floating-ball.cors.allowed-origins` 的本地配置只能做增量补充，不能覆盖掉桌面端默认 origin（`tauri://localhost`、`asset://localhost`、`https://tauri.localhost`、`http://tauri.localhost`、本地 localhost/127.0.0.1`），否则桌面端会在浏览器 Fetch 层直接报 `Load failed`
 

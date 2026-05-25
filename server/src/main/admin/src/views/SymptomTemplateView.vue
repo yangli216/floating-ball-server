@@ -1,6 +1,6 @@
 <template>
-  <div class="symptom-template-page">
-    <div class="page-card">
+  <div class="page-surface symptom-template-page">
+    <section class="page-section page-section--padded">
       <div class="page-toolbar symptom-toolbar">
         <div class="page-toolbar__filters symptom-filters">
           <el-select v-model="filters.medicalMode" class="filter-select" @change="handleMedicalModeChange">
@@ -9,7 +9,7 @@
           <el-input
             v-model.trim="filters.keyword"
             clearable
-            placeholder="输入症状名称或标识"
+            placeholder="输入症状名称或标识…"
             class="search-input"
             @keyup.enter.native="loadData"
           />
@@ -57,10 +57,10 @@
         class="hidden-file-input"
         @change="handleJsonFileChange"
       >
-    </div>
+    </section>
 
     <div class="symptom-layout">
-      <div class="page-card symptom-sidebar" v-loading="loading">
+      <section class="page-section page-section--padded symptom-sidebar" v-loading="loading">
         <div class="symptom-sidebar__header">
           <div>
             <div class="section-title">症状列表</div>
@@ -85,9 +85,9 @@
           </button>
           <div v-if="!records.length" class="empty-state">当前筛选条件下暂无症状模板</div>
         </div>
-      </div>
+      </section>
 
-      <div class="page-card symptom-editor">
+      <section class="page-section page-section--padded symptom-editor">
         <div v-if="editingRecord" class="editor-shell">
           <div class="editor-header">
             <div>
@@ -125,7 +125,7 @@
                 </div>
                 <div class="form-item">
                   <label>状态</label>
-                  <div class="segmented"><button type="button" :class="{ active: editingRecord.sdStatus === '1' }" @click="editingRecord.sdStatus = '1'">启用</button><button type="button" :class="{ active: editingRecord.sdStatus === '0' }" @click="editingRecord.sdStatus = '0'">停用</button></div>
+                  <segmented-switch v-model="editingRecord.sdStatus" :options="statusOptions" />
                 </div>
                 <div class="form-item">
                   <label class="row-label">
@@ -157,7 +157,7 @@
                       v-model.trim="newBodyPart"
                       type="text"
                       class="token-input"
-                      placeholder="输入后回车添加部位"
+                      placeholder="输入后回车添加部位…"
                       @keyup.enter.prevent="addBodyPart"
                     />
                   </div>
@@ -189,7 +189,7 @@
                 </div>
                 <div class="form-item full">
                   <label>自定义脚本</label>
-                  <el-input v-model="editingRecord.customScript" type="textarea" :rows="3" placeholder="可选，自定义运行脚本" />
+                  <el-input v-model="editingRecord.customScript" type="textarea" :rows="3" placeholder="可选，自定义运行脚本…" />
                 </div>
               </div>
             </section>
@@ -222,7 +222,7 @@
                   </div>
                   <div class="form-item full">
                     <label>分组描述</label>
-                    <el-input v-model="section.description" type="textarea" :rows="2" placeholder="可选，中医模板常用" />
+                    <el-input v-model="section.description" type="textarea" :rows="2" placeholder="可选，中医模板常用…" />
                   </div>
                 </div>
 
@@ -269,7 +269,7 @@
                           v-model.trim="field.__newOption"
                           type="text"
                           class="token-input"
-                          placeholder="输入后回车添加"
+                          placeholder="输入后回车添加…"
                           @keyup.enter.prevent="addOption(field)"
                         />
                       </div>
@@ -293,7 +293,7 @@
                           v-model.trim="field.__newLabel"
                           type="text"
                           class="token-input"
-                          placeholder="输入后回车添加"
+                          placeholder="输入后回车添加…"
                           @keyup.enter.prevent="addSliderLabel(field)"
                         />
                       </div>
@@ -305,7 +305,7 @@
                           <el-input v-model.trim="pair[0]" placeholder="左侧选项" />
                           <span class="pair-sep">vs</span>
                           <el-input v-model.trim="pair[1]" placeholder="右侧选项" />
-                          <button type="button" class="icon-button danger" @click="field.props.pairs.splice(pairIndex, 1)">×</button>
+                          <button type="button" class="icon-button danger" :aria-label="`删除第 ${pairIndex + 1} 组偏好配对`" @click="field.props.pairs.splice(pairIndex, 1)">×</button>
                         </div>
                         <el-button size="mini" @click="addPreferencePair(field)">新增配对</el-button>
                       </div>
@@ -325,14 +325,14 @@
                           <div class="mutual-group__items">
                             <span v-for="(item, index) in group" :key="item + index" class="token-chip">
                               {{ item }}
-                              <button type="button" class="token-chip__remove" @click="group.splice(index, 1)">×</button>
+                              <button type="button" class="token-chip__remove" :aria-label="`移除${item}`" @click="group.splice(index, 1)">×</button>
                             </span>
                             <select class="mutual-select" @change="addToMutualGroup(field, groupIndex, $event.target.value); $event.target.value = ''">
-                              <option value="">添加到组...</option>
+                              <option value="">添加到组…</option>
                               <option v-for="item in getMutualAvailableOptions(field, group)" :key="item" :value="item">{{ item }}</option>
                             </select>
                           </div>
-                          <button type="button" class="icon-button danger" @click="field.props.mutualExclusions.splice(groupIndex, 1)">删除组</button>
+                          <button type="button" class="icon-button danger" :aria-label="`删除第 ${groupIndex + 1} 个互斥组`" @click="field.props.mutualExclusions.splice(groupIndex, 1)">删除组</button>
                         </div>
                         <el-button size="mini" @click="addMutualGroup(field)">新增互斥组</el-button>
                       </div>
@@ -385,7 +385,7 @@
                     </div>
                     <div class="form-item">
                       <label>多选分隔符</label>
-                      <el-input v-model.trim="ensureTextGenConfig(field).separator" maxlength="8" placeholder="默认 、" />
+                      <el-input v-model.trim="ensureTextGenConfig(field).separator" maxlength="8" placeholder="默认 、…" />
                     </div>
                     <div class="form-item full">
                       <label>忽略值</label>
@@ -395,7 +395,7 @@
                           <button type="button" class="token-chip__remove" @click="ignoreValues(field).splice(index, 1)">×</button>
                         </span>
                         <select class="mutual-select" @change="addIgnoreValue(field, $event.target.value); $event.target.value = ''">
-                          <option value="">选择要忽略的值...</option>
+                          <option value="">选择要忽略的值…</option>
                           <option v-for="item in getOptionList(field)" :key="item" :value="item" :disabled="ignoreValues(field).includes(item)">{{ item }}</option>
                         </select>
                       </div>
@@ -408,7 +408,7 @@
             <section class="editor-section" v-if="editingRecord.medicalMode === 'tcm'">
               <div class="section-title">中医扩展元数据</div>
               <div class="muted-text section-desc">保留 `tcmMetadata` 原始结构，便于维护辨证分类、脏腑经络与可能证型。</div>
-              <el-input v-model="tcmMetadataText" type="textarea" :rows="12" placeholder="请输入合法配置，对应 tcmMetadata" />
+              <el-input v-model="tcmMetadataText" type="textarea" :rows="12" placeholder="请输入合法配置，对应 tcmMetadata…" />
             </section>
           </div>
         </div>
@@ -417,7 +417,7 @@
           <div class="section-title">请选择或新建一个症状模板</div>
           
         </div>
-      </div>
+      </section>
     </div>
 
     <el-dialog
@@ -431,7 +431,7 @@
         <el-input
           v-model.trim="changeLogFilters.keyword"
           clearable
-          placeholder="搜索症状、操作者或摘要"
+          placeholder="搜索症状、操作者或摘要…"
           class="search-input"
           @keyup.enter.native="searchChangeLogs"
         />
@@ -488,7 +488,7 @@
         </el-table-column>
         <el-table-column label="操作" width="88" fixed="right">
           <template slot-scope="{ row }">
-            <a class="table-action" @click="openChangeLogDetail(row)">详情</a>
+            <table-action @click="openChangeLogDetail(row)">详情</table-action>
           </template>
         </el-table-column>
       </el-table>
@@ -554,6 +554,7 @@
 import http from '../api/http'
 import { fetchOrgs, fetchRegions } from '../api/reference'
 import { buildLabelMap, formatDateTime, resolveScopeLabel } from '../utils/admin'
+import { SegmentedSwitch, TableAction } from '../components/ui'
 
 const medicalModeOptions = [
   { value: 'western', label: '西医' },
@@ -688,6 +689,10 @@ function cloneRecord(value) {
 }
 
 export default {
+  components: {
+    SegmentedSwitch,
+    TableAction
+  },
   data() {
     return {
       medicalModeOptions,
@@ -1368,7 +1373,7 @@ export default {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
-  height: calc(100vh - 132px);
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -1640,11 +1645,17 @@ export default {
 .token-input,
 .mutual-select {
   border: none;
-  outline: none;
   font-size: 13px;
   color: #33475c;
   min-width: 180px;
   background: transparent;
+}
+
+.token-input:focus-visible,
+.mutual-select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }
 
 .section-card,
@@ -1723,12 +1734,6 @@ export default {
   margin-top: 3px;
   color: #7d8ca0;
   font-size: 12px;
-}
-
-.table-action {
-  color: #1D9E75;
-  cursor: pointer;
-  font-weight: 500;
 }
 
 .page-footer {

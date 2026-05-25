@@ -1,111 +1,120 @@
 <template>
-  <div>
-    <div class="filter-bar release-toolbar">
-      <div class="page-toolbar__filters">
-        <el-select v-model="filters.channel" placeholder="发布通道" class="filter-select" @change="loadData">
-          <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-button @click="loadData">刷新</el-button>
+  <div class="page-surface">
+    <admin-filter-bar class="release-toolbar">
+      <div class="release-toolbar__content">
+        <div class="page-toolbar__filters">
+          <el-select v-model="filters.channel" placeholder="发布通道" class="filter-select" @change="loadData">
+            <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-button @click="loadData">刷新</el-button>
+        </div>
+        <el-button type="primary" icon="el-icon-upload" @click="openUpload">上传新版本</el-button>
       </div>
-      <el-button type="primary" @click="openUpload">上传新版本</el-button>
-    </div>
+    </admin-filter-bar>
 
-    <el-table v-loading="loading" :data="records" class="page-card admin-table" row-key="channel">
-      <el-table-column label="通道" width="130">
-        <template slot-scope="{ row }">
-          <span class="status-pill status-pill--success">{{ channelLabel(row.channel) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="version" label="版本" width="120">
-        <template slot-scope="{ row }">{{ row.version || '--' }}</template>
-      </el-table-column>
-      <el-table-column label="强制更新" width="130">
-        <template slot-scope="{ row }">
-          <el-switch
-            v-model="row.forceUpdate"
-            :disabled="!row.version || policySavingKey === row.channel"
-            active-color="#1D9E75"
-            inactive-color="#dcdfe6"
-            @change="toggleForceUpdate(row, $event)"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
-        <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
-      </el-table-column>
-      <el-table-column prop="target" label="平台" width="160">
-        <template slot-scope="{ row }"><code>{{ row.target || '--' }}</code></template>
-      </el-table-column>
-      <el-table-column prop="fileName" label="安装包" min-width="220">
-        <template slot-scope="{ row }">
-          <span>{{ row.fileName || '暂无上传文件' }}</span>
-          <span v-if="row.fileSize" class="muted">（{{ formatFileSize(row.fileSize) }}）</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="更新源" min-width="300">
-        <template slot-scope="{ row }">
-          <code>{{ row.latestJsonUrl }}</code>
-        </template>
-      </el-table-column>
-      <el-table-column prop="pubDate" label="发布时间" width="190">
-        <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
-        <template slot-scope="{ row }">
-          <a class="table-action" :class="{ 'is-disabled': !row.latestJsonUrl }" @click="row.latestJsonUrl && copy(row.latestJsonUrl)">复制源</a>
-        </template>
-      </el-table-column>
-    </el-table>
+    <section class="page-section page-section--table release-table-card">
+      <el-table v-loading="loading" :data="records" class="admin-table" row-key="channel">
+        <el-table-column label="通道" width="130">
+          <template slot-scope="{ row }">
+            <status-pill tone="success" :label="channelLabel(row.channel)" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="version" label="版本" width="120">
+          <template slot-scope="{ row }">{{ row.version || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="强制更新" width="130">
+          <template slot-scope="{ row }">
+            <el-switch
+              v-model="row.forceUpdate"
+              :disabled="!row.version || policySavingKey === row.channel"
+              active-color="#1D9E75"
+              inactive-color="#dcdfe6"
+              @change="toggleForceUpdate(row, $event)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
+          <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="target" label="平台" width="160">
+          <template slot-scope="{ row }"><code-tag :value="row.target" /></template>
+        </el-table-column>
+        <el-table-column prop="fileName" label="安装包" min-width="220">
+          <template slot-scope="{ row }">
+            <span>{{ row.fileName || '暂无上传文件' }}</span>
+            <span v-if="row.fileSize" class="muted">（{{ formatFileSize(row.fileSize) }}）</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="更新源" min-width="300">
+          <template slot-scope="{ row }">
+            <code-tag :value="row.latestJsonUrl" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="pubDate" label="发布时间" width="190">
+          <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template slot-scope="{ row }">
+            <table-action :disabled="!row.latestJsonUrl" @click="copy(row.latestJsonUrl)">复制源</table-action>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
 
     <div class="history-header">
       <span>历史版本</span>
     </div>
-    <el-table v-loading="historyLoading" :data="historyRecords" class="page-card admin-table history-table" :row-key="historyKey">
-      <el-table-column label="通道" width="130">
-        <template slot-scope="{ row }">
-          <span class="status-pill status-pill--success">{{ channelLabel(row.channel) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="version" label="版本" width="120">
-        <template slot-scope="{ row }">
-          <span>{{ row.version || '--' }}</span>
-          <span v-if="row.active" class="current-marker">当前</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="强制更新" width="130">
-        <template slot-scope="{ row }">
-          <span class="status-pill" :class="row.forceUpdate ? 'status-pill--warning' : 'status-pill--muted'">
-            {{ row.forceUpdate ? '已开启' : '未开启' }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
-        <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
-      </el-table-column>
-      <el-table-column label="平台" width="180">
-        <template slot-scope="{ row }"><code>{{ formatList(row.targets) }}</code></template>
-      </el-table-column>
-      <el-table-column label="安装包" min-width="260">
-        <template slot-scope="{ row }">{{ formatList(row.fileNames) || '暂无上传文件' }}</template>
-      </el-table-column>
-      <el-table-column prop="pubDate" label="发布时间" width="190">
-        <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
-      </el-table-column>
-      <el-table-column prop="updatedAt" label="最后激活" width="170">
-        <template slot-scope="{ row }">{{ formatTimestamp(row.updatedAt) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
-        <template slot-scope="{ row }">
-          <a class="table-action" :class="{ 'is-disabled': row.active }" @click="!row.active && rollback(row)">回滚</a>
-        </template>
-      </el-table-column>
-    </el-table>
+    <section class="page-section page-section--table release-table-card">
+      <el-table
+        v-loading="historyLoading"
+        :data="historyRecords"
+        class="admin-table history-table"
+        :row-key="historyKey"
+      >
+        <el-table-column label="通道" width="130">
+          <template slot-scope="{ row }">
+            <status-pill tone="success" :label="channelLabel(row.channel)" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="version" label="版本" width="120">
+          <template slot-scope="{ row }">
+            <span>{{ row.version || '--' }}</span>
+            <span v-if="row.active" class="current-marker">当前</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="强制更新" width="130">
+          <template slot-scope="{ row }">
+            <status-pill :tone="row.forceUpdate ? 'warning' : 'muted'" :label="row.forceUpdate ? '已开启' : '未开启'" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
+          <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="平台" width="180">
+          <template slot-scope="{ row }"><code-tag :value="formatList(row.targets)" /></template>
+        </el-table-column>
+        <el-table-column label="安装包" min-width="260">
+          <template slot-scope="{ row }">{{ formatList(row.fileNames) || '暂无上传文件' }}</template>
+        </el-table-column>
+        <el-table-column prop="pubDate" label="发布时间" width="190">
+          <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="updatedAt" label="最后激活" width="170">
+          <template slot-scope="{ row }">{{ formatTimestamp(row.updatedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template slot-scope="{ row }">
+            <table-action :disabled="row.active" danger @click="rollback(row)">回滚</table-action>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
 
     <el-dialog v-if="dialogVisible" title="上传客户端版本" :visible.sync="dialogVisible" width="680px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
           <el-form-item label="发布通道" prop="channel">
-            <el-select v-model="form.channel" placeholder="请选择通道">
+            <el-select v-model="form.channel" placeholder="请选择通道…">
               <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
@@ -114,15 +123,15 @@
             <div class="muted upload-hint">选择 Tauri 发布产物中的 latest.json，系统会自动解析版本号、target 和签名。</div>
           </el-form-item>
           <el-form-item label="版本号">
-            <el-input v-model.trim="form.version" placeholder="默认从 latest.json 读取" />
+            <el-input v-model.trim="form.version" placeholder="默认从 latest.json 读取…" />
           </el-form-item>
           <el-form-item label="平台 target">
-            <el-select v-model="form.target" filterable allow-create default-first-option placeholder="请选择或输入 target">
+            <el-select v-model="form.target" filterable allow-create default-first-option placeholder="请选择或输入 target…">
               <el-option v-for="item in targetOptions" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item label="发布时间">
-            <el-input v-model.trim="form.pubDate" placeholder="留空由服务端生成" />
+            <el-input v-model.trim="form.pubDate" placeholder="留空由服务端生成…" />
           </el-form-item>
           <el-form-item label="强制更新">
             <div class="switch-row">
@@ -135,7 +144,7 @@
             </div>
           </el-form-item>
           <el-form-item label="更新说明" class="form-span-2">
-            <el-input v-model="form.notes" type="textarea" :rows="4" placeholder="可选，展示在桌面端更新内容中" />
+            <el-input v-model="form.notes" type="textarea" :rows="4" placeholder="可选，展示在桌面端更新内容中…" />
           </el-form-item>
           <el-form-item label="安装包文件" prop="file" class="form-span-2">
             <input ref="fileInput" type="file" @change="handleFileChange" />
@@ -153,6 +162,7 @@
 
 <script>
 import http from '../api/http'
+import { AdminFilterBar, CodeTag, StatusPill, TableAction } from '../components/ui'
 
 const channelOptions = [
   { value: 'production', label: '正式内网' },
@@ -175,6 +185,12 @@ function createDefaultForm() {
 }
 
 export default {
+  components: {
+    AdminFilterBar,
+    CodeTag,
+    StatusPill,
+    TableAction
+  },
   data() {
     return {
       channelOptions,
@@ -405,8 +421,16 @@ export default {
 </script>
 
 <style scoped>
-.release-toolbar {
+.release-toolbar__content {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.release-table-card {
+  padding: 0;
 }
 
 .history-header {
@@ -446,12 +470,6 @@ export default {
   gap: 10px;
   min-height: 40px;
   color: var(--color-text-regular);
-}
-
-code {
-  font-family: var(--font-mono);
-  color: var(--color-text-regular);
-  word-break: break-all;
 }
 
 .is-disabled {

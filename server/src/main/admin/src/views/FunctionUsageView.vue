@@ -1,88 +1,57 @@
 <template>
-  <div class="func-page" v-loading="loading">
-    <div class="filter-bar">
+  <div class="page-surface func-page" v-loading="loading">
+    <admin-filter-bar>
       <div class="filter-row">
         <div class="filter-item">
           <div class="filter-label">时间范围</div>
-          <div class="time-tabs">
-            <button
-              v-for="opt in timeRangeOptions"
-              :key="opt.value"
-              type="button"
-              :class="['time-tab', { 'is-active': timeRange === opt.value }]"
-              @click="setTimeRange(opt.value)"
-            >{{ opt.label }}</button>
-          </div>
-          <div v-if="timeRange === 'custom'" class="custom-date-row">
-            <el-date-picker
-              v-model="query.dateFrom"
-              type="date"
-              placeholder="开始日期"
-              size="small"
-              value-format="yyyy-MM-dd"
-              @change="onCustomDateChange"
-            />
-            <span class="date-sep">至</span>
-            <el-date-picker
-              v-model="query.dateTo"
-              type="date"
-              placeholder="结束日期"
-              size="small"
-              value-format="yyyy-MM-dd"
-              @change="onCustomDateChange"
-            />
-          </div>
+          <time-range-filter
+            v-model="timeRange"
+            :options="timeRangeOptions"
+            :date-from.sync="query.dateFrom"
+            :date-to.sync="query.dateTo"
+            @input="setTimeRange"
+            @custom-change="onCustomDateChange"
+          />
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
-          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" style="width:200px" @change="search">
+          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="search">
             <el-option v-for="r in regionOptions" :key="r.id" :label="r.name" :value="r.id" />
           </el-select>
         </div>
         <div class="filter-item">
           <div class="filter-label">机构选择</div>
-          <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" style="width:200px" @change="search">
+          <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" class="filter-select" @change="search">
             <el-option v-for="o in orgOptions" :key="o.id" :label="o.name" :value="o.id" />
           </el-select>
         </div>
         <div class="filter-item">
           <div class="filter-label">功能模块</div>
-          <el-select v-model="query.functionModules" placeholder="全部功能" multiple collapse-tags clearable size="small" style="width:220px" @change="search">
+          <el-select v-model="query.functionModules" placeholder="全部功能" multiple collapse-tags clearable size="small" class="function-select" @change="search">
             <el-option v-for="m in moduleOptions" :key="m" :label="m" :value="m" />
           </el-select>
         </div>
-        <div>
+        <div class="filter-actions">
           <el-button type="primary" size="small" @click="search">查询</el-button>
           <el-button size="small" @click="reset">重置</el-button>
         </div>
       </div>
-      <div class="export-bar">
+      <template #actions>
         <el-button size="small" icon="el-icon-download" :loading="exporting" @click="exportData">导出数据</el-button>
-      </div>
+      </template>
+    </admin-filter-bar>
+
+    <div class="metric-grid metric-grid--three">
+      <metric-card label="总调用次数" :value="(response.totalCallCount || 0).toLocaleString()" />
+      <metric-card label="平均每日调用" :value="(response.avgDailyCalls || 0).toLocaleString()" />
+      <metric-card label="功能使用率" :value="response.usageRate || '0%'" />
     </div>
 
-    <div class="card-row">
-      <div class="summary-card">
-        <div class="summary-card__label">总调用次数</div>
-        <div class="summary-card__value">{{ (response.totalCallCount || 0).toLocaleString() }}</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-card__label">平均每日调用</div>
-        <div class="summary-card__value">{{ (response.avgDailyCalls || 0).toLocaleString() }}</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-card__label">功能使用率</div>
-        <div class="summary-card__value">{{ response.usageRate || '0%' }}</div>
-      </div>
-    </div>
-
-    <div class="chart-duo">
-      <div class="chart-panel">
-        <div class="chart-panel__title">功能使用排行</div>
+    <div class="chart-grid">
+      <chart-panel title="功能使用排行">
         <div ref="rankChartRef" class="chart-body--rank"></div>
-      </div>
-      <div class="chart-panel">
-        <div class="chart-panel__title">功能使用趋势</div>
+      </chart-panel>
+      <chart-panel title="功能使用趋势">
         <div ref="trendChartRef" class="chart-body--trend"></div>
         <div class="trend-legend">
           <span
@@ -94,13 +63,13 @@
             {{ m }}
           </span>
         </div>
-      </div>
+      </chart-panel>
     </div>
 
-    <div class="table-section">
-      <div class="table-section__header">
-        <span class="table-section__title">功能使用明细</span>
-        <div class="table-section__meta">
+    <section class="page-section page-section--table">
+      <div class="page-section__header">
+        <span class="page-section__title">功能使用明细</span>
+        <div class="page-section__meta">
           共 {{ response.total || 0 }} 条
           <el-pagination
             small
@@ -112,7 +81,7 @@
           />
         </div>
       </div>
-      <el-table :data="response.records || []" border stripe size="small">
+      <el-table :data="response.records || []" size="small" class="admin-table">
         <el-table-column prop="moduleName" label="功能模块" min-width="160" />
         <el-table-column prop="callCount" label="调用次数" width="120" sortable />
         <el-table-column prop="doctorCount" label="使用医生数" width="120" sortable />
@@ -125,7 +94,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -133,6 +102,7 @@
 import * as echarts from 'echarts'
 import http from '../api/http'
 import { refOptions } from '../api/reference'
+import { AdminFilterBar, ChartPanel, MetricCard, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
   { value: 'today', label: '今日' },
@@ -146,6 +116,12 @@ const TIME_RANGES = [
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#EC4899', '#06B6D4', '#F97316']
 
 export default {
+  components: {
+    AdminFilterBar,
+    ChartPanel,
+    MetricCard,
+    TimeRangeFilter
+  },
   data() {
     return {
       loading: false,
@@ -365,32 +341,25 @@ export default {
 </script>
 
 <style scoped>
-.func-page { display: grid; gap: 16px; }
-.filter-bar { background: #fff; border-radius: 8px; padding: 20px 24px; border: 0.5px solid #E8EEEC; }
-.filter-row { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
-.filter-item { display: grid; gap: 6px; }
-.filter-label { font-size: 14px; font-weight: 500; color: #4B5563; }
-.time-tabs { display: flex; border: 0.8px solid #E2E8F0; border-radius: 8px; overflow: hidden; }
-.time-tab { height: 38px; padding: 0 16px; border: none; background: #fff; color: #64748B; font-size: 14px; cursor: pointer; }
-.time-tab.is-active { background: #EFF6FF; color: #1E40AF; font-weight: 500; }
-.custom-date-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.date-sep { color: #94A3B8; font-size: 13px; }
-.export-bar { display: flex; justify-content: flex-end; margin-top: 14px; padding-top: 14px; border-top: 0.5px solid #F1F5F9; }
-.card-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.summary-card { padding: 24px 20px; background: #fff; border: 0.8px solid #F1F5F9; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-.summary-card__label { font-size: 14px; color: #64748B; }
-.summary-card__value { font-size: 28px; font-weight: 600; color: #1E293B; margin-top: 8px; }
-.chart-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.chart-panel { background: #fff; border: 0.8px solid #F1F5F9; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); padding: 20px; }
-.chart-panel__title { font-size: 16px; font-weight: 600; color: #1E293B; margin-bottom: 12px; }
-.chart-body--rank { width: 100%; height: 340px; }
-.chart-body--trend { width: 100%; height: 300px; }
-.trend-legend { display: flex; justify-content: center; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
-.legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748B; }
-.legend-dot { width: 10px; height: 10px; border-radius: 999px; }
-.table-section { background: #fff; border: 0.8px solid #F1F5F9; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); padding: 20px; }
-.table-section__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.table-section__title { font-size: 16px; font-weight: 600; color: #1E293B; }
-.table-section__meta { display: flex; align-items: center; gap: 12px; font-size: 13px; color: #94A3B8; }
-@media (max-width: 1280px) { .chart-duo { grid-template-columns: 1fr; } }
+.metric-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.function-select {
+  width: 220px;
+}
+
+.trend-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 960px) {
+  .metric-grid--three {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

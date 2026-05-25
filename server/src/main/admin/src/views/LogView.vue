@@ -1,11 +1,11 @@
 <template>
-  <div>
-    <div class="filter-bar">
+  <div class="page-surface">
+    <section class="page-section page-section--padded">
       <div class="page-toolbar__filters log-filter-grid">
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索模块、标题、动作、原始数据、设备或机构"
+          placeholder="搜索模块、标题、动作、原始数据、设备或机构…"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
@@ -105,9 +105,9 @@
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
-    </div>
+    </section>
 
-    <div class="page-card">
+    <section class="page-section page-section--table">
       <el-table :data="records" v-loading="loading">
       <el-table-column label="日志类型" width="112">
         <template slot-scope="{ row }">
@@ -131,13 +131,13 @@
       <el-table-column label="动作编码" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
           <div class="log-main-text">{{ primaryDisplay(row.displayAction, row.opAction) }}</div>
-          <span class="code-tag">{{ displayText(row.opAction) }}</span>
+          <code-tag :value="row.opAction" />
         </template>
       </el-table-column>
-        <el-table-column label="来源/场景" min-width="180" show-overflow-tooltip>
+      <el-table-column label="来源/场景" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">
-            <div class="log-main-text">{{ formatDisplaySourceScene(row) }}</div>
-            <div v-if="showRawSourceScene(row)" class="log-sub-text">{{ formatSourceScene(row.sourceModule, row.sceneCode) }}</div>
+          <div class="log-main-text">{{ formatDisplaySourceScene(row) }}</div>
+          <div v-if="showRawSourceScene(row)" class="log-sub-text">{{ formatSourceScene(row.sourceModule, row.sceneCode) }}</div>
         </template>
       </el-table-column>
       <el-table-column label="结果" width="88">
@@ -149,7 +149,7 @@
       </el-table-column>
       <el-table-column label="原始数据" min-width="220" show-overflow-tooltip>
         <template slot-scope="{ row }">
-            <span class="code-tag log-summary">{{ summarizeRawData(row) }}</span>
+          <code-tag class="log-summary" :value="summarizeRawData(row)" />
         </template>
       </el-table-column>
       <el-table-column label="操作时间" width="168">
@@ -159,7 +159,7 @@
       </el-table-column>
       <el-table-column label="操作" width="88" fixed="right">
         <template slot-scope="{ row }">
-          <a class="table-action" @click="openRawData(row)">详情</a>
+          <table-action @click="openRawData(row)">详情</table-action>
         </template>
       </el-table-column>
     </el-table>
@@ -174,7 +174,7 @@
         @current-change="loadData"
       />
     </div>
-    </div>
+    </section>
 
     <el-dialog v-if="payloadDialogVisible" title="日志详情" :visible.sync="payloadDialogVisible" width="760px">
       <div v-if="payloadRecord" class="detail-grid">
@@ -229,6 +229,7 @@
 
 <script>
 import http from '../api/http'
+import { CodeTag, TableAction } from '../components/ui'
 
 const MODULE_LABELS = {
   feedback: '反馈弹层',
@@ -343,6 +344,10 @@ function createDefaultFilters() {
 }
 
 export default {
+  components: {
+    CodeTag,
+    TableAction
+  },
   data() {
     return {
       loading: false,
@@ -534,7 +539,7 @@ export default {
       if (!value || value.length <= maxLength) {
         return value
       }
-      return `${value.slice(0, maxLength)}...`
+      return `${value.slice(0, maxLength)}…`
     },
     formatSourceScene(sourceModule, sceneCode) {
       const left = this.normalizeText(sourceModule)
