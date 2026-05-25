@@ -190,6 +190,7 @@
             <SnapshotList title="用药" :items="snapshotItems(firstSnapshot, 'medicines')" />
             <SnapshotList title="检查" :items="snapshotItems(firstSnapshot, 'examinations')" />
             <SnapshotList title="检验" :items="snapshotItems(firstSnapshot, 'labTests')" />
+            <SnapshotList title="处置" :items="snapshotItems(firstSnapshot, 'procedures')" />
           </div>
 
           <div class="snapshot-panel">
@@ -236,6 +237,12 @@
               :previous-items="snapshotItems(firstSnapshot, 'labTests')"
               diff-mode
             />
+            <SnapshotList
+              title="处置"
+              :items="snapshotItems(finalSnapshot, 'procedures')"
+              :previous-items="snapshotItems(firstSnapshot, 'procedures')"
+              diff-mode
+            />
           </div>
         </div>
 
@@ -257,6 +264,10 @@
             <div class="selection-card">
               <div class="record-field__label">检验</div>
               <div class="selection-card__value">{{ selectedNames('selectedLabTestNames') }}</div>
+            </div>
+            <div class="selection-card">
+              <div class="record-field__label">处置</div>
+              <div class="selection-card__value">{{ selectedNames('selectedProcedureNames') }}</div>
             </div>
           </div>
         </div>

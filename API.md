@@ -616,7 +616,8 @@ Content-Type: application/json
     "diagnoses": [{ "name": "急性上呼吸道感染", "selected": true }],
     "medicines": [{ "name": "氨溴索", "selected": true }],
     "examinations": [{ "name": "胸部CT", "selected": false }],
-    "labTests": [{ "name": "血常规", "selected": true }]
+    "labTests": [{ "name": "血常规", "selected": true }],
+    "procedures": [{ "name": "雾化吸入", "selected": true }]
   },
   "finalSnapshot": {
     "chiefComplaint": "咳嗽、咳痰3天",
@@ -624,13 +625,15 @@ Content-Type: application/json
     "diagnoses": [{ "name": "急性支气管炎", "selected": true }],
     "medicines": [{ "name": "氨溴索", "selected": true }],
     "examinations": [],
-    "labTests": [{ "name": "血常规", "selected": true }]
+    "labTests": [{ "name": "血常规", "selected": true }],
+    "procedures": [{ "name": "雾化吸入", "selected": true }]
   },
   "selectionSnapshot": {
     "selectedDiagnosisNames": ["急性支气管炎"],
     "selectedMedicineNames": ["氨溴索"],
     "selectedExaminationNames": [],
-    "selectedLabTestNames": ["血常规"]
+    "selectedLabTestNames": ["血常规"],
+    "selectedProcedureNames": ["雾化吸入"]
   }
 }
 ```
@@ -1772,7 +1775,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "hasSpeechText": true,
   "firstSnapshotJson": "{\"chiefComplaint\":\"咳嗽3天\"}",
   "finalSnapshotJson": "{\"chiefComplaint\":\"咳嗽、咳痰3天\"}",
-  "selectionJson": "{\"selectedMedicineNames\":[\"氨溴索\"]}",
+  "selectionJson": "{\"selectedMedicineNames\":[\"氨溴索\"],\"selectedProcedureNames\":[\"雾化吸入\"]}",
   "status": "completed",
   "consultationTime": "2026-04-27T10:00:00"
 }
