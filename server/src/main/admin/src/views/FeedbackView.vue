@@ -13,19 +13,6 @@
         <el-select v-model="filters.kind" clearable placeholder="反馈类型" class="filter-select">
           <el-option v-for="item in KIND_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select
-          v-model="filters.scores"
-          multiple
-          clearable
-          collapse-tags
-          placeholder="评分"
-          class="filter-select"
-        >
-          <el-option v-for="value in scoreOptions" :key="value" :label="`${value} 分`" :value="value" />
-        </el-select>
-        <el-input v-model.trim="filters.doctor" clearable placeholder="医生" class="filter-narrow" />
-        <el-input v-model.trim="filters.dept" clearable placeholder="科室" class="filter-narrow" />
-        <el-input v-model.trim="filters.org" clearable placeholder="机构" class="filter-narrow" />
         <el-date-picker
           v-model="filters.dateRange"
           type="datetimerange"
@@ -39,29 +26,41 @@
         />
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
-        <el-checkbox v-model="advancedMode" class="filter-toggle">高级筛选</el-checkbox>
-      </div>
-      <div v-if="advancedMode" class="page-toolbar__filters page-toolbar__filters--advanced">
-        <el-select v-model="filters.severity" clearable placeholder="严重度" class="filter-select">
-          <el-option v-for="item in SEVERITY_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.sourceModule" clearable filterable placeholder="来源模块" class="filter-select">
-          <el-option
-            v-for="item in sourceModuleOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-        <el-select v-model="filters.hasCorrection" clearable placeholder="是否含修正" class="filter-select">
-          <el-option label="包含医生修正" :value="true" />
-          <el-option label="无修正" :value="false" />
-        </el-select>
-        <el-select v-model="filters.hasTrace" clearable placeholder="是否含 trace" class="filter-select">
-          <el-option label="有 traceId" :value="true" />
-          <el-option label="无 traceId" :value="false" />
-        </el-select>
-        <el-checkbox v-model="filters.includeHistory">包含历史修订</el-checkbox>
+        <advanced-filter-panel v-model="advancedMode">
+          <el-select
+            v-model="filters.scores"
+            multiple
+            clearable
+            collapse-tags
+            placeholder="评分"
+            class="filter-select"
+          >
+            <el-option v-for="value in scoreOptions" :key="value" :label="`${value} 分`" :value="value" />
+          </el-select>
+          <el-input v-model.trim="filters.doctor" clearable placeholder="医生" class="filter-narrow" />
+          <el-input v-model.trim="filters.dept" clearable placeholder="科室" class="filter-narrow" />
+          <el-input v-model.trim="filters.org" clearable placeholder="机构" class="filter-narrow" />
+          <el-select v-model="filters.severity" clearable placeholder="严重度" class="filter-select">
+            <el-option v-for="item in SEVERITY_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-select v-model="filters.sourceModule" clearable filterable placeholder="来源模块" class="filter-select">
+            <el-option
+              v-for="item in sourceModuleOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+          <el-select v-model="filters.hasCorrection" clearable placeholder="是否含修正" class="filter-select">
+            <el-option label="包含医生修正" :value="true" />
+            <el-option label="无修正" :value="false" />
+          </el-select>
+          <el-select v-model="filters.hasTrace" clearable placeholder="是否含 trace" class="filter-select">
+            <el-option label="有 traceId" :value="true" />
+            <el-option label="无 traceId" :value="false" />
+          </el-select>
+          <el-checkbox v-model="filters.includeHistory">包含历史修订</el-checkbox>
+        </advanced-filter-panel>
       </div>
     </div>
     </section>
@@ -314,6 +313,7 @@
 
 <script>
 import http from '../api/http'
+import { AdvancedFilterPanel } from '../components/ui'
 
 const MODULE_LABELS = {
   feedback: '反馈弹层',
@@ -411,6 +411,9 @@ function createDefaultFilters() {
 }
 
 export default {
+  components: {
+    AdvancedFilterPanel
+  },
   data() {
     return {
       loading: false,

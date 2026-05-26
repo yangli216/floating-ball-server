@@ -151,8 +151,10 @@ floating-ball-server/
 - 管理端全局交互态必须包含 hover、active 与 `:focus-visible` 样式；表单占位文案统一使用中文省略号 `…`，数字/时间/编码列使用等宽或 tabular number 表达，长文本必须可折行或截断
 - 管理端公共组件按 `server/src/main/admin/src/components/layout` 与 `server/src/main/admin/src/components/ui` 分层：`layout` 只承载后台壳、侧栏、顶栏、tags-view 与账号菜单，`ui` 承载筛选条、指标卡、图表面板、状态 pill、code tag、分段开关等页面无关组件
 - 管理端壳层 div 分配固定为 `admin-shell -> admin-shell__sidebar + admin-shell__main -> admin-shell__topbar + admin-shell__tabs + admin-shell__content`；`AdminLayout` 只做组合编排，侧栏、顶栏、页签栏分别由 `AdminSidebar`、`AdminTopbar`、`AdminTabBar` 承载，业务页面不得重新定义外层导航/内容容器
+- 管理端壳层必须提供真实可用的侧栏折叠、窄屏侧栏抽屉与顶栏快捷动作；未实现的视觉按钮不得保留在顶栏。跨页面导航入口使用 `router-link` 或等价导航语义，避免把跳转伪装成普通动作按钮
 - 管理端内容区统一由 `admin-shell__content` 提供滚动和页面留白，业务页面只提供页面内的筛选、指标、图表、表格区块，避免每个页面重复定义顶层灰底、横向滚动条或额外外框
 - 统计分析、活跃度、安全分析等运营看板统一使用 `MetricCard`、`ChartPanel`、`AdminFilterBar` 与 `TimeRangeFilter`，保证筛选、指标、图表标题、导出入口和移动端折行行为一致
+- 图表类页面必须为 loading、空数据和重绘状态提供稳定视觉反馈；ECharts resize 监听由页面统一绑定和释放，不得在每次渲染时重复追加
 - 列表 CRUD 页新增状态、编码、分段开关时优先复用 `StatusPill`、`CodeTag`、`SegmentedSwitch`；确有复杂交互时可在页面内组合，但不得重新定义同义状态样式
 - 远端 `/v1/*` 默认 CORS 需要兼容 `floating-ball` 的 Tauri dev / desktop WebView origin，且 `OPTIONS` 预检请求不能被设备鉴权拦截
 - `floating-ball.cors.allowed-origins` 的本地配置只能做增量补充，不能覆盖掉桌面端默认 origin（`tauri://localhost`、`asset://localhost`、`https://tauri.localhost`、`http://tauri.localhost`、本地 localhost/127.0.0.1`），否则桌面端会在浏览器 Fetch 层直接报 `Load failed`

@@ -1,3 +1,4 @@
+export { default as AdvancedFilterPanel } from './AdvancedFilterPanel.vue'
 export { default as AdminFilterBar } from './AdminFilterBar.vue'
 export { default as ChartPanel } from './ChartPanel.vue'
 export { default as CodeTag } from './CodeTag.vue'

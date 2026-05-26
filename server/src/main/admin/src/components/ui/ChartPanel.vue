@@ -9,7 +9,8 @@
         <slot name="actions" />
       </div>
     </header>
-    <slot />
+    <div v-if="empty" class="chart-panel__empty">{{ emptyText }}</div>
+    <slot v-else />
   </section>
 </template>
 
@@ -24,6 +25,14 @@ export default {
     subtitle: {
       type: String,
       default: ''
+    },
+    empty: {
+      type: Boolean,
+      default: false
+    },
+    emptyText: {
+      type: String,
+      default: '暂无图表数据'
     }
   }
 }
@@ -68,5 +77,17 @@ export default {
 
 .chart-panel__actions {
   flex: 0 0 auto;
+}
+
+.chart-panel__empty {
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px dashed var(--border-color-base);
+  border-radius: 8px;
+  background: var(--background-color-base);
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <aside class="admin-sidebar" aria-label="管理端导航">
+  <aside class="admin-sidebar" :class="{ 'is-collapsed': collapsed }" aria-label="管理端导航">
     <div class="admin-sidebar__brand">
       <span class="admin-sidebar__brand-mark" aria-hidden="true">医</span>
       <span class="admin-sidebar__brand-text">区域智能后台</span>
@@ -13,6 +13,8 @@
         class="admin-sidebar__link"
         active-class="is-active"
         exact
+        :title="collapsed ? item.label : null"
+        @click.native="$emit('navigate', item.path)"
       >
         <i :class="item.icon" class="admin-sidebar__link-icon" aria-hidden="true"></i>
         <span class="admin-sidebar__link-text">{{ item.label }}</span>
@@ -28,6 +30,10 @@ export default {
     menuItems: {
       type: Array,
       required: true
+    },
+    collapsed: {
+      type: Boolean,
+      default: false
     }
   }
 }

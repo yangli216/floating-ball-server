@@ -3,7 +3,10 @@
     <admin-filter-bar>
       <div class="overview-actions">
         <el-button type="primary" icon="el-icon-refresh" @click="loadData">刷新</el-button>
-        <el-button icon="el-icon-user" @click="$router.push('/users')">用户管理</el-button>
+        <router-link class="el-button el-button--default overview-link-button" to="/users">
+          <i class="el-icon-user" aria-hidden="true"></i>
+          <span>用户管理</span>
+        </router-link>
       </div>
     </admin-filter-bar>
 
@@ -14,23 +17,22 @@
         :label="item.label"
         :value="item.value"
         clickable
-        @click="jumpTo(item.path)"
+        :to="item.path"
       />
     </div>
 
     <section class="page-section page-section--padded quick-panel">
       <div class="section-title">快速入口</div>
       <div class="quick-links">
-        <button
+        <router-link
           v-for="item in quickLinks"
           :key="item.path"
-          type="button"
           class="quick-link"
-          @click="jumpTo(item.path)"
+          :to="item.path"
         >
           <span>{{ item.label }}</span>
           <span class="quick-link__arrow">›</span>
-        </button>
+        </router-link>
       </div>
     </section>
   </div>
@@ -94,11 +96,6 @@ export default {
       } finally {
         this.loading = false
       }
-    },
-    jumpTo(path) {
-      if (path && path !== this.$route.path) {
-        this.$router.push(path)
-      }
     }
   }
 }
@@ -110,6 +107,13 @@ export default {
   justify-content: flex-end;
   gap: 10px;
   width: 100%;
+}
+
+.overview-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: none;
 }
 
 .overview-grid {
@@ -142,8 +146,8 @@ export default {
   border-radius: 8px;
   background: #fff;
   color: #5F5E5A;
-  cursor: pointer;
   font-size: 13px;
+  text-decoration: none;
 }
 
 .quick-link:hover {

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>区域智能后台 - 总览工作台示意</title>
+  <style>
+    :root {
+      --bg: #eef3f5;
+      --panel: #ffffff;
+      --panel-soft: #f7faf9;
+      --line: #dfe8e6;
+      --line-soft: #edf3f1;
+      --text: #1f2a2e;
+      --muted: #6f7b80;
+      --faint: #98a5aa;
+      --nav: #172b37;
+      --nav-2: #203846;
+      --green: #16866a;
+      --green-soft: #e3f4ef;
+      --blue: #315f9d;
+      --blue-soft: #e8eff8;
+      --amber: #b36b16;
+      --amber-soft: #fbefd9;
+      --red: #a83b3b;
+      --red-soft: #f8e6e6;
+      --shadow: 0 1px 2px rgba(29, 48, 56, 0.05);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      background: var(--bg);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      min-width: 0;
+      background: var(--nav);
+      color: #cad6dc;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand {
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 18px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: var(--green);
+      font-size: 13px;
+    }
+
+    .nav {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 12px 10px 18px;
+    }
+
+    .nav-group { margin-bottom: 14px; }
+
+    .nav-title {
+      padding: 8px 10px 6px;
+      color: #7f929c;
+      font-size: 11px;
+      letter-spacing: 0;
+    }
+
+    .nav-item {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border-radius: 6px;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
+    .nav-item.active { background: #0f222d; color: #fff; box-shadow: inset 3px 0 0 var(--green); }
+    .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .72; }
+
+    .main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 52px minmax(0, 1fr);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .page-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      color: #273338;
+    }
+
+    .env {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 400;
+    }
+
+    .env::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .top-actions { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--muted);
+    }
+
+    .content {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 14px;
+    }
+
+    .panel {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel-head {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .panel-title { font-weight: 600; color: #26353b; }
+    .panel-meta { color: var(--muted); font-size: 12px; }
+
+    .health-strip {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr));
+      overflow: hidden;
+    }
+
+    .health-main {
+      padding: 18px;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+    }
+
+    .health-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--green);
+      font-size: 20px;
+      font-weight: 650;
+    }
+
+    .pulse {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 6px var(--green-soft);
+    }
+
+    .health-note { color: var(--muted); }
+
+    .kpi {
+      padding: 18px 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .kpi:last-child { border-right: 0; }
+    .kpi-label { color: var(--muted); font-size: 12px; }
+    .kpi-value { margin-top: 8px; font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .kpi-sub { margin-top: 6px; color: var(--faint); font-size: 12px; }
+
+    .work-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .risk-list { padding: 10px 0; }
+
+    .risk-row {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) 80px;
+      gap: 12px;
+      align-items: center;
+      min-height: 58px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .risk-row:last-child { border-bottom: 0; }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .tag.red { color: var(--red); background: var(--red-soft); }
+    .tag.amber { color: var(--amber); background: var(--amber-soft); }
+    .tag.blue { color: var(--blue); background: var(--blue-soft); }
+    .tag.green { color: var(--green); background: var(--green-soft); }
+
+    .risk-title { font-weight: 550; color: #26353b; }
+    .risk-desc { margin-top: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .risk-time { color: var(--faint); font-size: 12px; text-align: right; }
+
+    .coverage {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .coverage-card {
+      min-height: 90px;
+      padding: 12px;
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      background: var(--panel-soft);
+    }
+
+    .coverage-card strong { display: block; font-size: 22px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .coverage-card span { color: var(--muted); font-size: 12px; }
+
+    .timeline { padding: 8px 16px 16px; }
+
+    .event {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .event:last-child { border-bottom: 0; }
+    .event-dot { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--green); }
+    .event-title { font-weight: 550; }
+    .event-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .mini-chart {
+      height: 210px;
+      padding: 10px 16px 16px;
+    }
+
+    svg { display: block; width: 100%; height: 100%; }
+    .axis { stroke: #e4ece9; stroke-width: 1; }
+    .line-green { fill: none; stroke: var(--green); stroke-width: 2.2; }
+    .line-blue { fill: none; stroke: var(--blue); stroke-width: 2.2; }
+    .area-green { fill: rgba(22,134,106,.10); }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .app { height: auto; grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .dashboard, .work-grid, .health-strip { grid-template-columns: 1fr; }
+      .main { grid-template-rows: 52px auto; }
+      .content { overflow: visible; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">医</span><span>区域智能后台</span></div>
+      <nav class="nav" aria-label="主导航">
+        <div class="nav-group">
+          <div class="nav-title">工作台</div>
+          <a class="nav-item active" href="#"><span class="nav-dot"></span>总览与待办</a>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>系统健康</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-title">机构与终端</div>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>区域机构</a>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>终端令牌</a>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>模型配置</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-title">临床内容</div>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>症状模板</a>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>客户端发布</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-title">审计与分析</div>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>操作日志</a>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>安全拦截</a>
+          <a class="nav-item" href="#"><span class="nav-dot"></span>统计分析</a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="page-title">
+          <span>总览工作台</span>
+          <span class="env">生产内网 / 2026-05-25 18:40</span>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn" aria-label="刷新">R</button>
+          <button class="icon-btn" aria-label="全屏">F</button>
+          <span>系统管理员</span>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="dashboard">
+          <section class="panel health-strip" aria-label="系统状态概览">
+            <div class="health-main">
+              <div class="health-status"><span class="pulse"></span>核心链路正常</div>
+              <div class="health-note">注册、bootstrap、AI 代理、审计上报均在最近 15 分钟内有成功请求。</div>
+            </div>
+            <div class="kpi"><div class="kpi-label">接入终端</div><div class="kpi-value">142</div><div class="kpi-sub">23 台今日活跃</div></div>
+            <div class="kpi"><div class="kpi-label">启用模板</div><div class="kpi-value">265</div><div class="kpi-sub">覆盖西医/中医</div></div>
+            <div class="kpi"><div class="kpi-label">今日问诊</div><div class="kpi-value">95</div><div class="kpi-sub">有效率 52.6%</div></div>
+            <div class="kpi"><div class="kpi-label">安全拦截</div><div class="kpi-value">18</div><div class="kpi-sub">3 条需复核</div></div>
+          </section>
+
+          <div class="work-grid">
+            <section class="panel">
+              <div class="panel-head"><div class="panel-title">待处理风险</div><div class="panel-meta">按影响优先</div></div>
+              <div class="risk-list">
+                <div class="risk-row"><span class="tag red">高</span><div><div class="risk-title">3 台终端连续签名失败</div><div class="risk-desc">集中在默认机构，建议确认版本与设备公钥状态</div></div><div class="risk-time">10 分钟前</div></div>
+                <div class="risk-row"><span class="tag amber">中</span><div><div class="risk-title">测试通道发布策略未配置</div><div class="risk-desc">latest.json 存在，但 policy.json 未声明最低可用版本</div></div><div class="risk-time">42 分钟前</div></div>
+                <div class="risk-row"><span class="tag blue">提示</span><div><div class="risk-title">AI 配置 1 项即将过期</div><div class="risk-desc">语音密钥还有 7 天到期，请安排轮换</div></div><div class="risk-time">今天</div></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head"><div class="panel-title">区域覆盖</div><div class="panel-meta">生产范围</div></div>
+              <div class="coverage">
+                <div class="coverage-card"><span>区域</span><strong>1</strong><span>默认区域</span></div>
+                <div class="coverage-card"><span>机构</span><strong>1</strong><span>默认机构</span></div>
+                <div class="coverage-card"><span>活跃医生</span><strong>3</strong><span>本月满足活跃口径</span></div>
+                <div class="coverage-card"><span>模型配置</span><strong>1</strong><span>机构级生效</span></div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head"><div class="panel-title">服务趋势</div><div class="panel-meta">最近 7 天</div></div>
+            <div class="mini-chart">
+              <svg viewBox="0 0 520 210" role="img" aria-label="服务趋势图">
+                <line class="axis" x1="34" y1="168" x2="500" y2="168"></line>
+                <line class="axis" x1="34" y1="122" x2="500" y2="122"></line>
+                <line class="axis" x1="34" y1="76" x2="500" y2="76"></line>
+                <path class="area-green" d="M34 150 C92 118 132 126 184 92 C244 54 294 72 350 68 C410 66 452 88 500 64 L500 168 L34 168 Z"></path>
+                <path class="line-green" d="M34 150 C92 118 132 126 184 92 C244 54 294 72 350 68 C410 66 452 88 500 64"></path>
+                <path class="line-blue" d="M34 160 C104 150 148 156 200 134 C256 108 316 118 374 104 C426 92 460 112 500 96"></path>
+              </svg>
+            </div>
+          </section>
+
+          <aside class="panel">
+            <div class="panel-head"><div class="panel-title">最近事件</div><div class="panel-meta">审计流</div></div>
+            <div class="timeline">
+              <div class="event"><span class="event-dot"></span><div><div class="event-title">管理员更新症状模板</div><div class="event-meta">fever / 新增 2 个字段规则</div></div></div>
+              <div class="event"><span class="event-dot"></span><div><div class="event-title">FloatingBall-MacIntel 心跳恢复</div><div class="event-meta">默认机构 / 18:34</div></div></div>
+              <div class="event"><span class="event-dot"></span><div><div class="event-title">AI 代理请求峰值</div><div class="event-meta">95 次问诊，平均响应 1.8s</div></div></div>
+              <div class="event"><span class="event-dot"></span><div><div class="event-title">安全拦截批量记录</div><div class="event-meta">WebSocket 签名无效 / 18 条</div></div></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

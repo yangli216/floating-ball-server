@@ -13,34 +13,36 @@
             class="search-input"
             @keyup.enter.native="loadData"
           />
-          <el-select v-model="filters.systemCategory" clearable class="filter-select" placeholder="系统分类">
-            <el-option v-for="item in systemCategoryOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
           <el-select v-model="filters.sdStatus" clearable class="filter-select" placeholder="状态">
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
-          <el-select
-            v-model="filters.idRegion"
-            clearable
-            filterable
-            placeholder="所属区域"
-            class="filter-select"
-            @change="handleFilterRegionChange"
-          >
-            <el-option v-for="item in regionOptions" :key="item.idRegion" :label="item.naRegion" :value="item.idRegion" />
-          </el-select>
-          <el-select
-            v-model="filters.idOrg"
-            clearable
-            filterable
-            placeholder="所属机构"
-            class="filter-select"
-            @change="handleFilterOrgChange"
-          >
-            <el-option v-for="item in filteredOrgOptions" :key="item.idOrg" :label="item.naOrg" :value="item.idOrg" />
-          </el-select>
           <el-button type="primary" icon="el-icon-search" @click="loadData">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
+          <advanced-filter-panel v-model="advancedFiltersOpen">
+            <el-select v-model="filters.systemCategory" clearable class="filter-select" placeholder="系统分类">
+              <el-option v-for="item in systemCategoryOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-select
+              v-model="filters.idRegion"
+              clearable
+              filterable
+              placeholder="所属区域"
+              class="filter-select"
+              @change="handleFilterRegionChange"
+            >
+              <el-option v-for="item in regionOptions" :key="item.idRegion" :label="item.naRegion" :value="item.idRegion" />
+            </el-select>
+            <el-select
+              v-model="filters.idOrg"
+              clearable
+              filterable
+              placeholder="所属机构"
+              class="filter-select"
+              @change="handleFilterOrgChange"
+            >
+              <el-option v-for="item in filteredOrgOptions" :key="item.idOrg" :label="item.naOrg" :value="item.idOrg" />
+            </el-select>
+          </advanced-filter-panel>
         </div>
         <div class="symptom-toolbar__actions">
           <el-button icon="el-icon-document" @click="openChangeLogDialog">修改日志</el-button>
@@ -554,7 +556,7 @@
 import http from '../api/http'
 import { fetchOrgs, fetchRegions } from '../api/reference'
 import { buildLabelMap, formatDateTime, resolveScopeLabel } from '../utils/admin'
-import { SegmentedSwitch, TableAction } from '../components/ui'
+import { AdvancedFilterPanel, SegmentedSwitch, TableAction } from '../components/ui'
 
 const medicalModeOptions = [
   { value: 'western', label: '西医' },
@@ -690,6 +692,7 @@ function cloneRecord(value) {
 
 export default {
   components: {
+    AdvancedFilterPanel,
     SegmentedSwitch,
     TableAction
   },
@@ -705,6 +708,7 @@ export default {
       importing: false,
       importingJson: false,
       filters: createFilters(),
+      advancedFiltersOpen: false,
       records: [],
       selectedId: '',
       editingRecord: null,

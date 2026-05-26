@@ -48,10 +48,10 @@
     </div>
 
     <div class="chart-grid">
-      <chart-panel title="功能使用排行">
+      <chart-panel title="功能使用排行" :empty="isRankingEmpty">
         <div ref="rankChartRef" class="chart-body--rank"></div>
       </chart-panel>
-      <chart-panel title="功能使用趋势">
+      <chart-panel title="功能使用趋势" :empty="isTrendEmpty">
         <div ref="trendChartRef" class="chart-body--trend"></div>
         <div class="trend-legend">
           <span
@@ -139,6 +139,14 @@ export default {
       COLORS,
       rankChart: null,
       trendChart: null
+    }
+  },
+  computed: {
+    isRankingEmpty() {
+      return !(this.response.ranking || []).some(item => Number(item.callCount) > 0)
+    },
+    isTrendEmpty() {
+      return !(this.trend.values || []).some(series => (series || []).some(value => Number(value) > 0))
     }
   },
   mounted() {
@@ -268,10 +276,28 @@ export default {
     disposeCharts() {
       if (this.rankChart) { this.rankChart.dispose(); this.rankChart = null }
       if (this.trendChart) { this.trendChart.dispose(); this.trendChart = null }
+      if (this._resizeHandler) {
+        window.removeEventListener('resize', this._resizeHandler)
+        this._resizeHandler = null
+      }
+    },
+    bindResize() {
+      if (this._resizeHandler) {
+        return
+      }
+      this._resizeHandler = () => {
+        [this.rankChart, this.trendChart].forEach(chart => {
+          if (chart) {
+            chart.resize()
+          }
+        })
+      }
+      window.addEventListener('resize', this._resizeHandler)
     },
     renderRankChart() {
-      if (!this.$refs.rankChartRef) return
       if (this.rankChart) this.rankChart.dispose()
+      this.rankChart = null
+      if (!this.$refs.rankChartRef || this.isRankingEmpty) return
       this.rankChart = echarts.init(this.$refs.rankChartRef)
       const data = (this.response.ranking || []).slice(0, 10).reverse()
       this.rankChart.setOption({
@@ -298,12 +324,12 @@ export default {
           label: { show: true, position: 'right', color: '#475569', fontSize: 11 }
         }]
       })
-      const self = this
-      window.addEventListener('resize', self._resizeRank = () => { if (self.rankChart) self.rankChart.resize() })
+      this.bindResize()
     },
     renderTrendChart() {
-      if (!this.$refs.trendChartRef) return
       if (this.trendChart) this.trendChart.dispose()
+      this.trendChart = null
+      if (!this.$refs.trendChartRef || this.isTrendEmpty) return
       this.trendChart = echarts.init(this.$refs.trendChartRef)
       const modules = this.trend.modules || []
       const days = this.trend.days || []
@@ -333,8 +359,7 @@ export default {
           itemStyle: { color: COLORS[i % COLORS.length] }
         }))
       })
-      const self = this
-      window.addEventListener('resize', self._resizeTrend = () => { if (self.trendChart) self.trendChart.resize() })
+      this.bindResize()
     }
   }
 }

@@ -34,7 +34,7 @@
     </div>
 
     <div class="chart-grid">
-      <chart-panel title="拦截趋势分析">
+      <chart-panel title="拦截趋势分析" :empty="isTrendEmpty">
         <template #actions>
           <el-select v-model="trendMetric" size="small" class="trend-select">
             <el-option label="全部拦截" value="total" />
@@ -47,19 +47,19 @@
     </div>
 
     <div class="chart-grid chart-grid--double">
-      <chart-panel title="拦截类型分布" subtitle="各类拦截占比">
+      <chart-panel title="拦截类型分布" subtitle="各类拦截占比" :empty="isTypeEmpty">
         <div ref="typeChartRef" class="chart-body"></div>
       </chart-panel>
-      <chart-panel title="高危 IP 排行" subtitle="拦截次数 Top 10">
+      <chart-panel title="高危 IP 排行" subtitle="拦截次数 Top 10" :empty="isIpEmpty">
         <div ref="ipChartRef" class="chart-body"></div>
       </chart-panel>
     </div>
 
     <div class="chart-grid chart-grid--double">
-      <chart-panel title="被攻击路径排行" subtitle="拦截次数 Top 10">
+      <chart-panel title="被攻击路径排行" subtitle="拦截次数 Top 10" :empty="isPathEmpty">
         <div ref="pathChartRef" class="chart-body"></div>
       </chart-panel>
-      <chart-panel title="异常设备排行" subtitle="拦截次数 Top 10">
+      <chart-panel title="异常设备排行" subtitle="拦截次数 Top 10" :empty="isDeviceEmpty">
         <div ref="deviceChartRef" class="chart-body"></div>
       </chart-panel>
     </div>
@@ -183,6 +183,22 @@ export default {
         }
         return { key: def.key, label: def.label, value, desc: def.desc, growthUp, growthText }
       })
+    },
+    isTrendEmpty() {
+      const values = this.resolveTrendValues()
+      return !values.some(value => Number(value) > 0)
+    },
+    isTypeEmpty() {
+      return !(this.distribution.byType || []).some(item => Number(item.value) > 0)
+    },
+    isIpEmpty() {
+      return !(this.distribution.byIp || []).some(item => Number(item.value) > 0)
+    },
+    isPathEmpty() {
+      return !(this.distribution.byPath || []).some(item => Number(item.value) > 0)
+    },
+    isDeviceEmpty() {
+      return !(this.distribution.byDevice || []).some(item => Number(item.value) > 0)
     }
   },
   mounted() {
@@ -280,6 +296,16 @@ export default {
       this.initDateRange()
       this.search()
     },
+    resolveTrendValues() {
+      switch (this.trendMetric) {
+        case 'auth':
+          return this.trendData.authValues || []
+        case 'sig':
+          return this.trendData.sigValues || []
+        default:
+          return this.trendData.totalValues || []
+      }
+    },
     disposeCharts() {
       if (this.trendChart) { this.trendChart.dispose(); this.trendChart = null }
       if (this.typeChart) { this.typeChart.dispose(); this.typeChart = null }
@@ -302,25 +328,23 @@ export default {
       }
     },
     renderTrendChart() {
-      if (!this.$refs.trendChartRef) return
       if (this.trendChart) this.trendChart.dispose()
+      this.trendChart = null
+      if (!this.$refs.trendChartRef || this.isTrendEmpty) return
       this.trendChart = echarts.init(this.$refs.trendChartRef)
 
       const days = this.trendData.days || []
-      let values, color, areaColor
+      let color, areaColor
       switch (this.trendMetric) {
         case 'auth':
-          values = this.trendData.authValues || []
           color = '#F59E0B'
           areaColor = 'rgba(245,158,11,0.15)'
           break
         case 'sig':
-          values = this.trendData.sigValues || []
           color = '#EF4444'
           areaColor = 'rgba(239,68,68,0.15)'
           break
         default:
-          values = this.trendData.totalValues || []
           color = '#3B82F6'
           areaColor = 'rgba(59,130,246,0.15)'
       }
@@ -342,7 +366,7 @@ export default {
         },
         series: [{
           type: 'line',
-          data: values,
+          data: this.resolveTrendValues(),
           smooth: true,
           symbol: 'circle',
           symbolSize: 6,
@@ -359,8 +383,9 @@ export default {
       this.bindResize()
     },
     renderTypeChart() {
-      if (!this.$refs.typeChartRef) return
       if (this.typeChart) this.typeChart.dispose()
+      this.typeChart = null
+      if (!this.$refs.typeChartRef || this.isTypeEmpty) return
       this.typeChart = echarts.init(this.$refs.typeChartRef)
 
       const data = this.distribution.byType || []
@@ -410,8 +435,9 @@ export default {
       this.bindResize()
     },
     renderIpChart() {
-      if (!this.$refs.ipChartRef) return
       if (this.ipChart) this.ipChart.dispose()
+      this.ipChart = null
+      if (!this.$refs.ipChartRef || this.isIpEmpty) return
       this.ipChart = echarts.init(this.$refs.ipChartRef)
 
       const data = (this.distribution.byIp || []).slice(0, 10)
@@ -447,8 +473,9 @@ export default {
       this.bindResize()
     },
     renderPathChart() {
-      if (!this.$refs.pathChartRef) return
       if (this.pathChart) this.pathChart.dispose()
+      this.pathChart = null
+      if (!this.$refs.pathChartRef || this.isPathEmpty) return
       this.pathChart = echarts.init(this.$refs.pathChartRef)
 
       const data = (this.distribution.byPath || []).slice(0, 10)
@@ -484,8 +511,9 @@ export default {
       this.bindResize()
     },
     renderDeviceChart() {
-      if (!this.$refs.deviceChartRef) return
       if (this.deviceChart) this.deviceChart.dispose()
+      this.deviceChart = null
+      if (!this.$refs.deviceChartRef || this.isDeviceEmpty) return
       this.deviceChart = echarts.init(this.$refs.deviceChartRef)
 
       const data = (this.distribution.byDevice || []).slice(0, 10)

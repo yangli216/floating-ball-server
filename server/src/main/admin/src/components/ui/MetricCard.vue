@@ -1,8 +1,9 @@
 <template>
   <component
-    :is="clickable ? 'button' : 'article'"
-    :type="clickable ? 'button' : null"
-    :class="['metric-card', clickable ? 'metric-card--clickable' : '', toneClass]"
+    :is="componentType"
+    :to="to || null"
+    :type="componentType === 'button' ? 'button' : null"
+    :class="['metric-card', isInteractive ? 'metric-card--clickable' : '', toneClass]"
     @click="handleClick"
   >
     <div class="metric-card__label">{{ label }}</div>
@@ -43,6 +44,10 @@ export default {
       type: Boolean,
       default: false
     },
+    to: {
+      type: [String, Object],
+      default: ''
+    },
     tone: {
       type: String,
       default: 'normal'
@@ -51,6 +56,15 @@ export default {
   computed: {
     growthIcon() {
       return this.growthUp ? 'el-icon-top' : 'el-icon-bottom'
+    },
+    componentType() {
+      if (this.to) {
+        return 'router-link'
+      }
+      return this.clickable ? 'button' : 'article'
+    },
+    isInteractive() {
+      return this.clickable || Boolean(this.to)
     },
     toneClass() {
       return this.tone === 'risk' ? 'metric-card--risk' : ''
@@ -79,6 +93,7 @@ export default {
   width: 100%;
   color: inherit;
   text-align: left;
+  text-decoration: none;
 }
 
 .metric-card--clickable {

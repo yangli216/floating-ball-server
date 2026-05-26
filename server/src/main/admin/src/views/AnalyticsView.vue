@@ -58,7 +58,7 @@
     </div>
 
     <div class="chart-grid">
-      <chart-panel title="服务趋势分析">
+      <chart-panel title="服务趋势分析" :empty="isTrendEmpty">
         <template #actions>
           <el-select v-model="trendMetric" size="small" class="trend-select">
             <el-option label="功能调用量" value="ai" />
@@ -70,10 +70,10 @@
     </div>
 
     <div class="chart-grid chart-grid--double">
-      <chart-panel title="功能调用量按机构分布" subtitle="Top 10 医疗机构">
+      <chart-panel title="功能调用量按机构分布" subtitle="Top 10 医疗机构" :empty="isOrgDistributionEmpty">
         <div ref="orgChartRef" class="chart-body"></div>
       </chart-panel>
-      <chart-panel title="功能调用量按区域分布" subtitle="各区县占比情况">
+      <chart-panel title="功能调用量按区域分布" subtitle="各区县占比情况" :empty="isRegionDistributionEmpty">
         <div ref="regionChartRef" class="chart-body"></div>
         <div class="pie-legend">
           <span
@@ -203,6 +203,18 @@ export default {
         pct: item.percentage,
         color: COLORS[idx % COLORS.length]
       }))
+    },
+    isTrendEmpty() {
+      const values = this.trendMetric === 'ai'
+        ? (this.trendData.aiServiceValues || [])
+        : (this.trendData.consultationValues || [])
+      return !values.some(value => Number(value) > 0)
+    },
+    isOrgDistributionEmpty() {
+      return !(this.distribution.orgDistribution || []).some(item => Number(item.value) > 0)
+    },
+    isRegionDistributionEmpty() {
+      return !(this.distribution.regionDistribution || []).some(item => Number(item.value) > 0)
     }
   },
   mounted() {
@@ -335,10 +347,28 @@ export default {
       if (this.trendChart) { this.trendChart.dispose(); this.trendChart = null }
       if (this.orgChart) { this.orgChart.dispose(); this.orgChart = null }
       if (this.regionChart) { this.regionChart.dispose(); this.regionChart = null }
+      if (this._resizeHandler) {
+        window.removeEventListener('resize', this._resizeHandler)
+        this._resizeHandler = null
+      }
+    },
+    bindResize() {
+      if (this._resizeHandler) {
+        return
+      }
+      this._resizeHandler = () => {
+        [this.trendChart, this.orgChart, this.regionChart].forEach(chart => {
+          if (chart) {
+            chart.resize()
+          }
+        })
+      }
+      window.addEventListener('resize', this._resizeHandler)
     },
     renderTrendChart() {
-      if (!this.$refs.trendChartRef) return
       if (this.trendChart) this.trendChart.dispose()
+      this.trendChart = null
+      if (!this.$refs.trendChartRef || this.isTrendEmpty) return
       this.trendChart = echarts.init(this.$refs.trendChartRef)
 
       const days = this.trendData.days || []
@@ -377,14 +407,12 @@ export default {
         }]
       })
 
-      const self = this
-      window.addEventListener('resize', self._resizeTrend = () => {
-        if (self.trendChart) self.trendChart.resize()
-      })
+      this.bindResize()
     },
     renderOrgChart() {
-      if (!this.$refs.orgChartRef) return
       if (this.orgChart) this.orgChart.dispose()
+      this.orgChart = null
+      if (!this.$refs.orgChartRef || this.isOrgDistributionEmpty) return
       this.orgChart = echarts.init(this.$refs.orgChartRef)
 
       const data = (this.distribution.orgDistribution || []).slice(0, 10)
@@ -422,14 +450,12 @@ export default {
         }]
       })
 
-      const self = this
-      window.addEventListener('resize', self._resizeOrg = () => {
-        if (self.orgChart) self.orgChart.resize()
-      })
+      this.bindResize()
     },
     renderRegionChart() {
-      if (!this.$refs.regionChartRef) return
       if (this.regionChart) this.regionChart.dispose()
+      this.regionChart = null
+      if (!this.$refs.regionChartRef || this.isRegionDistributionEmpty) return
       this.regionChart = echarts.init(this.$refs.regionChartRef)
 
       const data = this.distribution.regionDistribution || []
@@ -478,10 +504,7 @@ export default {
         ]
       })
 
-      const self = this
-      window.addEventListener('resize', self._resizeRegion = () => {
-        if (self.regionChart) self.regionChart.resize()
-      })
+      this.bindResize()
     }
   },
   watch: {
