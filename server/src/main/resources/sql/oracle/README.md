@@ -59,11 +59,14 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 `init.sql` 当前是“删库重建”的权威基线，已包含：
 
 1. `c_ai_config` 的语音独立密钥、PMPHAI / Reviewer 服务端托管字段
-2. 默认区域 `REGION001`
-3. 默认机构 `ORG001`
-4. 默认管理员 `admin`
-5. 默认 AI 配置 `CFG001`
-6. 脚本末尾显式 `COMMIT`
+2. `c_ai_device.device_public_key` 设备签名公钥字段
+3. `c_ai_user_consultation_log.change_summary_json / total_changes` 变更统计字段
+4. `c_security_rejection_log` 安全拒绝日志表
+5. 默认区域 `REGION001`
+6. 默认机构 `ORG001`
+7. 默认管理员 `admin`
+8. 默认 AI 配置 `CFG001`
+9. 脚本末尾显式 `COMMIT`
 
 说明：
 

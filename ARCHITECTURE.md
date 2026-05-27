@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-05-22
+> 更新日期：2026-05-27
 
 ## 1. 项目定位
 
@@ -19,7 +19,7 @@
 - Java 8
 - Spring Boot 2.7.x
 - MyBatis-Plus
-- Oracle 19c
+- Oracle 19c / PostgreSQL
 - Maven
 - WebClient / RestTemplate 用于上游 AI 与语音代理
 
@@ -77,7 +77,9 @@ floating-ball-server/
                 ├── mapper/
                 ├── template-seeds/ # 症状模板内置基线 / 导入源
                 ├── static/admin/   # 管理端构建产物落点
-                └── sql/oracle/     # Oracle bootstrap/init scripts
+                ├── mapper/         # MyBatis XML，复杂 SQL 使用数据库方言分支
+                ├── sql/oracle/     # Oracle bootstrap/init/upgrade scripts
+                └── sql/postgres/   # PostgreSQL init/upgrade scripts
 ```
 
 ### 3.1 运行配置安全模式
@@ -86,6 +88,8 @@ floating-ball-server/
 2. 服务启动前必须注入 `FB_DB_URL`、`FB_DB_USERNAME`、`FB_DB_PASSWORD`、`FB_AES_KEY`。
 3. PMPHAI 等上游服务地址在公开仓库中只保留示例地址；真实地址通过管理端配置或部署环境注入。
 4. 本地联调如需私有覆盖配置，应使用未入库文件或部署环境变量，不得直接改回仓库默认值。
+5. 数据库类型由 `FB_DB_TYPE` / `floating-ball.database.type` 指定，当前支持 `oracle`、`postgres`，默认保持 `oracle` 兼容既有部署。
+6. 数据库驱动由连接 URL 与 `FB_DB_DRIVER_CLASS_NAME` / `spring.datasource.driver-class-name` 共同决定；Oracle 使用 `oracle.jdbc.OracleDriver`，PostgreSQL 使用 `org.postgresql.Driver`。
 
 ### 3.2 客户端安全基线
 
@@ -132,7 +136,11 @@ floating-ball-server/
 
 ### 4.3 数据访问层
 
-- 使用 MyBatis-Plus `Mapper` 访问 Oracle 19c
+- 使用 MyBatis-Plus `Mapper` 访问业务表；普通 CRUD 尽量保持数据库无关
+- 数据库差异收束在 `common/db` 方言、MyBatis XML 方言 SQL、运行 profile 与 `sql/{dbType}` 脚本中
+- `DatabaseDialect` 负责提供 MyBatis-Plus 分页 `DbType`、MyBatis `databaseId` 和日期分组表达式等少量运行期能力；普通分页、取首条和导出上限统一走 MyBatis-Plus `Page` / `PaginationInnerInterceptor`，不在业务代码拼接数据库专属 limit SQL
+- 统计、趋势、JSON 提取、取最新一条等复杂查询使用 MyBatis XML 的 `_databaseId` 分支，不在 service/controller 中判断数据库类型
+- DTO 层保留对外的日期字符串字段，service 在调用 mapper 前转换为内部 `LocalDateTime` 边界，SQL 使用 `>= from` 与 `< toExclusive`，避免数据库专属日期解析函数
 - 首期不引入复杂读写分离、缓存和消息队列
 
 ### 4.4 管理端托管约定
@@ -179,7 +187,7 @@ floating-ball-server/
 
 删库重建补充约定：
 
-1. Oracle `init.sql` 作为当前初始开发阶段的单一建库基线，直接包含 `c_ai_config` 的服务端托管字段，不依赖运行期回退
+1. 各数据库的 `sql/{dbType}/init.sql` 作为当前初始开发阶段的建库基线，直接包含 `c_ai_config` 的服务端托管字段，不依赖运行期回退
 2. `init.sql` 会预置 `REGION001`、`ORG001`、`admin` 和作用域为 `ORG001` 的默认 AI 配置，保证 `register -> bootstrap -> audit` 链路可立即联调
 3. 默认 AI 配置只保证启动链路与日志链路可用；真实上游 AI 地址、密钥、模型仍需在管理端修改
 
@@ -394,7 +402,16 @@ floating-ball-server/
 
 扩展表如用户、角色、统计可在第二阶段补齐。
 
-## 8. Oracle 初始化约定
+## 8. 多数据库初始化约定
+
+本项目按“业务契约稳定、数据库落地可替换”的方式维护数据库适配：
+
+1. 逻辑表、字段语义、索引意图以本章和实体/mapper 契约为准，不把某一种数据库的 DDL 当成唯一事实源。
+2. 每一种数据库独立维护 `server/src/main/resources/sql/{dbType}/init.sql` 与升级脚本，避免把跨数据库兼容性压进一份难以维护的万能 SQL。
+3. 新增数据库类型时，必须同步新增 `DatabaseDialect` 实现、运行 profile、SQL 目录 README、初始化脚本和必要的 mapper XML 方言分支。
+4. JSON 字段当前作为应用层 JSON 文本处理；Oracle 使用 `CLOB`，PostgreSQL 第一阶段使用 `text`，统计查询需要提取 JSON 时由方言 SQL 局部处理。
+
+### 8.1 Oracle 初始化约定
 
 Oracle 初始化拆成两步：
 
@@ -410,6 +427,20 @@ Oracle 初始化拆成两步：
 
 1. 本项目不在业务初始化脚本中执行 `CREATE DATABASE`。Oracle 一般复用现有实例/服务，应用侧只负责 schema 层初始化。
 2. 当前默认连接账号为 `SYSTEM`，因此 `bootstrap.sql` 会先建表空间、再跳过建用户步骤；`init.sql` 只保留建表语句，由执行前切换好的 schema/默认表空间决定对象落点。正式环境仍建议切回独立业务 schema。
+
+### 8.2 PostgreSQL 初始化约定
+
+PostgreSQL 初始化采用 schema/database 已存在的前提：
+
+1. `server/src/main/resources/sql/postgres/init.sql`
+   - 由应用连接账号或具备建表权限的账号执行
+   - 负责创建业务表、索引和种子数据
+   - 不执行 `CREATE DATABASE`，部署侧负责创建数据库与授权
+2. PostgreSQL profile 推荐配置：
+   - `FB_DB_TYPE=postgres`
+   - `FB_DB_DRIVER_CLASS_NAME=org.postgresql.Driver`
+   - `FB_DB_URL=jdbc:postgresql://host:5432/floating_ball`
+3. PostgreSQL JSON 类字段第一阶段使用 `text` 保存，保持 Java 实体和客户端契约不变；后续若切换 `jsonb`，必须同步评估索引、迁移脚本和统计 SQL。
 
 ## 9. 单体部署约定
 

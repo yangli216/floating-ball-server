@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.device.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.exception.UpdateRequiredException;
 import com.regionalai.floatingball.server.common.util.MaskingUtils;
@@ -66,11 +67,10 @@ public class DeviceService {
             throw new UpdateRequiredException(policy.getMinSupportedVersion());
         }
 
-        AiDevice existing = aiDeviceMapper.selectOne(new LambdaQueryWrapper<AiDevice>()
+        AiDevice existing = MybatisPlusQueryUtils.selectFirst(aiDeviceMapper, new LambdaQueryWrapper<AiDevice>()
             .eq(AiDevice::getCdDevice, request.getCdDevice())
             .eq(AiDevice::getIdOrg, org.getIdOrg())
-            .eq(AiDevice::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq(AiDevice::getFgActive, "1"));
 
         if (existing != null) {
             if (StringUtils.hasText(existing.getDevicePublicKey())) {
@@ -109,10 +109,9 @@ public class DeviceService {
     }
 
     public AiDevice findActiveByToken(String token) {
-        return aiDeviceMapper.selectOne(new LambdaQueryWrapper<AiDevice>()
+        return MybatisPlusQueryUtils.selectFirst(aiDeviceMapper, new LambdaQueryWrapper<AiDevice>()
             .eq(AiDevice::getDeviceToken, token)
-            .eq(AiDevice::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq(AiDevice::getFgActive, "1"));
     }
 
     public void heartbeat(AiDevice device) {
@@ -198,10 +197,9 @@ public class DeviceService {
     }
 
     private AiOrg requireActiveOrg(String idOrg) {
-        AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
+        AiOrg org = MybatisPlusQueryUtils.selectFirst(aiOrgMapper, new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getIdOrg, idOrg)
-            .eq(AiOrg::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq(AiOrg::getFgActive, "1"));
         if (org == null) {
             throw new BusinessException("机构不存在");
         }
@@ -216,7 +214,7 @@ public class DeviceService {
         if (StringUtils.hasText(excludeIdDevice)) {
             wrapper.ne(AiDevice::getIdDevice, excludeIdDevice);
         }
-        AiDevice existing = aiDeviceMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        AiDevice existing = MybatisPlusQueryUtils.selectFirst(aiDeviceMapper, wrapper);
         if (existing != null) {
             throw new BusinessException("设备编码已存在");
         }

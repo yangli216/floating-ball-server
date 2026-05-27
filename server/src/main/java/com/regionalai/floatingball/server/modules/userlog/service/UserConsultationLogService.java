@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
@@ -161,12 +162,11 @@ public class UserConsultationLogService {
                               String consultationType,
                               String status,
                               Integer minChanges,
-                              Integer maxChanges,
-                              String dateFrom,
-                              String dateTo) {
+        Integer maxChanges,
+        String dateFrom,
+        String dateTo) {
         LambdaQueryWrapper<AiUserConsultationLog> wrapper = buildListWrapper(keyword, consultationType, status, minChanges, maxChanges, dateFrom, dateTo);
-        wrapper.last("FETCH FIRST " + EXPORT_MAX_ROWS + " ROWS ONLY");
-        List<AiUserConsultationLog> records = userConsultationLogMapper.selectList(wrapper);
+        List<AiUserConsultationLog> records = MybatisPlusQueryUtils.selectLimit(userConsultationLogMapper, wrapper, EXPORT_MAX_ROWS);
 
         try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
             org.apache.poi.xssf.usermodel.XSSFSheet sheet = workbook.createSheet("用户日志");
@@ -352,7 +352,7 @@ public class UserConsultationLogService {
         if (device != null && StringUtils.hasText(device.getIdDevice())) {
             wrapper.eq(AiUserConsultationLog::getIdDevice, device.getIdDevice());
         }
-        return userConsultationLogMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        return MybatisPlusQueryUtils.selectFirst(userConsultationLogMapper, wrapper);
     }
 
     private void fillCommonFields(AiUserConsultationLog entity, AiDevice device, UserConsultationLogRequest request) {

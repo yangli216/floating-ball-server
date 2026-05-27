@@ -4,7 +4,7 @@
 
 本项目是 `floating-ball` 的配套后台，当前采用：
 
-1. `server/`：Spring Boot 2.7 + Java 8 + Oracle 19c + MyBatis-Plus
+1. `server/`：Spring Boot 2.7 + Java 8 + MyBatis-Plus，当前支持 Oracle 19c 与 PostgreSQL
 2. `server/src/main/admin/`：Vue 2 + Element UI 管理端源码，由 `server/` 统一托管
 3. `API.md`：远端 `/v1/*` 契约文档
 
@@ -27,6 +27,7 @@
 2. 契约优先：`/v1/*` 契约变更时，必须同时更新 `API.md` 与 `floating-ball` 调用方。
 3. 交付顺序：`ARCHITECTURE/API/AGENTS -> 代码 -> 构建/测试验证`
 4. 管理端目录、构建命令、托管入口变化时，必须同步更新 `ARCHITECTURE.md` 与本文件。
+5. 数据库适配变化必须先同步 `ARCHITECTURE.md` 的多数据库适配约定，再落配置、方言、SQL 脚本和 mapper SQL。
 
 ## 硬约束
 
@@ -36,6 +37,7 @@
 4. `bootstrap`、`templates/mappings delta`、审计事件结构必须优先兼容 `floating-ball` 现有实现。
 5. 未经明确要求，不引入 Redis、RocketMQ、微服务拆分等额外依赖。
 6. **请求签名校验禁止绕过**：`DeviceAuthFilter` 和 `RealtimeSpeechHandshakeInterceptor` 必须校验 ECDSA P-256 签名；新增 `/v1/*` 接口必须经过 `DeviceAuthFilter`，不得私自添加绕过路径。
+7. 业务 service/controller 不得直接判断 Oracle、PostgreSQL 或其他数据库类型；数据库差异只能出现在 `common/db` 方言、MyBatis XML 方言 SQL、运行配置和 `sql/{dbType}` 脚本中。
 
 ## 当前阶段目标
 
@@ -51,6 +53,7 @@
 4. 新增或修改核心 service/controller/security 逻辑时，默认新增或更新 JUnit 测试；确实不适合自动化时，必须在交付说明中写明原因
 5. 修改 `/v1/*` 契约、设备鉴权、请求签名、AI 代理或客户端 delta 链路时，必须按工作区 [TESTING_STRATEGY.md](../TESTING_STRATEGY.md) 补充对应单元测试、集成测试或联调记录
 6. 若无法完成构建或测试，必须说明阻塞原因，并补充静态审查结论
+7. 修改数据库适配层时，至少补充或更新方言选择、分页方言、mapper SQL 结构或初始化脚本相关测试；新增数据库类型必须提供 `sql/{dbType}/init.sql` 与 README。
 
 ## 管理端 UED 与组件规则
 

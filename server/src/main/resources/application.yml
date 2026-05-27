@@ -7,10 +7,10 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:development}
   datasource:
-    driver-class-name: oracle.jdbc.OracleDriver
-    url: ${FB_DB_URL:jdbc:oracle:thin:@10.17.66.45:1521:phis}
-    username: ${FB_DB_USERNAME:RBMH_AI}
-    password: ${FB_DB_PASSWORD:RBMH_AI}
+    driver-class-name: ${FB_DB_DRIVER_CLASS_NAME:oracle.jdbc.OracleDriver}
+    url: ${FB_DB_URL:}
+    username: ${FB_DB_USERNAME:}
+    password: ${FB_DB_PASSWORD:}
     hikari:
       initialization-fail-timeout: 1
   jackson:
@@ -21,6 +21,7 @@ spring:
       max-request-size: ${FB_RELEASE_MAX_REQUEST_SIZE:2048MB}
 
 mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
     jdbc-type-for-null: 'NULL'
@@ -31,7 +32,9 @@ mybatis-plus:
       logic-not-delete-value: 1
 
 floating-ball:
-  aes-key: ${FB_AES_KEY:FloatingBallKey!}
+  database:
+    type: ${FB_DB_TYPE:oracle}
+  aes-key: ${FB_AES_KEY:}
   admin:
     bootstrap-reset:
       enabled: ${FB_ADMIN_BOOTSTRAP_RESET_ENABLED:false}

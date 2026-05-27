@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.security.dto.SecurityDistributionVO;
 import com.regionalai.floatingball.server.modules.security.dto.SecurityDistributionVO.DistributionItem;
@@ -35,9 +37,12 @@ public class SecurityRejectionLogService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final SecurityRejectionLogMapper rejectionLogMapper;
+    private final DatabaseDialect databaseDialect;
 
-    public SecurityRejectionLogService(SecurityRejectionLogMapper rejectionLogMapper) {
+    public SecurityRejectionLogService(SecurityRejectionLogMapper rejectionLogMapper,
+                                       DatabaseDialect databaseDialect) {
         this.rejectionLogMapper = rejectionLogMapper;
+        this.databaseDialect = databaseDialect;
     }
 
     @Async
@@ -233,12 +238,13 @@ public class SecurityRejectionLogService {
     }
 
     private List<Map<String, Object>> groupByDailyWithType(LocalDateTime from, LocalDateTime to, String typePrefix) {
+        String dayLabelExpression = databaseDialect.dayLabelExpression("insert_time");
         QueryWrapper<SecurityRejectionLog> qw = new QueryWrapper<SecurityRejectionLog>()
-            .select("TO_CHAR(insert_time, 'YYYY-MM-DD') as day_label", "count(*) as cnt")
+            .select(dayLabelExpression + " as day_label", "count(*) as cnt")
             .eq("fg_active", "1")
             .likeRight("rejection_type", typePrefix)
-            .groupBy("TO_CHAR(insert_time, 'YYYY-MM-DD')")
-            .orderByAsc("TO_CHAR(insert_time, 'YYYY-MM-DD')");
+            .groupBy(dayLabelExpression)
+            .orderByAsc(dayLabelExpression);
         if (from != null) qw.ge("insert_time", from);
         if (to != null) qw.le("insert_time", to);
 
@@ -307,9 +313,9 @@ public class SecurityRejectionLogService {
             .orderByDesc("count(*)");
         if (from != null) qw.ge("insert_time", from);
         if (to != null) qw.le("insert_time", to);
-        if (limit > 0) qw.last("FETCH FIRST " + limit + " ROWS ONLY");
-
-        List<Map<String, Object>> maps = rejectionLogMapper.selectMaps(qw);
+        List<Map<String, Object>> maps = limit > 0
+            ? MybatisPlusQueryUtils.selectMapsLimit(rejectionLogMapper, qw, limit)
+            : rejectionLogMapper.selectMaps(qw);
         if (maps == null) return Collections.emptyList();
 
         List<Map<String, Object>> result = new ArrayList<>();
@@ -327,11 +333,12 @@ public class SecurityRejectionLogService {
     }
 
     private List<Map<String, Object>> groupByDaily(LocalDateTime from, LocalDateTime to) {
+        String dayLabelExpression = databaseDialect.dayLabelExpression("insert_time");
         QueryWrapper<SecurityRejectionLog> qw = new QueryWrapper<SecurityRejectionLog>()
-            .select("TO_CHAR(insert_time, 'YYYY-MM-DD') as day_label", "count(*) as cnt")
+            .select(dayLabelExpression + " as day_label", "count(*) as cnt")
             .eq("fg_active", "1")
-            .groupBy("TO_CHAR(insert_time, 'YYYY-MM-DD')")
-            .orderByAsc("TO_CHAR(insert_time, 'YYYY-MM-DD')");
+            .groupBy(dayLabelExpression)
+            .orderByAsc(dayLabelExpression);
         if (from != null) qw.ge("insert_time", from);
         if (to != null) qw.le("insert_time", to);
 

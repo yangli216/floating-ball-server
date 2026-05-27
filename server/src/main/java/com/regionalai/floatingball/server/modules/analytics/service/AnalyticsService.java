@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
@@ -66,6 +67,7 @@ public class AnalyticsService {
     }
 
     public AnalyticsSummaryVO getSummary(AnalyticsQueryDTO query) {
+        normalizeDateBounds(query);
         AnalyticsSummaryVO vo = new AnalyticsSummaryVO();
 
         long aiServiceTotal = analyticsMapper.countAiService(query);
@@ -91,6 +93,7 @@ public class AnalyticsService {
         vo.setConsultationTotal(consultationTotal);
 
         AnalyticsQueryDTO prevQuery = buildPreviousPeriodQuery(query);
+        normalizeDateBounds(prevQuery);
         long prevAiService = analyticsMapper.countAiService(prevQuery);
         long prevConsultation = analyticsMapper.countConsultation(prevQuery);
         long prevActiveDoctors = analyticsMapper.countActiveDoctors(prevQuery);
@@ -118,6 +121,7 @@ public class AnalyticsService {
     }
 
     public TrendDataVO getTrend(AnalyticsQueryDTO query) {
+        normalizeDateBounds(query);
         TrendDataVO vo = new TrendDataVO();
         List<Map<String, Object>> aiRows = analyticsMapper.queryAiServiceTrend(query);
         List<Map<String, Object>> consRows = analyticsMapper.queryConsultationTrend(query);
@@ -157,6 +161,7 @@ public class AnalyticsService {
     }
 
     public DistributionDataVO getDistribution(AnalyticsQueryDTO query) {
+        normalizeDateBounds(query);
         DistributionDataVO vo = new DistributionDataVO();
 
         List<DistributionItemVO> orgDist = analyticsMapper.queryOrgDistribution(query);
@@ -193,6 +198,7 @@ public class AnalyticsService {
     }
 
     public byte[] exportAnalyticsExcel(AnalyticsQueryDTO query) {
+        normalizeDateBounds(query);
         AnalyticsSummaryVO summary = getSummary(query);
         TrendDataVO trend = getTrend(query);
         DistributionDataVO distribution = getDistribution(query);
@@ -321,8 +327,9 @@ public class AnalyticsService {
             return map;
         }
         for (Map<String, Object> row : rows) {
-            String day = String.valueOf(row.get("DAY_STR"));
-            Object cntObj = row.get("CNT");
+            Object dayObj = mapValue(row, "DAY_STR", "day_str");
+            String day = dayObj != null ? String.valueOf(dayObj) : "";
+            Object cntObj = mapValue(row, "CNT", "cnt");
             long cnt = 0;
             if (cntObj instanceof Number) {
                 cnt = ((Number) cntObj).longValue();
@@ -359,6 +366,7 @@ public class AnalyticsService {
 
     public FunctionUsageResponseVO getFunctionUsage(FunctionUsageQueryDTO query) {
         FunctionUsageQueryDTO normalizedQuery = normalizeFunctionUsageQuery(query);
+        normalizeDateBounds(normalizedQuery);
         FunctionUsageResponseVO vo = new FunctionUsageResponseVO();
 
         List<FunctionUsageItemVO> ranking = analyticsMapper.queryFunctionUsageRanking(normalizedQuery);
@@ -380,6 +388,7 @@ public class AnalyticsService {
         vo.setUsageRate(usageRate);
 
         FunctionUsageQueryDTO prevQuery = buildPreviousFunctionUsageQuery(normalizedQuery);
+        normalizeDateBounds(prevQuery);
         List<FunctionUsageItemVO> prevRanking = analyticsMapper.queryFunctionUsagePreviousRanking(prevQuery);
         Map<String, Long> prevCallMap = new LinkedHashMap<>();
         for (FunctionUsageItemVO item : prevRanking) {
@@ -403,9 +412,9 @@ public class AnalyticsService {
         List<Map<String, Object>> trendRows = analyticsMapper.queryFunctionUsageTrend(normalizedQuery);
         Map<String, Map<String, Long>> trendMap = new LinkedHashMap<>();
         for (Map<String, Object> row : trendRows) {
-            String module = String.valueOf(row.get("MODULENAME"));
-            String day = String.valueOf(row.get("DAYSTR"));
-            Object cntObj = row.get("CNT");
+            String module = String.valueOf(mapValue(row, "MODULENAME", "moduleName", "modulename"));
+            String day = String.valueOf(mapValue(row, "DAYSTR", "dayStr", "daystr"));
+            Object cntObj = mapValue(row, "CNT", "cnt");
             long cnt = cntObj instanceof Number ? ((Number) cntObj).longValue() : 0L;
             trendMap.computeIfAbsent(module, k -> new LinkedHashMap<>()).put(day, cnt);
         }
@@ -566,8 +575,54 @@ public class AnalyticsService {
         normalized.setIdRegion(query.getIdRegion());
         normalized.setCurrent(query.getCurrent());
         normalized.setSize(query.getSize());
+        normalized.setDateFromValue(query.getDateFromValue());
+        normalized.setDateToExclusive(query.getDateToExclusive());
         normalized.setFunctionModules(resolveFunctionModules(query.getFunctionModules()));
         return normalized;
+    }
+
+    private void normalizeDateBounds(AnalyticsQueryDTO query) {
+        if (query == null) {
+            return;
+        }
+        DateBounds bounds = parseBounds(query.getDateFrom(), query.getDateTo());
+        query.setDateFromValue(bounds.from);
+        query.setDateToExclusive(bounds.toExclusive);
+    }
+
+    private void normalizeDateBounds(FunctionUsageQueryDTO query) {
+        if (query == null) {
+            return;
+        }
+        DateBounds bounds = parseBounds(query.getDateFrom(), query.getDateTo());
+        query.setDateFromValue(bounds.from);
+        query.setDateToExclusive(bounds.toExclusive);
+    }
+
+    private DateBounds parseBounds(String fromStr, String toStr) {
+        LocalDateTime from = null;
+        LocalDateTime toExclusive = null;
+        try {
+            if (fromStr != null && !fromStr.isEmpty()) {
+                from = LocalDate.parse(fromStr, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
+            }
+            if (toStr != null && !toStr.isEmpty()) {
+                toExclusive = LocalDate.parse(toStr, DateTimeFormatter.ISO_LOCAL_DATE).plusDays(1).atStartOfDay();
+            }
+        } catch (Exception ex) {
+            log.debug("analytics date bound parsing failed. error={}", ex.getMessage());
+        }
+        return new DateBounds(from, toExclusive);
+    }
+
+    private static class DateBounds {
+        private final LocalDateTime from;
+        private final LocalDateTime toExclusive;
+
+        private DateBounds(LocalDateTime from, LocalDateTime toExclusive) {
+            this.from = from;
+            this.toExclusive = toExclusive;
+        }
     }
 
     private List<String> resolveFunctionModules(List<String> selectedModules) {
@@ -683,6 +738,25 @@ public class AnalyticsService {
             return null;
         }
         return text.toLowerCase(Locale.ROOT).replace(" ", "").replace("_", "").replace("-", "");
+    }
+
+    private Object mapValue(Map<String, Object> row, String... keys) {
+        if (row == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            if (row.containsKey(key)) {
+                return row.get(key);
+            }
+        }
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            for (String key : keys) {
+                if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+                    return entry.getValue();
+                }
+            }
+        }
+        return null;
     }
 
     private static CellStyle createHeaderStyle(XSSFWorkbook workbook) {

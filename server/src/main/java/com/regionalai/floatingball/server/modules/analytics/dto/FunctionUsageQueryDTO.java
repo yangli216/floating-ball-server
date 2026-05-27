@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.analytics.dto;
 
 import lombok.Data;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -12,4 +13,6 @@ public class FunctionUsageQueryDTO {
     private List<String> functionModules;
     private Integer current;
     private Integer size;
+    private LocalDateTime dateFromValue;
+    private LocalDateTime dateToExclusive;
 }

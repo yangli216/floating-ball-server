@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.role.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.role.dto.AdminRoleSaveRequest;
 import com.regionalai.floatingball.server.modules.role.entity.AiRole;
@@ -94,7 +95,7 @@ public class RoleService {
         if (StringUtils.hasText(excludeIdRole)) {
             wrapper.ne(AiRole::getIdRole, excludeIdRole);
         }
-        AiRole existing = aiRoleMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        AiRole existing = MybatisPlusQueryUtils.selectFirst(aiRoleMapper, wrapper);
         if (existing != null) {
             throw new BusinessException("角色编码已存在");
         }

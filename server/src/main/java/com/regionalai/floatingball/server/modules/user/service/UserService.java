@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.user.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.PasswordUtils;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
@@ -241,10 +242,9 @@ public class UserService {
     }
 
     private void ensureActiveOrg(String idOrg) {
-        AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
+        AiOrg org = MybatisPlusQueryUtils.selectFirst(aiOrgMapper, new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getIdOrg, idOrg)
-            .eq(AiOrg::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq(AiOrg::getFgActive, "1"));
         if (org == null) {
             throw new BusinessException("所属机构不存在");
         }
@@ -257,7 +257,7 @@ public class UserService {
         if (StringUtils.hasText(excludeIdUser)) {
             wrapper.ne(AiUser::getIdUser, excludeIdUser);
         }
-        AiUser existing = aiUserMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        AiUser existing = MybatisPlusQueryUtils.selectFirst(aiUserMapper, wrapper);
         if (existing != null) {
             throw new BusinessException("登录账号已存在");
         }

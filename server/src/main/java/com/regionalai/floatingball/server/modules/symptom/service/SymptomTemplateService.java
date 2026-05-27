@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
 import com.regionalai.floatingball.server.modules.datapackage.service.BuiltinTemplateSeedService;
@@ -436,7 +437,7 @@ public class SymptomTemplateService {
         if (StringUtils.hasText(excludeId)) {
             wrapper.ne(AiSymptomTemplate::getIdTemplate, excludeId);
         }
-        return aiSymptomTemplateMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        return MybatisPlusQueryUtils.selectFirst(aiSymptomTemplateMapper, wrapper);
     }
 
     private void validateConfig(Map<String, Object> config) {

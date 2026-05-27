@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.auth.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.PasswordUtils;
 import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
@@ -47,10 +48,9 @@ public class AdminAuthService {
         if (request == null || !StringUtils.hasText(request.getUsername()) || !StringUtils.hasText(request.getPassword())) {
             throw new BusinessException("账号或密码不能为空");
         }
-        AiUser user = aiUserMapper.selectOne(new LambdaQueryWrapper<AiUser>()
+        AiUser user = MybatisPlusQueryUtils.selectFirst(aiUserMapper, new LambdaQueryWrapper<AiUser>()
             .eq(AiUser::getCdUser, request.getUsername().trim())
-            .eq(AiUser::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq(AiUser::getFgActive, "1"));
         if (user == null || !"1".equals(user.getSdStatus()) || !PasswordUtils.matches(request.getPassword(), user.getPasswordHash())) {
             log.warn("admin login failed: invalid credentials. username={}", request.getUsername().trim());
             throw new BusinessException("账号或密码错误");
@@ -129,11 +129,10 @@ public class AdminAuthService {
     }
 
     private AiUser requireActiveUserByUsername(String username, String errorMessage) {
-        AiUser user = aiUserMapper.selectOne(new LambdaQueryWrapper<AiUser>()
+        AiUser user = MybatisPlusQueryUtils.selectFirst(aiUserMapper, new LambdaQueryWrapper<AiUser>()
             .eq(AiUser::getCdUser, username)
             .eq(AiUser::getFgActive, "1")
-            .eq(AiUser::getSdStatus, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq(AiUser::getSdStatus, "1"));
         if (user == null) {
             throw new BusinessException(errorMessage);
         }

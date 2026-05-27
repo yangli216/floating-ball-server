@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.regionalai.floatingball.server.modules.useractivity.mapper.UserActivityMapper">
+
+    <sql id="consultationDateFilter">
+        <if test="query.dateFromValue != null">
+            AND ucl.consultation_time <![CDATA[>=]]> #{query.dateFromValue}
+        </if>
+        <if test="query.dateToExclusive != null">
+            AND ucl.consultation_time <![CDATA[<]]> #{query.dateToExclusive}
+        </if>
+    </sql>
+
+    <sql id="deviceScopeFilter">
+        <if test="query.idRegion != null and query.idRegion != ''">
+            AND d.id_region = #{query.idRegion}
+        </if>
+        <if test="query.idOrg != null and query.idOrg != ''">
+            AND d.id_org = #{query.idOrg}
+        </if>
+    </sql>
+
+    <select id="countActiveUsers" resultType="long">
+        SELECT COUNT(DISTINCT d.id_device)
+        FROM c_ai_device d
+        WHERE d.fg_active = '1'
+          AND EXISTS (
+            SELECT 1
+            FROM c_ai_user_consultation_log ucl
+            WHERE ucl.fg_active = '1'
+              AND ucl.id_device = d.id_device
+            <include refid="consultationDateFilter"/>
+          )
+        <include refid="deviceScopeFilter"/>
+    </select>
+
+    <select id="countTotalDevices" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_device d
+        WHERE d.fg_active = '1'
+        <include refid="deviceScopeFilter"/>
+    </select>
+
+    <select id="countEffectiveConsultations" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_user_consultation_log ucl
+        LEFT JOIN c_ai_device d ON d.id_device = ucl.id_device AND d.fg_active = '1'
+        WHERE ucl.fg_active = '1'
+          AND d.id_device IS NOT NULL
+          AND ucl.status = 'completed'
+        <include refid="consultationDateFilter"/>
+        <include refid="deviceScopeFilter"/>
+    </select>
+
+    <select id="countConsultations" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_user_consultation_log ucl
+        LEFT JOIN c_ai_device d ON d.id_device = ucl.id_device AND d.fg_active = '1'
+        WHERE ucl.fg_active = '1'
+          AND d.id_device IS NOT NULL
+        <include refid="consultationDateFilter"/>
+        <include refid="deviceScopeFilter"/>
+    </select>
+
+    <select id="queryAllRegions" resultType="map">
+        SELECT
+            id_region AS id,
+            na_region AS name,
+            sd_region_type AS type,
+            id_parent AS parentId
+        FROM c_ai_region
+        WHERE fg_active = '1'
+          AND sd_status = '1'
+        ORDER BY sort_order, na_region
+    </select>
+
+    <select id="countActiveUsersByRegion" resultType="map">
+        SELECT d.id_region, COUNT(DISTINCT d.id_device) AS cnt
+        FROM c_ai_device d
+        WHERE d.fg_active = '1'
+          AND EXISTS (
+            SELECT 1
+            FROM c_ai_user_consultation_log ucl
+            WHERE ucl.fg_active = '1'
+              AND ucl.id_device = d.id_device
+            <include refid="consultationDateFilter"/>
+          )
+        <if test="query.idOrg != null and query.idOrg != ''">
+            AND d.id_org = #{query.idOrg}
+        </if>
+        GROUP BY d.id_region
+    </select>
+
+    <select id="queryUserActivityList" resultType="map">
+        SELECT
+            d.id_device AS idDevice,
+            d.cd_device AS cdDevice,
+            d.na_device AS naDevice,
+            d.id_org AS idOrg,
+            o.na_org AS naOrg,
+            d.id_region AS idRegion,
+            r.na_region AS naRegion,
+            (
+                SELECT MAX(ucl5.na_doctor)
+                FROM c_ai_user_consultation_log ucl5
+                WHERE ucl5.fg_active = '1'
+                  AND ucl5.id_device = d.id_device
+                  AND ucl5.consultation_time = (
+                    SELECT MAX(ucl6.consultation_time)
+                    FROM c_ai_user_consultation_log ucl6
+                    WHERE ucl6.fg_active = '1'
+                      AND ucl6.id_device = d.id_device
+                  )
+            ) AS naDoctor,
+            (
+                SELECT MAX(ucl.consultation_time)
+                FROM c_ai_user_consultation_log ucl
+                WHERE ucl.fg_active = '1'
+                  AND ucl.id_device = d.id_device
+                <include refid="consultationDateFilter"/>
+            ) AS lastActiveTime,
+            (
+                SELECT COUNT(1)
+                FROM c_ai_user_consultation_log ucl
+                WHERE ucl.fg_active = '1'
+                  AND ucl.id_device = d.id_device
+                <include refid="consultationDateFilter"/>
+            ) AS consultationCount,
+            (
+                SELECT COUNT(1)
+                FROM c_ai_user_consultation_log ucl
+                WHERE ucl.fg_active = '1'
+                  AND ucl.id_device = d.id_device
+                  AND ucl.status = 'completed'
+                <include refid="consultationDateFilter"/>
+            ) AS effectiveConsultationCount
+        FROM c_ai_device d
+        LEFT JOIN c_ai_org o ON o.id_org = d.id_org AND o.fg_active = '1'
+        LEFT JOIN c_ai_region r ON r.id_region = d.id_region AND r.fg_active = '1'
+        WHERE d.fg_active = '1'
+        <include refid="deviceScopeFilter"/>
+        <if test="query.activeStatus == 'active'">
+            AND EXISTS (
+                SELECT 1
+                FROM c_ai_user_consultation_log ucl
+                WHERE ucl.fg_active = '1'
+                  AND ucl.id_device = d.id_device
+                <include refid="consultationDateFilter"/>
+            )
+        </if>
+        <if test="query.activeStatus == 'inactive'">
+            AND NOT EXISTS (
+                SELECT 1
+                FROM c_ai_user_consultation_log ucl
+                WHERE ucl.fg_active = '1'
+                  AND ucl.id_device = d.id_device
+                <include refid="consultationDateFilter"/>
+            )
+        </if>
+        ORDER BY CASE WHEN lastActiveTime IS NULL THEN 1 ELSE 0 END, lastActiveTime DESC
+    </select>
+</mapper>

@@ -1,14 +1,6 @@
--- Oracle business schema initialization script.
--- Run this file after bootstrap.sql.
--- Before execution, switch to the target schema/user and make sure
--- the default tablespace has been prepared by DBA or execution context.
---
--- This file only contains object DDL and seed data.
--- It does not declare TABLESPACE clauses explicitly.
--- Connect with the same schema as FB_DB_USERNAME before running this file.
--- Current application schema is the user configured by FB_DB_USERNAME.
--- This file intentionally keeps only plain Oracle DDL/DML so it can run in
--- SQL Developer, Navicat, DBeaver and other generic SQL clients.
+-- PostgreSQL business schema initialization script.
+-- Create the target database and connect with FB_DB_USERNAME before running it.
+-- This file contains object DDL, indexes and seed data for PostgreSQL.
 --
 -- Writing convention:
 -- 1. CREATE TABLE
@@ -17,17 +9,17 @@
 -- 4. Seed data at the end
 
 CREATE TABLE c_ai_region (
-    id_region            VARCHAR2(32) PRIMARY KEY,
-    cd_region            VARCHAR2(64),
-    na_region            VARCHAR2(128) NOT NULL,
-    id_parent            VARCHAR2(32),
-    sd_region_type       VARCHAR2(32),
-    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
-    sort_order           NUMBER(10) DEFAULT 0,
-    des_region           VARCHAR2(500),
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_region            varchar(32) PRIMARY KEY,
+    cd_region            varchar(64),
+    na_region            varchar(128) NOT NULL,
+    id_parent            varchar(32),
+    sd_region_type       varchar(32),
+    sd_status            varchar(2) DEFAULT '1' NOT NULL,
+    sort_order           integer DEFAULT 0,
+    des_region           varchar(500),
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_region IS '区域表';
@@ -47,18 +39,18 @@ CREATE INDEX idx_c_ai_region_active ON c_ai_region (fg_active, sd_status);
 
 
 CREATE TABLE c_ai_org (
-    id_org               VARCHAR2(32) PRIMARY KEY,
-    cd_org               VARCHAR2(64),
-    na_org               VARCHAR2(128) NOT NULL,
-    id_parent            VARCHAR2(32),
-    id_region            VARCHAR2(32),
-    sd_org_type          VARCHAR2(32),
-    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
-    sort_order           NUMBER(10) DEFAULT 0,
-    des_org              VARCHAR2(500),
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_org               varchar(32) PRIMARY KEY,
+    cd_org               varchar(64),
+    na_org               varchar(128) NOT NULL,
+    id_parent            varchar(32),
+    id_region            varchar(32),
+    sd_org_type          varchar(32),
+    sd_status            varchar(2) DEFAULT '1' NOT NULL,
+    sort_order           integer DEFAULT 0,
+    des_org              varchar(500),
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_org IS '机构表';
@@ -80,22 +72,22 @@ CREATE INDEX idx_c_ai_org_code ON c_ai_org (cd_org, fg_active);
 
 
 CREATE TABLE c_ai_device (
-    id_device            VARCHAR2(32) PRIMARY KEY,
-    cd_device            VARCHAR2(128) NOT NULL,
-    na_device            VARCHAR2(128),
-    id_org               VARCHAR2(32) NOT NULL,
-    id_region            VARCHAR2(32),
-    id_bind_user         VARCHAR2(32),
-    device_token         VARCHAR2(64) NOT NULL,
-    sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
-    dt_last_heartbeat    TIMESTAMP,
-    dt_registered        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    client_version       VARCHAR2(64),
-    os_info              VARCHAR2(500),
-    device_public_key    CLOB,
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_device            varchar(32) PRIMARY KEY,
+    cd_device            varchar(128) NOT NULL,
+    na_device            varchar(128),
+    id_org               varchar(32) NOT NULL,
+    id_region            varchar(32),
+    id_bind_user         varchar(32),
+    device_token         varchar(64) NOT NULL,
+    sd_status            varchar(2) DEFAULT '0' NOT NULL,
+    dt_last_heartbeat    timestamp,
+    dt_registered        timestamp DEFAULT CURRENT_TIMESTAMP,
+    client_version       varchar(64),
+    os_info              varchar(500),
+    device_public_key    text,
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_device IS '设备表';
@@ -121,38 +113,38 @@ CREATE INDEX idx_c_ai_device_token ON c_ai_device (device_token, fg_active);
 
 
 CREATE TABLE c_ai_config (
-    id_config                VARCHAR2(32) PRIMARY KEY,
-    cd_config                VARCHAR2(64),
-    na_config                VARCHAR2(128) NOT NULL,
-    provider                 VARCHAR2(32),
-    api_base_url             VARCHAR2(500),
-    api_key_encrypted        VARCHAR2(1000),
-    model_name               VARCHAR2(128),
-    fast_model_name          VARCHAR2(128),
-    enable_thinking          CHAR(1) DEFAULT '0' NOT NULL,
-    audio_api_key_encrypted  VARCHAR2(1000),
-    audio_base_url           VARCHAR2(500),
-    audio_model              VARCHAR2(128),
-    speech_provider          VARCHAR2(64),
-    speech_model             VARCHAR2(128),
-    knowledge_base_enabled   CHAR(1) DEFAULT '0' NOT NULL,
-    knowledge_base_base_url  VARCHAR2(500),
-    pmphai_enabled           CHAR(1) DEFAULT '0' NOT NULL,
-    pmphai_base_url          VARCHAR2(500),
-    pmphai_app_key_encrypted VARCHAR2(1000),
-    pmphai_app_secret_encrypted VARCHAR2(1000),
-    reviewer_enabled         CHAR(1) DEFAULT '0' NOT NULL,
-    reviewer_base_url        VARCHAR2(500),
-    reviewer_api_key_encrypted VARCHAR2(1000),
-    reviewer_model           VARCHAR2(128),
-    reviewer_check_examination_enabled CHAR(1) DEFAULT '1' NOT NULL,
-    features_json            CLOB,
-    id_org                   VARCHAR2(32),
-    id_region                VARCHAR2(32),
-    sd_status                VARCHAR2(2) DEFAULT '1' NOT NULL,
-    fg_active                CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_config                varchar(32) PRIMARY KEY,
+    cd_config                varchar(64),
+    na_config                varchar(128) NOT NULL,
+    provider                 varchar(32),
+    api_base_url             varchar(500),
+    api_key_encrypted        varchar(1000),
+    model_name               varchar(128),
+    fast_model_name          varchar(128),
+    enable_thinking          char(1) DEFAULT '0' NOT NULL,
+    audio_api_key_encrypted  varchar(1000),
+    audio_base_url           varchar(500),
+    audio_model              varchar(128),
+    speech_provider          varchar(64),
+    speech_model             varchar(128),
+    knowledge_base_enabled   char(1) DEFAULT '0' NOT NULL,
+    knowledge_base_base_url  varchar(500),
+    pmphai_enabled           char(1) DEFAULT '0' NOT NULL,
+    pmphai_base_url          varchar(500),
+    pmphai_app_key_encrypted varchar(1000),
+    pmphai_app_secret_encrypted varchar(1000),
+    reviewer_enabled         char(1) DEFAULT '0' NOT NULL,
+    reviewer_base_url        varchar(500),
+    reviewer_api_key_encrypted varchar(1000),
+    reviewer_model           varchar(128),
+    reviewer_check_examination_enabled char(1) DEFAULT '1' NOT NULL,
+    features_json            text,
+    id_org                   varchar(32),
+    id_region                varchar(32),
+    sd_status                varchar(2) DEFAULT '1' NOT NULL,
+    fg_active                char(1) DEFAULT '1' NOT NULL,
+    insert_time              timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time              timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_config IS 'AI配置表';
@@ -193,19 +185,19 @@ CREATE INDEX idx_c_ai_config_scope ON c_ai_config (id_org, id_region, fg_active,
 
 
 CREATE TABLE c_ai_prompt (
-    id_prompt            VARCHAR2(32) PRIMARY KEY,
-    cd_prompt            VARCHAR2(128) NOT NULL,
-    na_prompt            VARCHAR2(128) NOT NULL,
-    sys_prompt           CLOB,
-    user_template        CLOB,
-    version_num          VARCHAR2(64),
-    sd_prompt_type       VARCHAR2(64),
-    sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
-    id_org               VARCHAR2(32),
-    id_region            VARCHAR2(32),
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_prompt            varchar(32) PRIMARY KEY,
+    cd_prompt            varchar(128) NOT NULL,
+    na_prompt            varchar(128) NOT NULL,
+    sys_prompt           text,
+    user_template        text,
+    version_num          varchar(64),
+    sd_prompt_type       varchar(64),
+    sd_status            varchar(2) DEFAULT '0' NOT NULL,
+    id_org               varchar(32),
+    id_region            varchar(32),
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_prompt IS 'Prompt模板表';
@@ -227,18 +219,18 @@ CREATE INDEX idx_c_ai_prompt_scope ON c_ai_prompt (cd_prompt, id_org, id_region,
 
 
 CREATE TABLE c_ai_data_package (
-    id_package           VARCHAR2(32) PRIMARY KEY,
-    cd_package           VARCHAR2(128),
-    na_package           VARCHAR2(128) NOT NULL,
-    sd_package_type      VARCHAR2(32) NOT NULL,
-    version_num          VARCHAR2(64),
-    content_json         CLOB,
-    sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
-    id_org               VARCHAR2(32),
-    id_region            VARCHAR2(32),
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_package           varchar(32) PRIMARY KEY,
+    cd_package           varchar(128),
+    na_package           varchar(128) NOT NULL,
+    sd_package_type      varchar(32) NOT NULL,
+    version_num          varchar(64),
+    content_json         text,
+    sd_status            varchar(2) DEFAULT '0' NOT NULL,
+    id_org               varchar(32),
+    id_region            varchar(32),
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_data_package IS '数据包表';
@@ -259,27 +251,27 @@ CREATE INDEX idx_c_ai_package_scope ON c_ai_data_package (sd_package_type, id_or
 
 
 CREATE TABLE c_ai_symptom_template (
-    id_template              VARCHAR2(32) PRIMARY KEY,
-    cd_symptom               VARCHAR2(128) NOT NULL,
-    na_symptom               VARCHAR2(200) NOT NULL,
-    sd_medical_mode          VARCHAR2(16) NOT NULL,
-    des_symptom              VARCHAR2(1000),
-    fg_common                CHAR(1) DEFAULT '0' NOT NULL,
-    sort_order               NUMBER(10) DEFAULT 0,
-    system_category_json     CLOB,
-    system_category_tokens   VARCHAR2(1000),
-    body_parts_json          CLOB,
-    body_parts_tokens        VARCHAR2(1000),
-    custom_script            CLOB,
-    applicable_population_json CLOB,
-    config_json              CLOB,
-    tcm_metadata_json        CLOB,
-    id_org                   VARCHAR2(32),
-    id_region                VARCHAR2(32),
-    sd_status                VARCHAR2(2) DEFAULT '1' NOT NULL,
-    fg_active                CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_template              varchar(32) PRIMARY KEY,
+    cd_symptom               varchar(128) NOT NULL,
+    na_symptom               varchar(200) NOT NULL,
+    sd_medical_mode          varchar(16) NOT NULL,
+    des_symptom              varchar(1000),
+    fg_common                char(1) DEFAULT '0' NOT NULL,
+    sort_order               integer DEFAULT 0,
+    system_category_json     text,
+    system_category_tokens   varchar(1000),
+    body_parts_json          text,
+    body_parts_tokens        varchar(1000),
+    custom_script            text,
+    applicable_population_json text,
+    config_json              text,
+    tcm_metadata_json        text,
+    id_org                   varchar(32),
+    id_region                varchar(32),
+    sd_status                varchar(2) DEFAULT '1' NOT NULL,
+    fg_active                char(1) DEFAULT '1' NOT NULL,
+    insert_time              timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time              timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_symptom_template IS '症状模板表';
@@ -311,25 +303,25 @@ CREATE INDEX idx_c_ai_symptom_sort ON c_ai_symptom_template (sd_medical_mode, so
 
 
 CREATE TABLE c_ai_symptom_template_change_log (
-    id_log                  VARCHAR2(32) PRIMARY KEY,
-    id_template             VARCHAR2(32),
-    cd_symptom              VARCHAR2(128),
-    na_symptom              VARCHAR2(200),
-    sd_medical_mode         VARCHAR2(16),
-    id_org                  VARCHAR2(32),
-    id_region               VARCHAR2(32),
-    operation_type          VARCHAR2(32) NOT NULL,
-    id_operator             VARCHAR2(32),
-    cd_operator             VARCHAR2(64),
-    na_operator             VARCHAR2(128),
-    change_summary          VARCHAR2(1000),
-    before_json             CLOB,
-    after_json              CLOB,
-    diff_json               CLOB,
-    operation_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fg_active               CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_log                  varchar(32) PRIMARY KEY,
+    id_template             varchar(32),
+    cd_symptom              varchar(128),
+    na_symptom              varchar(200),
+    sd_medical_mode         varchar(16),
+    id_org                  varchar(32),
+    id_region               varchar(32),
+    operation_type          varchar(32) NOT NULL,
+    id_operator             varchar(32),
+    cd_operator             varchar(64),
+    na_operator             varchar(128),
+    change_summary          varchar(1000),
+    before_json             text,
+    after_json              text,
+    diff_json               text,
+    operation_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    fg_active               char(1) DEFAULT '1' NOT NULL,
+    insert_time             timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time             timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_symptom_template_change_log IS '症状模板修改日志表';
@@ -360,25 +352,25 @@ CREATE INDEX idx_c_ai_symptom_log_scope ON c_ai_symptom_template_change_log (sd_
 
 
 CREATE TABLE c_ai_op_log (
-    id_log               VARCHAR2(32) PRIMARY KEY,
-    id_device            VARCHAR2(32),
-    id_org               VARCHAR2(32),
-    sd_log_type          VARCHAR2(64),
-    na_module            VARCHAR2(128),
-    op_action            VARCHAR2(256),
-    op_title             VARCHAR2(500),
-    source_module        VARCHAR2(128),
-    scene_code           VARCHAR2(256),
-    trace_id             VARCHAR2(64),
-    des_op               VARCHAR2(500),
-    payload_json         CLOB,
-    audio_file_path      VARCHAR2(1000),
-    consultation_id      VARCHAR2(64),
-    op_result            VARCHAR2(8),
-    operation_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_log               varchar(32) PRIMARY KEY,
+    id_device            varchar(32),
+    id_org               varchar(32),
+    sd_log_type          varchar(64),
+    na_module            varchar(128),
+    op_action            varchar(256),
+    op_title             varchar(500),
+    source_module        varchar(128),
+    scene_code           varchar(256),
+    trace_id             varchar(64),
+    des_op               varchar(500),
+    payload_json         text,
+    audio_file_path      varchar(1000),
+    consultation_id      varchar(64),
+    op_result            varchar(8),
+    operation_time       timestamp DEFAULT CURRENT_TIMESTAMP,
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_op_log IS '操作日志表';
@@ -410,35 +402,35 @@ CREATE INDEX idx_c_ai_op_log_scene ON c_ai_op_log (source_module, scene_code, op
 
 
 CREATE TABLE c_ai_user_consultation_log (
-    id_log               VARCHAR2(32) PRIMARY KEY,
-    consultation_id      VARCHAR2(64) NOT NULL,
-    id_device            VARCHAR2(32),
-    id_org               VARCHAR2(32),
-    na_org               VARCHAR2(255),
-    id_doctor            VARCHAR2(64),
-    na_doctor            VARCHAR2(128),
-    id_dept              VARCHAR2(64),
-    na_dept              VARCHAR2(128),
-    consultation_type    VARCHAR2(32) NOT NULL,
-    consultation_time    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    patient_id           VARCHAR2(64),
-    patient_name         VARCHAR2(128),
-    patient_gender       VARCHAR2(32),
-    patient_age          VARCHAR2(32),
-    speech_text          CLOB,
-    audio_file_path      VARCHAR2(1000),
-    audio_file_name      VARCHAR2(255),
-    audio_mime_type      VARCHAR2(128),
-    audio_size           NUMBER(12),
-    first_snapshot_json  CLOB,
-    final_snapshot_json  CLOB,
-    selection_json       CLOB,
-    change_summary_json  CLOB,
-    total_changes        NUMBER(5),
-    status               VARCHAR2(32) DEFAULT 'generated',
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_log               varchar(32) PRIMARY KEY,
+    consultation_id      varchar(64) NOT NULL,
+    id_device            varchar(32),
+    id_org               varchar(32),
+    na_org               varchar(255),
+    id_doctor            varchar(64),
+    na_doctor            varchar(128),
+    id_dept              varchar(64),
+    na_dept              varchar(128),
+    consultation_type    varchar(32) NOT NULL,
+    consultation_time    timestamp DEFAULT CURRENT_TIMESTAMP,
+    patient_id           varchar(64),
+    patient_name         varchar(128),
+    patient_gender       varchar(32),
+    patient_age          varchar(32),
+    speech_text          text,
+    audio_file_path      varchar(1000),
+    audio_file_name      varchar(255),
+    audio_mime_type      varchar(128),
+    audio_size           bigint,
+    first_snapshot_json  text,
+    final_snapshot_json  text,
+    selection_json       text,
+    change_summary_json  text,
+    total_changes        integer,
+    status               varchar(32) DEFAULT 'generated',
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_user_consultation_log IS '运维用户日志-问诊聚合表';
@@ -479,29 +471,29 @@ CREATE INDEX idx_c_ai_user_log_consultation ON c_ai_user_consultation_log (consu
 
 
 CREATE TABLE c_ai_feature_event (
-    id_event             VARCHAR2(64) PRIMARY KEY,
-    id_device            VARCHAR2(32),
-    id_org               VARCHAR2(32),
-    id_region            VARCHAR2(32),
-    feature_code         VARCHAR2(64) NOT NULL,
-    feature_name         VARCHAR2(128) NOT NULL,
-    event_action         VARCHAR2(128),
-    idempotency_key      VARCHAR2(255) NOT NULL,
-    trace_id             VARCHAR2(64),
-    consultation_id      VARCHAR2(64),
-    session_id           VARCHAR2(64),
-    source_module        VARCHAR2(128),
-    scene_code           VARCHAR2(256),
-    id_doctor            VARCHAR2(64),
-    na_doctor            VARCHAR2(128),
-    id_dept              VARCHAR2(64),
-    na_dept              VARCHAR2(128),
-    event_status         VARCHAR2(32) DEFAULT 'success',
-    payload_json         CLOB,
-    event_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_event             varchar(64) PRIMARY KEY,
+    id_device            varchar(32),
+    id_org               varchar(32),
+    id_region            varchar(32),
+    feature_code         varchar(64) NOT NULL,
+    feature_name         varchar(128) NOT NULL,
+    event_action         varchar(128),
+    idempotency_key      varchar(255) NOT NULL,
+    trace_id             varchar(64),
+    consultation_id      varchar(64),
+    session_id           varchar(64),
+    source_module        varchar(128),
+    scene_code           varchar(256),
+    id_doctor            varchar(64),
+    na_doctor            varchar(128),
+    id_dept              varchar(64),
+    na_dept              varchar(128),
+    event_status         varchar(32) DEFAULT 'success',
+    payload_json         text,
+    event_time           timestamp DEFAULT CURRENT_TIMESTAMP,
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_feature_event IS '辅诊功能调用事件表';
@@ -537,37 +529,37 @@ CREATE INDEX idx_c_ai_feature_event_org ON c_ai_feature_event (id_org, id_region
 
 
 CREATE TABLE c_ai_feedback (
-    id_feedback           VARCHAR2(32) PRIMARY KEY,
-    id_device             VARCHAR2(32),
-    id_org                VARCHAR2(32),
-    na_org                VARCHAR2(255),
-    id_doctor             VARCHAR2(64),
-    na_doctor             VARCHAR2(128),
-    id_dept               VARCHAR2(64),
-    na_dept               VARCHAR2(128),
-    session_id            VARCHAR2(64),
-    trace_id              VARCHAR2(64),
-    source_module         VARCHAR2(128),
-    kind                  VARCHAR2(32) DEFAULT 'general',
-    severity              VARCHAR2(16) DEFAULT 'medium',
-    tags_json             VARCHAR2(1000),
-    has_correction        CHAR(1) DEFAULT '0',
-    has_trace             CHAR(1) DEFAULT '0',
-    score                 NUMBER(2) NOT NULL,
-    comment_text          VARCHAR2(2000) NOT NULL,
-    screenshot_file_name  VARCHAR2(255),
-    screenshot_mime_type  VARCHAR2(128),
-    screenshot_data_url   CLOB,
-    feedback_scope_key    VARCHAR2(255),
-    id_feedback_root      VARCHAR2(32),
-    previous_feedback_id  VARCHAR2(32),
-    revision_no           NUMBER(10) DEFAULT 1,
-    fg_latest             CHAR(1) DEFAULT '1' NOT NULL,
-    chain_context_json    CLOB,
-    feedback_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fg_active             CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_feedback           varchar(32) PRIMARY KEY,
+    id_device             varchar(32),
+    id_org                varchar(32),
+    na_org                varchar(255),
+    id_doctor             varchar(64),
+    na_doctor             varchar(128),
+    id_dept               varchar(64),
+    na_dept               varchar(128),
+    session_id            varchar(64),
+    trace_id              varchar(64),
+    source_module         varchar(128),
+    kind                  varchar(32) DEFAULT 'general',
+    severity              varchar(16) DEFAULT 'medium',
+    tags_json             varchar(1000),
+    has_correction        char(1) DEFAULT '0',
+    has_trace             char(1) DEFAULT '0',
+    score                 integer NOT NULL,
+    comment_text          varchar(2000) NOT NULL,
+    screenshot_file_name  varchar(255),
+    screenshot_mime_type  varchar(128),
+    screenshot_data_url   text,
+    feedback_scope_key    varchar(255),
+    id_feedback_root      varchar(32),
+    previous_feedback_id  varchar(32),
+    revision_no           integer DEFAULT 1,
+    fg_latest             char(1) DEFAULT '1' NOT NULL,
+    chain_context_json    text,
+    feedback_time         timestamp DEFAULT CURRENT_TIMESTAMP,
+    fg_active             char(1) DEFAULT '1' NOT NULL,
+    insert_time           timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time           timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_feedback IS '用户反馈表';
@@ -613,25 +605,25 @@ CREATE INDEX idx_c_ai_feedback_scope ON c_ai_feedback (id_device, feedback_scope
 
 
 CREATE TABLE c_security_rejection_log (
-    id_log               VARCHAR2(32) PRIMARY KEY,
-    rejection_type       VARCHAR2(64) NOT NULL,
-    request_method       VARCHAR2(16),
-    request_path         VARCHAR2(500),
-    client_ip            VARCHAR2(64),
-    id_device            VARCHAR2(32),
-    cd_device            VARCHAR2(128),
-    id_org               VARCHAR2(32),
-    request_id           VARCHAR2(64),
-    reject_reason        VARCHAR2(128),
-    reject_detail        VARCHAR2(500),
-    has_signature        CHAR(1) DEFAULT '0' NOT NULL,
-    timestamp_header     VARCHAR2(32),
-    nonce_header         VARCHAR2(64),
-    client_version       VARCHAR2(32),
-    update_channel       VARCHAR2(32),
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_log               varchar(32) PRIMARY KEY,
+    rejection_type       varchar(64) NOT NULL,
+    request_method       varchar(16),
+    request_path         varchar(500),
+    client_ip            varchar(64),
+    id_device            varchar(32),
+    cd_device            varchar(128),
+    id_org               varchar(32),
+    request_id           varchar(64),
+    reject_reason        varchar(128),
+    reject_detail        varchar(500),
+    has_signature        char(1) DEFAULT '0' NOT NULL,
+    timestamp_header     varchar(32),
+    nonce_header         varchar(64),
+    client_version       varchar(32),
+    update_channel       varchar(32),
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_security_rejection_log IS '安全拒绝日志表';
@@ -662,15 +654,15 @@ CREATE INDEX idx_security_reject_path ON c_security_rejection_log (request_path,
 
 
 CREATE TABLE c_ai_user (
-    id_user              VARCHAR2(32) PRIMARY KEY,
-    cd_user              VARCHAR2(64) NOT NULL,
-    na_user              VARCHAR2(128) NOT NULL,
-    password_hash        VARCHAR2(128) NOT NULL,
-    id_org               VARCHAR2(32),
-    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_user              varchar(32) PRIMARY KEY,
+    cd_user              varchar(64) NOT NULL,
+    na_user              varchar(128) NOT NULL,
+    password_hash        varchar(128) NOT NULL,
+    id_org               varchar(32),
+    sd_status            varchar(2) DEFAULT '1' NOT NULL,
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_user IS '用户表';
@@ -689,14 +681,14 @@ CREATE INDEX idx_c_ai_user_org ON c_ai_user (id_org, fg_active);
 
 
 CREATE TABLE c_ai_role (
-    id_role              VARCHAR2(32) PRIMARY KEY,
-    cd_role              VARCHAR2(64) NOT NULL,
-    na_role              VARCHAR2(128) NOT NULL,
-    des_role             VARCHAR2(500),
-    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_role              varchar(32) PRIMARY KEY,
+    cd_role              varchar(64) NOT NULL,
+    na_role              varchar(128) NOT NULL,
+    des_role             varchar(500),
+    sd_status            varchar(2) DEFAULT '1' NOT NULL,
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_role IS '角色表';
@@ -713,12 +705,12 @@ CREATE INDEX idx_c_ai_role_code ON c_ai_role (cd_role, fg_active);
 
 
 CREATE TABLE c_ai_user_role (
-    id_user_role         VARCHAR2(32) PRIMARY KEY,
-    id_user              VARCHAR2(32) NOT NULL,
-    id_role              VARCHAR2(32) NOT NULL,
-    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
-    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id_user_role         varchar(32) PRIMARY KEY,
+    id_user              varchar(32) NOT NULL,
+    id_role              varchar(32) NOT NULL,
+    fg_active            char(1) DEFAULT '1' NOT NULL,
+    insert_time          timestamp DEFAULT CURRENT_TIMESTAMP,
+    update_time          timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE c_ai_user_role IS '用户角色关联表';

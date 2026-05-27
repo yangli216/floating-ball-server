@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.regionalai.floatingball.server.modules.stats.mapper.OverviewStatsMapper">
+
+    <resultMap id="overviewStatsMap" type="com.regionalai.floatingball.server.modules.stats.dto.OverviewStatsVO">
+        <result property="regionCount" column="region_count"/>
+        <result property="orgCount" column="org_count"/>
+        <result property="deviceCount" column="device_count"/>
+        <result property="configCount" column="config_count"/>
+        <result property="symptomTemplateCount" column="symptom_template_count"/>
+        <result property="logCount" column="log_count"/>
+        <result property="userCount" column="user_count"/>
+        <result property="roleCount" column="role_count"/>
+    </resultMap>
+
+    <select id="selectOverviewStats" resultMap="overviewStatsMap">
+        SELECT
+            (SELECT COUNT(1) FROM c_ai_region WHERE fg_active = '1') AS region_count,
+            (SELECT COUNT(1) FROM c_ai_org WHERE fg_active = '1') AS org_count,
+            (SELECT COUNT(1) FROM c_ai_device WHERE fg_active = '1') AS device_count,
+            (SELECT COUNT(1) FROM c_ai_config WHERE fg_active = '1') AS config_count,
+            (SELECT COUNT(1) FROM c_ai_symptom_template WHERE fg_active = '1') AS symptom_template_count,
+            (SELECT COUNT(1) FROM c_ai_op_log WHERE fg_active = '1') AS log_count,
+            (SELECT COUNT(1) FROM c_ai_user WHERE fg_active = '1') AS user_count,
+            (SELECT COUNT(1) FROM c_ai_role WHERE fg_active = '1') AS role_count
+        <if test="_databaseId != 'postgres'">FROM dual</if>
+    </select>
+</mapper>

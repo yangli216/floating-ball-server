@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper">
+
+    <resultMap id="distributionItemMap" type="com.regionalai.floatingball.server.modules.analytics.dto.DistributionItemVO">
+        <result property="name" column="name"/>
+        <result property="value" column="value"/>
+    </resultMap>
+
+    <resultMap id="functionUsageItemMap" type="com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageItemVO">
+        <result property="moduleName" column="moduleName"/>
+        <result property="callCount" column="callCount"/>
+        <result property="doctorCount" column="doctorCount"/>
+        <result property="avgPerDoctor" column="avgPerDoctor"/>
+    </resultMap>
+
+    <sql id="featureEventDateFilter">
+        <if test="query.dateFromValue != null">
+            AND event_time <![CDATA[>=]]> #{query.dateFromValue}
+        </if>
+        <if test="query.dateToExclusive != null">
+            AND event_time <![CDATA[<]]> #{query.dateToExclusive}
+        </if>
+    </sql>
+
+    <sql id="consultationDateFilter">
+        <if test="query.dateFromValue != null">
+            AND consultation_time <![CDATA[>=]]> #{query.dateFromValue}
+        </if>
+        <if test="query.dateToExclusive != null">
+            AND consultation_time <![CDATA[<]]> #{query.dateToExclusive}
+        </if>
+    </sql>
+
+    <sql id="featureEventScopeFilter">
+        <if test="query.idOrg != null and query.idOrg != ''">
+            AND id_org = #{query.idOrg}
+        </if>
+        <if test="query.idRegion != null and query.idRegion != ''">
+            AND id_region = #{query.idRegion}
+        </if>
+    </sql>
+
+    <sql id="consultationScopeFilter">
+        <if test="query.idOrg != null and query.idOrg != ''">
+            AND id_org = #{query.idOrg}
+        </if>
+    </sql>
+
+    <sql id="functionModuleFilter">
+        <if test="query.functionModules != null and query.functionModules.size() > 0">
+            AND feature_name IN
+            <foreach collection="query.functionModules" item="m" open="(" separator="," close=")">
+                #{m}
+            </foreach>
+        </if>
+    </sql>
+
+    <select id="countAiService" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_feature_event
+        WHERE fg_active = '1'
+          AND LOWER(event_status) = 'success'
+        <include refid="featureEventDateFilter"/>
+        <include refid="featureEventScopeFilter"/>
+    </select>
+
+    <select id="countConsultation" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_user_consultation_log
+        WHERE fg_active = '1'
+        <include refid="consultationDateFilter"/>
+        <include refid="consultationScopeFilter"/>
+    </select>
+
+    <select id="countActiveDoctors" resultType="long">
+        SELECT COUNT(DISTINCT id_doctor)
+        FROM c_ai_user_consultation_log
+        WHERE fg_active = '1'
+        <include refid="consultationDateFilter"/>
+        <include refid="consultationScopeFilter"/>
+    </select>
+
+    <select id="countAdoptedConsultations" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_user_consultation_log
+        WHERE fg_active = '1'
+          AND status = 'completed'
+        <include refid="consultationDateFilter"/>
+        <include refid="consultationScopeFilter"/>
+    </select>
+
+    <select id="countFinalizedConsultations" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_user_consultation_log
+        WHERE fg_active = '1'
+          AND status IN ('completed', 'abandoned')
+        <include refid="consultationDateFilter"/>
+        <include refid="consultationScopeFilter"/>
+    </select>
+
+    <select id="countDiagnosisMatchedConsultations" resultType="long">
+        SELECT COUNT(1)
+        FROM c_ai_user_consultation_log
+        WHERE fg_active = '1'
+          AND status IN ('completed', 'abandoned')
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                AND CAST(CAST(change_summary_json AS jsonb) ->> 'diagnosisChanges' AS integer) = 0
+            </when>
+            <otherwise>
+                AND JSON_VALUE(change_summary_json, '$.diagnosisChanges' RETURNING NUMBER) = 0
+            </otherwise>
+        </choose>
+        <include refid="consultationDateFilter"/>
+        <include refid="consultationScopeFilter"/>
+    </select>
+
+    <select id="queryAiServiceTrend" resultType="map">
+        SELECT
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                TO_CHAR(DATE_TRUNC('day', event_time), 'YYYY-MM-DD') AS day_str,
+                DATE_TRUNC('day', event_time) AS day_order,
+            </when>
+            <otherwise>
+                TO_CHAR(TRUNC(event_time), 'YYYY-MM-DD') AS day_str,
+                TRUNC(event_time) AS day_order,
+            </otherwise>
+        </choose>
+            COUNT(1) AS cnt
+        FROM c_ai_feature_event
+        WHERE fg_active = '1'
+          AND LOWER(event_status) = 'success'
+        <include refid="featureEventDateFilter"/>
+        <include refid="featureEventScopeFilter"/>
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                GROUP BY DATE_TRUNC('day', event_time)
+                ORDER BY DATE_TRUNC('day', event_time)
+            </when>
+            <otherwise>
+                GROUP BY TRUNC(event_time)
+                ORDER BY TRUNC(event_time)
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="queryConsultationTrend" resultType="map">
+        SELECT
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                TO_CHAR(DATE_TRUNC('day', consultation_time), 'YYYY-MM-DD') AS day_str,
+                DATE_TRUNC('day', consultation_time) AS day_order,
+            </when>
+            <otherwise>
+                TO_CHAR(TRUNC(consultation_time), 'YYYY-MM-DD') AS day_str,
+                TRUNC(consultation_time) AS day_order,
+            </otherwise>
+        </choose>
+            COUNT(1) AS cnt
+        FROM c_ai_user_consultation_log
+        WHERE fg_active = '1'
+        <include refid="consultationDateFilter"/>
+        <include refid="consultationScopeFilter"/>
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                GROUP BY DATE_TRUNC('day', consultation_time)
+                ORDER BY DATE_TRUNC('day', consultation_time)
+            </when>
+            <otherwise>
+                GROUP BY TRUNC(consultation_time)
+                ORDER BY TRUNC(consultation_time)
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="queryOrgDistribution" resultMap="distributionItemMap">
+        SELECT o.na_org AS name, COALESCE(l.cnt, 0) AS value
+        FROM c_ai_org o
+        LEFT JOIN (
+            SELECT id_org, COUNT(1) AS cnt
+            FROM c_ai_feature_event
+            WHERE fg_active = '1'
+              AND LOWER(event_status) = 'success'
+            <include refid="featureEventDateFilter"/>
+            <if test="query.idRegion != null and query.idRegion != ''">
+                AND id_region = #{query.idRegion}
+            </if>
+            GROUP BY id_org
+        ) l ON o.id_org = l.id_org
+        WHERE o.fg_active = '1'
+        <if test="query.idRegion != null and query.idRegion != ''">
+            AND o.id_region = #{query.idRegion}
+        </if>
+        ORDER BY value DESC
+    </select>
+
+    <select id="queryRegionDistributionRaw" resultMap="distributionItemMap">
+        SELECT r.na_region AS name, SUM(COALESCE(l.cnt, 0)) AS value
+        FROM c_ai_region r
+        LEFT JOIN c_ai_org o ON o.id_region = r.id_region AND o.fg_active = '1'
+        LEFT JOIN (
+            SELECT id_org, COUNT(1) AS cnt
+            FROM c_ai_feature_event
+            WHERE fg_active = '1'
+              AND LOWER(event_status) = 'success'
+            <include refid="featureEventDateFilter"/>
+            GROUP BY id_org
+        ) l ON o.id_org = l.id_org
+        WHERE r.fg_active = '1'
+        <if test="query.idRegion != null and query.idRegion != ''">
+            AND r.id_region = #{query.idRegion}
+        </if>
+        GROUP BY r.na_region
+        ORDER BY value DESC
+    </select>
+
+    <select id="queryDistinctModules" resultType="string">
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                SELECT module_name
+                FROM (
+                    VALUES
+                        ('语音问诊'),
+                        ('智能问诊'),
+                        ('报告单解读'),
+                        ('聊天'),
+                        ('AI诊断鉴别'),
+                        ('AI推荐诊断'),
+                        ('AI推荐用药'),
+                        ('AI推荐检查'),
+                        ('AI推荐检验'),
+                        ('AI推荐处置'),
+                        ('知识库使用')
+                ) modules(module_name)
+            </when>
+            <otherwise>
+                SELECT '语音问诊' AS module_name FROM dual
+                UNION ALL SELECT '智能问诊' FROM dual
+                UNION ALL SELECT '报告单解读' FROM dual
+                UNION ALL SELECT '聊天' FROM dual
+                UNION ALL SELECT 'AI诊断鉴别' FROM dual
+                UNION ALL SELECT 'AI推荐诊断' FROM dual
+                UNION ALL SELECT 'AI推荐用药' FROM dual
+                UNION ALL SELECT 'AI推荐检查' FROM dual
+                UNION ALL SELECT 'AI推荐检验' FROM dual
+                UNION ALL SELECT 'AI推荐处置' FROM dual
+                UNION ALL SELECT '知识库使用' FROM dual
+            </otherwise>
+        </choose>
+    </select>
+
+    <sql id="functionUsageRankingSelect">
+        SELECT
+            feature_name AS "moduleName",
+            COUNT(1) AS "callCount",
+            COUNT(DISTINCT COALESCE(NULLIF(TRIM(id_doctor), ''), id_device)) AS "doctorCount",
+            COALESCE(ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT COALESCE(NULLIF(TRIM(id_doctor), ''), id_device)), 0)), 0) AS "avgPerDoctor"
+        FROM c_ai_feature_event
+        WHERE fg_active = '1'
+          AND LOWER(event_status) = 'success'
+        <include refid="featureEventDateFilter"/>
+        <include refid="featureEventScopeFilter"/>
+        <include refid="functionModuleFilter"/>
+        GROUP BY feature_name
+        ORDER BY "callCount" DESC
+    </sql>
+
+    <select id="queryFunctionUsageRanking" resultMap="functionUsageItemMap">
+        <include refid="functionUsageRankingSelect"/>
+    </select>
+
+    <select id="queryFunctionUsagePreviousRanking" resultMap="functionUsageItemMap">
+        <include refid="functionUsageRankingSelect"/>
+    </select>
+
+    <select id="queryFunctionUsageTrend" resultType="map">
+        SELECT
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                TO_CHAR(DATE_TRUNC('day', event_time), 'YYYY-MM-DD') AS dayStr,
+                DATE_TRUNC('day', event_time) AS dayOrder,
+            </when>
+            <otherwise>
+                TO_CHAR(TRUNC(event_time), 'YYYY-MM-DD') AS dayStr,
+                TRUNC(event_time) AS dayOrder,
+            </otherwise>
+        </choose>
+            feature_name AS moduleName,
+            COUNT(1) AS cnt
+        FROM c_ai_feature_event
+        WHERE fg_active = '1'
+          AND LOWER(event_status) = 'success'
+        <include refid="featureEventDateFilter"/>
+        <include refid="featureEventScopeFilter"/>
+        <include refid="functionModuleFilter"/>
+        <choose>
+            <when test="_databaseId == 'postgres'">
+                GROUP BY DATE_TRUNC('day', event_time), feature_name
+                ORDER BY DATE_TRUNC('day', event_time), feature_name
+            </when>
+            <otherwise>
+                GROUP BY TRUNC(event_time), feature_name
+                ORDER BY TRUNC(event_time), feature_name
+            </otherwise>
+        </choose>
+    </select>
+</mapper>

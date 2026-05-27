@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.MybatisPlusQueryUtils;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
@@ -218,10 +219,9 @@ public class FeedbackService {
     }
 
     public AdminFeedbackDetailResponse detail(String feedbackId) {
-        AiFeedback feedback = aiFeedbackMapper.selectOne(new QueryWrapper<AiFeedback>()
+        AiFeedback feedback = MybatisPlusQueryUtils.selectFirst(aiFeedbackMapper, new QueryWrapper<AiFeedback>()
             .eq("id_feedback", feedbackId)
-            .eq("fg_active", "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .eq("fg_active", "1"));
         if (feedback == null) {
             throw new BusinessException("反馈记录不存在");
         }
@@ -398,14 +398,13 @@ public class FeedbackService {
         if (!StringUtils.hasText(deviceId) || !StringUtils.hasText(scopeKey)) {
             return null;
         }
-        return aiFeedbackMapper.selectOne(new QueryWrapper<AiFeedback>()
+        return MybatisPlusQueryUtils.selectFirst(aiFeedbackMapper, new QueryWrapper<AiFeedback>()
             .eq("fg_active", "1")
             .eq("fg_latest", "1")
             .eq("id_device", deviceId)
             .eq("feedback_scope_key", scopeKey)
             .orderByDesc("revision_no")
-            .orderByDesc("feedback_time")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .orderByDesc("feedback_time"));
     }
 
     private FeedbackVersionInfo resolveVersionInfo(AiFeedback latestFeedback, String requestedPreviousFeedbackId) {
