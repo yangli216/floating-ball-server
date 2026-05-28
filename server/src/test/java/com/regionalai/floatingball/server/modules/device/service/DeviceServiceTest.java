@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -184,6 +185,23 @@ class DeviceServiceTest {
 
         assertEquals("设备编码已存在", ex.getMessage());
         verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
+    }
+
+    @Test
+    void saveShouldTranslateDatabaseUniqueConflictToBusinessError() {
+        AiOrg org = buildOrg("ORG001", "REG001");
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiDeviceMapper.selectOne(any())).thenReturn(null);
+        when(aiDeviceMapper.insert(any(AiDevice.class))).thenThrow(new DuplicateKeyException("uk_c_ai_device_code_org_active"));
+
+        AiDeviceSaveRequest request = new AiDeviceSaveRequest();
+        request.setCdDevice("DEV-NEW");
+        request.setNaDevice("新终端");
+        request.setIdOrg("ORG001");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> deviceService.save(request));
+
+        assertEquals("设备编码已存在", ex.getMessage());
     }
 
     @Test

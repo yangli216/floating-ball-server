@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService;
 import com.regionalai.floatingball.server.modules.ai.dto.ChatRequest;
 import com.regionalai.floatingball.server.modules.ai.dto.SpeechRequest;
 import com.regionalai.floatingball.server.modules.audit.service.AuditService;
@@ -29,7 +30,7 @@ class AiProxyServiceTest {
     void resolveChatConfigUsesReviewerOverrides() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setBaseUrl("https://main.example/v1");
@@ -57,7 +58,7 @@ class AiProxyServiceTest {
     void resolveChatConfigUsesFastModelWhenRequested() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setBaseUrl("https://main.example/v1");
@@ -82,7 +83,7 @@ class AiProxyServiceTest {
     void resolveChatConfigFastProfileFallsBackToMainModel() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setBaseUrl("https://main.example/v1");
@@ -105,7 +106,7 @@ class AiProxyServiceTest {
     void buildChatPayloadShouldCarryEnableThinkingFlag() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         Map<String, Object> payload = (Map<String, Object>) ReflectionTestUtils.invokeMethod(
             service,
@@ -126,7 +127,7 @@ class AiProxyServiceTest {
     void resolveChatConfigFallsBackToDefaultWhenReviewerOverridesMissing() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setBaseUrl("https://main.example/v1");
@@ -149,7 +150,7 @@ class AiProxyServiceTest {
     void resolveChatConfigRejectsReviewerProfileWhenDisabled() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setBaseUrl("https://main.example/v1");
@@ -171,7 +172,7 @@ class AiProxyServiceTest {
     void buildSpeechLogPayloadShouldNotContainRawAudio() throws Exception {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         SpeechRequest request = new SpeechRequest();
         request.setAudio("BASE64_AUDIO_SHOULD_NOT_BE_LOGGED");
@@ -227,7 +228,7 @@ class AiProxyServiceTest {
     void resolveAudioApiKeyShouldPreferSpeechKeyAndFallbackToMainKey() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setApiKey("main-key");
@@ -245,7 +246,7 @@ class AiProxyServiceTest {
     void dashScopeSpeechShouldNormalizeEndpointAndLegacyModel() {
         ConfigService configService = mock(ConfigService.class);
         AuditService auditService = mock(AuditService.class);
-        AiProxyService service = new AiProxyService(configService, auditService, new RestTemplate(), new ObjectMapper());
+        AiProxyService service = newService(configService, auditService);
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setSpeechProvider("aliyun-dashscope");
@@ -256,5 +257,16 @@ class AiProxyServiceTest {
 
         assertThat(model).isEqualTo("qwen3-asr-flash");
         assertThat(endpoint).isEqualTo("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+    }
+
+    private AiProxyService newService(ConfigService configService, AuditService auditService) {
+        return new AiProxyService(
+            configService,
+            auditService,
+            new RestTemplate(),
+            new ObjectMapper(),
+            mock(OutboundSecurityService.class),
+            Runnable::run
+        );
     }
 }

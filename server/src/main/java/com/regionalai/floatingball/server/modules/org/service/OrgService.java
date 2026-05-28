@@ -6,7 +6,9 @@ import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -31,6 +33,7 @@ public class OrgService {
         return new PageResponse<AiOrg>(result.getCurrent(), result.getSize(), result.getTotal(), result.getRecords());
     }
 
+    @Transactional
     public AiOrg save(AiOrg org) {
         if (!StringUtils.hasText(org.getNaOrg())) {
             throw new BusinessException("机构名称不能为空");
@@ -41,16 +44,26 @@ public class OrgService {
         if (!StringUtils.hasText(org.getSdStatus())) {
             org.setSdStatus("1");
         }
-        aiOrgMapper.insert(org);
+        try {
+            aiOrgMapper.insert(org);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("机构编码已存在");
+        }
         return org;
     }
 
+    @Transactional
     public AiOrg update(String idOrg, AiOrg org) {
         org.setIdOrg(idOrg);
-        aiOrgMapper.updateById(org);
+        try {
+            aiOrgMapper.updateById(org);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("机构编码已存在");
+        }
         return aiOrgMapper.selectById(idOrg);
     }
 
+    @Transactional
     public void invalidate(String idOrg) {
         AiOrg org = aiOrgMapper.selectById(idOrg);
         if (org == null) {

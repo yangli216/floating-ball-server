@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.util.Collections;
 import java.util.Base64;
@@ -25,6 +26,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -161,6 +163,72 @@ class UserConsultationLogServiceTest {
         assertEquals(OBJECT_MAPPER.readTree("{\"chiefComplaint\":\"咳嗽3天\"}"), OBJECT_MAPPER.readTree(updated.getFirstSnapshotJson()));
         assertEquals(OBJECT_MAPPER.valueToTree(finalSnapshot), OBJECT_MAPPER.readTree(updated.getFinalSnapshotJson()));
         assertEquals(OBJECT_MAPPER.valueToTree(selectionSnapshot), OBJECT_MAPPER.readTree(updated.getSelectionJson()));
+    }
+
+    @Test
+    void saveShouldRetryAsUpdateWhenConcurrentCreateHitsUniqueConstraint() {
+        AiUserConsultationLog existing = new AiUserConsultationLog();
+        existing.setIdLog("LOG001");
+        existing.setConsultationId("CONSULT-001");
+        existing.setConsultationType("voice");
+        existing.setIdDevice("DEV001");
+        existing.setFgActive("1");
+        existing.setStatus("generated");
+
+        when(mapper.selectOne(any())).thenReturn(null).thenReturn(existing);
+        when(mapper.insert(any(AiUserConsultationLog.class)))
+            .thenThrow(new DuplicateKeyException("uk_c_ai_user_log_consultation_active"));
+
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setIdOrg("ORG001");
+
+        Map<String, Object> finalSnapshot = new HashMap<String, Object>();
+        finalSnapshot.put("chiefComplaint", "咳嗽、咳痰3天");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationType("voice");
+        request.setFinalSnapshot(finalSnapshot);
+
+        AiUserConsultationLog result = service.save(device, request);
+
+        assertEquals("LOG001", result.getIdLog());
+        assertEquals("completed", result.getStatus());
+        verify(mapper).insert(any(AiUserConsultationLog.class));
+        verify(mapper).updateById(existing);
+    }
+
+    @Test
+    void saveShouldCleanNewAudioWhenConcurrentCreateRetryIsNeeded() throws Exception {
+        AiUserConsultationLog existing = new AiUserConsultationLog();
+        existing.setIdLog("LOG001");
+        existing.setConsultationId("CONSULT-001");
+        existing.setConsultationType("voice");
+        existing.setIdDevice("DEV001");
+        existing.setFgActive("1");
+        existing.setStatus("generated");
+
+        when(mapper.selectOne(any())).thenReturn(null).thenReturn(existing);
+        when(mapper.insert(any(AiUserConsultationLog.class)))
+            .thenThrow(new DuplicateKeyException("uk_c_ai_user_log_consultation_active"));
+        when(audioLogStorageService.store(any(byte[].class), any(String.class), any(String.class)))
+            .thenReturn("/tmp/floating-ball-server/speech-audit/new.wav");
+
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationType("voice");
+        request.setAudio(Base64.getEncoder().encodeToString("audio-bytes".getBytes("UTF-8")));
+        request.setAudioMimeType("audio/wav");
+        request.setAudioFileName("voice.wav");
+
+        service.save(device, request);
+
+        verify(audioLogStorageService).deleteQuietly("/tmp/floating-ball-server/speech-audit/new.wav");
+        verify(mapper).updateById(existing);
     }
 
     @Test

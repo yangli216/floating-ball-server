@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.knowledge.service;
 
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.service.ConfigService;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
@@ -19,7 +20,7 @@ class PmphaiProxyServiceTest {
     @Test
     void generatePageUrlUsesServerManagedPmphaiConfig() {
         ConfigService configService = mock(ConfigService.class);
-        PmphaiProxyService service = new PmphaiProxyService(configService, WebClient.builder().build());
+        PmphaiProxyService service = new PmphaiProxyService(configService, WebClient.builder().build(), mock(OutboundSecurityService.class));
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setPmphaiEnabled(Boolean.TRUE);
@@ -49,7 +50,7 @@ class PmphaiProxyServiceTest {
     @Test
     void generatePageUrlRejectsDisabledPmphaiConfig() {
         ConfigService configService = mock(ConfigService.class);
-        PmphaiProxyService service = new PmphaiProxyService(configService, WebClient.builder().build());
+        PmphaiProxyService service = new PmphaiProxyService(configService, WebClient.builder().build(), mock(OutboundSecurityService.class));
 
         ResolvedAiConfig resolved = new ResolvedAiConfig();
         resolved.setPmphaiEnabled(Boolean.FALSE);

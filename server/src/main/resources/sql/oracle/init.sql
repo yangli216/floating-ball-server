@@ -77,6 +77,9 @@ COMMENT ON COLUMN c_ai_org.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_org_active ON c_ai_org (fg_active, sd_status);
 CREATE INDEX idx_c_ai_org_code ON c_ai_org (cd_org, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_org_code_active ON c_ai_org (
+    CASE WHEN fg_active = '1' THEN cd_org END
+);
 
 
 CREATE TABLE c_ai_device (
@@ -116,6 +119,13 @@ COMMENT ON COLUMN c_ai_device.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_device_org ON c_ai_device (id_org, fg_active);
 CREATE INDEX idx_c_ai_device_token ON c_ai_device (device_token, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_device_code_org_active ON c_ai_device (
+    CASE WHEN fg_active = '1' THEN id_org END,
+    CASE WHEN fg_active = '1' THEN cd_device END
+);
+CREATE UNIQUE INDEX uk_c_ai_device_token_active ON c_ai_device (
+    CASE WHEN fg_active = '1' THEN device_token END
+);
 
 
 CREATE TABLE c_ai_config (
@@ -470,6 +480,11 @@ CREATE INDEX idx_c_ai_user_log_time ON c_ai_user_consultation_log (consultation_
 CREATE INDEX idx_c_ai_user_log_patient ON c_ai_user_consultation_log (patient_id, consultation_time, fg_active);
 CREATE INDEX idx_c_ai_user_log_doctor ON c_ai_user_consultation_log (id_doctor, consultation_time, fg_active);
 CREATE INDEX idx_c_ai_user_log_consultation ON c_ai_user_consultation_log (consultation_id, consultation_type, id_device, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_user_log_consultation_active ON c_ai_user_consultation_log (
+    CASE WHEN fg_active = '1' THEN consultation_id END,
+    CASE WHEN fg_active = '1' THEN consultation_type END,
+    CASE WHEN fg_active = '1' THEN NVL(id_device, '-') END
+);
 
 
 CREATE TABLE c_ai_feature_event (
@@ -604,6 +619,10 @@ CREATE INDEX idx_c_ai_feedback_kind ON c_ai_feedback (kind, fg_active);
 CREATE INDEX idx_c_ai_feedback_doctor ON c_ai_feedback (id_doctor, fg_active);
 CREATE INDEX idx_c_ai_feedback_dept ON c_ai_feedback (id_dept, fg_active);
 CREATE INDEX idx_c_ai_feedback_scope ON c_ai_feedback (id_device, feedback_scope_key, fg_latest, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope ON c_ai_feedback (
+    CASE WHEN fg_active = '1' AND fg_latest = '1' AND feedback_scope_key IS NOT NULL THEN NVL(id_device, '-') END,
+    CASE WHEN fg_active = '1' AND fg_latest = '1' AND feedback_scope_key IS NOT NULL THEN feedback_scope_key END
+);
 
 
 CREATE TABLE c_ai_user (
@@ -631,6 +650,9 @@ COMMENT ON COLUMN c_ai_user.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_user_code ON c_ai_user (cd_user, fg_active);
 CREATE INDEX idx_c_ai_user_org ON c_ai_user (id_org, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_user_code_active ON c_ai_user (
+    CASE WHEN fg_active = '1' THEN cd_user END
+);
 
 
 CREATE TABLE c_ai_role (
@@ -655,6 +677,9 @@ COMMENT ON COLUMN c_ai_role.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_role.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_role_code ON c_ai_role (cd_role, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_role_code_active ON c_ai_role (
+    CASE WHEN fg_active = '1' THEN cd_role END
+);
 
 
 CREATE TABLE c_ai_user_role (
@@ -676,6 +701,10 @@ COMMENT ON COLUMN c_ai_user_role.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_user_role_user ON c_ai_user_role (id_user, fg_active);
 CREATE INDEX idx_c_ai_user_role_role ON c_ai_user_role (id_role, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_user_role_active ON c_ai_user_role (
+    CASE WHEN fg_active = '1' THEN id_user END,
+    CASE WHEN fg_active = '1' THEN id_role END
+);
 
 
 INSERT INTO c_ai_region (id_region, cd_region, na_region, sd_region_type, sd_status, fg_active)

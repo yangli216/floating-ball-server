@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.util.Collections;
 
@@ -92,6 +93,18 @@ class OrgServiceTest {
         assertEquals("1", org.getFgActive());
         assertEquals("1", org.getSdStatus());
         verify(aiOrgMapper).insert(org);
+    }
+
+    @Test
+    void saveShouldTranslateDatabaseUniqueConflictToBusinessError() {
+        AiOrg org = new AiOrg();
+        org.setCdOrg("ORG-CODE");
+        org.setNaOrg("区域总院");
+        when(aiOrgMapper.insert(any(AiOrg.class))).thenThrow(new DuplicateKeyException("uk_c_ai_org_code_active"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> orgService.save(org));
+
+        assertEquals("机构编码已存在", ex.getMessage());
     }
 
     @Test

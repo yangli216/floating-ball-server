@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -93,6 +95,72 @@ class FeedbackServiceTest {
 
         verify(aiFeedbackMapper, times(2)).update(isNull(), org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiFeedback>>any());
         verify(aiFeedbackMapper, never()).updateById(any(AiFeedback.class));
+    }
+
+    @Test
+    void submitShouldRetryOnceWhenLatestScopeUniqueConflictHappens() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("device-1");
+        device.setIdOrg("ORG-1");
+
+        AiFeedback firstLatest = new AiFeedback();
+        firstLatest.setIdFeedback("feedback-1");
+        firstLatest.setIdFeedbackRoot("feedback-1");
+        firstLatest.setRevisionNo(1);
+        AiFeedback secondLatest = new AiFeedback();
+        secondLatest.setIdFeedback("feedback-2");
+        secondLatest.setIdFeedbackRoot("feedback-1");
+        secondLatest.setRevisionNo(2);
+
+        when(aiFeedbackMapper.selectOne(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiFeedback>>any()))
+            .thenReturn(firstLatest)
+            .thenReturn(secondLatest);
+        when(aiFeedbackMapper.insert(any(AiFeedback.class)))
+            .thenThrow(new DuplicateKeyException("uk_c_ai_feedback_latest_scope"))
+            .thenAnswer(invocation -> {
+                AiFeedback feedback = invocation.getArgument(0);
+                feedback.setIdFeedback("feedback-3");
+                return 1;
+            });
+
+        ClientFeedbackSubmitRequest request = new ClientFeedbackSubmitRequest();
+        request.setScore(4);
+        request.setComment("并发修订后的反馈");
+        request.setChainContext(buildChainContext("consult-1::view:consultation", "feedback-1", 2));
+
+        ClientFeedbackSubmitResponse response = feedbackService.submit(device, request);
+
+        assertEquals("feedback-3", response.getFeedbackId());
+        org.mockito.ArgumentCaptor<AiFeedback> insertCaptor = org.mockito.ArgumentCaptor.forClass(AiFeedback.class);
+        verify(aiFeedbackMapper, times(2)).insert(insertCaptor.capture());
+        assertEquals("feedback-2", insertCaptor.getAllValues().get(1).getPreviousFeedbackId());
+        assertEquals(Integer.valueOf(3), insertCaptor.getAllValues().get(1).getRevisionNo());
+    }
+
+    @Test
+    void submitShouldReturnBusinessErrorWhenLatestScopeConflictRepeats() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("device-1");
+
+        AiFeedback latest = new AiFeedback();
+        latest.setIdFeedback("feedback-1");
+        latest.setIdFeedbackRoot("feedback-1");
+        latest.setRevisionNo(1);
+
+        when(aiFeedbackMapper.selectOne(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiFeedback>>any()))
+            .thenReturn(latest);
+        when(aiFeedbackMapper.insert(any(AiFeedback.class)))
+            .thenThrow(new DuplicateKeyException("uk_c_ai_feedback_latest_scope"));
+
+        ClientFeedbackSubmitRequest request = new ClientFeedbackSubmitRequest();
+        request.setScore(4);
+        request.setComment("重复冲突");
+        request.setChainContext(buildChainContext("consult-1::view:consultation", "feedback-1", 2));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> feedbackService.submit(device, request));
+
+        assertEquals("反馈提交冲突，请稍后重试", ex.getMessage());
+        verify(aiFeedbackMapper, times(2)).insert(any(AiFeedback.class));
     }
 
     @Test

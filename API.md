@@ -352,6 +352,7 @@ Content-Type: application/json
 2. `publicKey` 为 ECDSA P-256 公钥，SPKI DER 后 base64 编码。
 3. 已存在且已绑定公钥的设备不允许匿名重新注册接管；若本地 token/key 丢失，客户端应生成新的兜底 `cdDevice` 注册为新设备，避免弱运维场景下阻断医生使用。
 4. 已存在但未绑定公钥的历史设备允许在注册时补录公钥，用于兼容旧数据。
+5. 同一机构下激活设备的 `cdDevice` 必须唯一；服务端用数据库唯一索引兜底并发注册，重复注册会返回业务错误。
 
 响应 `data`：
 
@@ -441,6 +442,13 @@ Content-Type: application/json
 配置优先级：机构级 > 区域级 > 全局级。
 
 生效方式：`/v1/client/bootstrap` 与 `/v1/ai/chat` 每次请求都会按设备当前作用域实时解析 AI 配置；管理端修改配置后，无需重启服务，客户端下一次 `bootstrap` 或 AI 请求即可看到最新结果。
+
+服务端出站安全约束：
+
+1. `apiBaseUrl`、`audioBaseUrl`、`reviewerBaseUrl`、`pmphaiBaseUrl` 只是候选上游地址；真实出站前服务端会按 `floating-ball.outbound-security.allowed-hosts` 做 host allowlist 校验。
+2. 默认只允许 HTTPS / WSS，拒绝 HTTP / WS；本机、私网、链路本地、组播、共享地址空间等地址默认拒绝，避免 SSRF。确需内网或本地联调时，必须在部署配置中同时显式放宽协议 / 私网并加入允许 host。
+3. 服务端按 host 进行本地限流与熔断；限流或熔断命中时，对客户端返回可理解的业务错误，不继续访问上游。
+4. `development` profile 默认允许 `api.deepseek.com,dashscope.aliyuncs.com`，并允许代理软件 fake-ip 常用的 `198.18.0.0/15` DNS 解析结果，用于匹配本地默认 DeepSeek / DashScope 配置；其他模型供应商或生产部署必须显式覆盖 `FB_OUTBOUND_ALLOWED_HOSTS`。host 被拒绝时，业务错误会包含被拒绝的 host，便于定位应加入的允许名单项。
 
 ### 3.4 GET `/v1/client/prompts/delta`
 
@@ -641,7 +649,7 @@ Content-Type: application/json
 约束：
 
 1. `consultationType` 取值：`voice`（语音问诊）、`smart`（智能问诊）。
-2. 服务端按 `consultationId + consultationType + idDevice` upsert；先收到首版快照则创建记录，后收到最终快照则更新同一条记录。
+2. 服务端按 `consultationId + consultationType + idDevice` 事务化 upsert；数据库通过唯一索引保证激活记录不重复，先收到首版快照则创建记录，后收到最终快照则更新同一条记录。
 3. 客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写时的最终状态。
 4. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
 
@@ -728,8 +736,8 @@ Content-Type: application/json
 版本持久化约定：
 
 - 若 `feedbackScopeKey` 缺失，则按普通单条反馈处理，`fg_latest=1`、`revision_no=1`
-- 若 `feedbackScopeKey` 存在，则同一 `id_device + feedback_scope_key` 下仅一条记录 `fg_latest=1`
-- 新版本会保留历史记录，并写入 `id_feedback_root`、`previous_feedback_id`、`revision_no`
+- 若 `feedbackScopeKey` 存在，则同一 `id_device + feedback_scope_key` 下仅一条激活记录 `fg_latest=1`，该约束由数据库唯一索引兜底
+- 新版本会在同一事务内保留历史记录、降级旧最新版，并写入 `id_feedback_root`、`previous_feedback_id`、`revision_no`
 
 响应 `data`：
 
@@ -751,6 +759,7 @@ Content-Type: application/json
 2. 当 `stream=true` 时，先完成配置校验，再按 OpenAI 风格 `data: ...` SSE 帧逐段转发上游模型输出，而不是把完整结果一次性封装后再返回
 3. 区域化模式下，实际生效的主模型 / 快速模型 / 审查模型与 `enableThinking` 开关以服务端当前配置解析结果为准；客户端不应依赖缓存的 `model` 值覆盖服务端配置
 4. 若上游模型服务返回 4xx / 5xx，服务端应尽量提取上游响应体中的可读错误消息，并作为当前接口错误消息返回，避免只暴露 WebClient 堆栈
+5. 实际访问上游前必须通过出站 host allowlist、私网拦截、限流与熔断校验；流式 SSE 由服务端有界线程池转发，上游或线程池拥塞时返回错误帧并结束流。
 
 请求：
 
@@ -849,6 +858,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 4. 当前仅在 `speechProvider=aliyun-dashscope` 时启用，服务端使用 `audioApiKey` 或主模型 `apiKey` 连接 DashScope WebSocket。
 5. 服务端向 DashScope `/api-ws/v1/inference` 发送 `run-task`，模型取 `speechModel`，默认 `paraformer-realtime-v2`；若配置其他同协议 Fun-ASR / Gummy / Paraformer realtime 模型则原样使用；音频格式为 `pcm` / `16000`。
 6. DashScope `qwen3-asr-flash-realtime` 属于另一套 `/api-ws/v1/realtime` session 协议，不属于当前代理通道；若后续要使用该模型，需要新增独立协议适配。
+7. 上游 WebSocket 地址同样走出站安全门；默认只允许 `wss` 且 host 必须在允许名单中，私网地址默认拒绝。
 
 客户端发送：
 
@@ -1255,6 +1265,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 }
 ```
 
+约束：激活用户的 `cdUser` 必须唯一；用户主表写入与角色映射写入在同一事务内完成，并由数据库唯一索引兜底并发重复。
+
 ### 5.12 PUT `/admin/api/users/{idUser}`
 用途：修改用户资料、角色和状态；`password` 为空时保留原值。
 
@@ -1466,6 +1478,13 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 1. `speechProvider=openai-compatible`：服务端将录音文件转为 multipart，调用 `{audioBaseUrl}/audio/transcriptions`。
 2. `speechProvider=aliyun-dashscope`：服务端将录音转为 Data URL，调用 DashScope 兼容模式 `{audioBaseUrl}/chat/completions`；`audioBaseUrl` 建议配置为 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
+
+上游地址安全要求：
+
+1. 服务端部署时必须通过 `floating-ball.outbound-security.allowed-hosts` 或 `FB_OUTBOUND_ALLOWED_HOSTS` 明确允许 AI、语音、Reviewer、PMPHAI host，例如 `api.openai.com,dashscope.aliyuncs.com,pmphai.example.com`。
+2. 生产默认拒绝未加密协议与私网地址；本地联调要访问 `localhost` / `127.0.0.1` 时，应只在本地环境开启 `FB_OUTBOUND_ALLOW_PRIVATE_NETWORK=true` 与 `FB_OUTBOUND_ALLOW_INSECURE_HTTP=true`，并将对应 host 加入允许名单。
+3. 同一 host 的出站请求会被本地限流与熔断保护；超过阈值或短时间连续失败时，配置测试、AI 代理、语音代理和 PMPHAI 代理都会被拒绝访问上游。
+4. `development` profile 默认允许 `api.deepseek.com,dashscope.aliyuncs.com`，并允许代理软件 fake-ip 常用的 `198.18.0.0/15` DNS 解析结果，用于匹配本地默认 DeepSeek / DashScope 配置；其他模型供应商或生产部署必须显式覆盖 `FB_OUTBOUND_ALLOWED_HOSTS`。host 被拒绝时，业务错误会包含被拒绝的 host，便于定位应加入的允许名单项。
 
 ### 5.32 PUT `/admin/api/configs/{idConfig}`
 用途：修改 AI 配置；`apiKey`、`audioApiKey`、`reviewerApiKey`、`pmphaiAppKey`、`pmphaiAppSecret` 为空时保留原值。

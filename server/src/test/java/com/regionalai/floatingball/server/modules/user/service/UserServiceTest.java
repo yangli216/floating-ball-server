@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -120,6 +121,35 @@ class UserServiceTest {
 
         assertEquals("至少选择一个角色", ex.getMessage());
         verify(aiUserMapper, never()).insert(any(AiUser.class));
+    }
+
+    @Test
+    void saveShouldTranslateDatabaseUniqueConflictToBusinessError() {
+        AiOrg org = new AiOrg();
+        org.setIdOrg("ORG001");
+        org.setFgActive("1");
+
+        AiRole role = new AiRole();
+        role.setIdRole("ROLE001");
+        role.setSdStatus("1");
+        role.setFgActive("1");
+
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiUserMapper.selectOne(any())).thenReturn(null);
+        when(aiRoleMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(role));
+        when(aiUserMapper.insert(any(AiUser.class))).thenThrow(new DuplicateKeyException("uk_c_ai_user_code_active"));
+
+        AdminUserSaveRequest request = new AdminUserSaveRequest();
+        request.setCdUser("zhangsan");
+        request.setNaUser("张三");
+        request.setPassword("123456");
+        request.setIdOrg("ORG001");
+        request.setRoleIds(Collections.singletonList("ROLE001"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> userService.save(request));
+
+        assertEquals("登录账号已存在", ex.getMessage());
+        verify(aiUserRoleMapper, never()).insert(any(AiUserRole.class));
     }
 
     @Test

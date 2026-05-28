@@ -21,7 +21,9 @@ import com.regionalai.floatingball.server.modules.feedback.entity.AiFeedback;
 import com.regionalai.floatingball.server.modules.feedback.mapper.AiFeedbackMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
@@ -59,9 +61,15 @@ public class FeedbackService {
         this.objectMapper = objectMapper;
     }
 
+    @Transactional
     public ClientFeedbackSubmitResponse submit(AiDevice device, ClientFeedbackSubmitRequest request) {
         validateRequest(request);
+        return submitResolved(device, request, false);
+    }
 
+    private ClientFeedbackSubmitResponse submitResolved(AiDevice device,
+                                                        ClientFeedbackSubmitRequest request,
+                                                        boolean retryingAfterDuplicate) {
         Map<String, Object> chainContext = request.getChainContext() == null
             ? Collections.<String, Object>emptyMap()
             : request.getChainContext();
@@ -129,11 +137,18 @@ public class FeedbackService {
             throw new BusinessException("反馈链路上下文序列化失败");
         }
 
-        downgradePreviousLatest(device == null ? null : device.getIdDevice(), scopeKey, feedback.getPreviousFeedbackId());
-        aiFeedbackMapper.insert(feedback);
-        if (!StringUtils.hasText(feedback.getIdFeedbackRoot())) {
-            feedback.setIdFeedbackRoot(feedback.getIdFeedback());
-            aiFeedbackMapper.updateById(feedback);
+        try {
+            downgradePreviousLatest(device == null ? null : device.getIdDevice(), scopeKey, feedback.getPreviousFeedbackId());
+            aiFeedbackMapper.insert(feedback);
+            if (!StringUtils.hasText(feedback.getIdFeedbackRoot())) {
+                feedback.setIdFeedbackRoot(feedback.getIdFeedback());
+                aiFeedbackMapper.updateById(feedback);
+            }
+        } catch (DuplicateKeyException ex) {
+            if (!retryingAfterDuplicate) {
+                return submitResolved(device, request, true);
+            }
+            throw new BusinessException("反馈提交冲突，请稍后重试");
         }
         log.info("feedback submitted. idFeedback={}, kind={}, score={}, deviceId={}", feedback.getIdFeedback(), feedback.getKind(), feedback.getScore(), device == null ? null : device.getIdDevice());
         return new ClientFeedbackSubmitResponse(feedback.getIdFeedback(), "accepted");

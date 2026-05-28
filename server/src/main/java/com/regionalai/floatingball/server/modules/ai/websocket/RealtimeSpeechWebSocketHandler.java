@@ -2,6 +2,8 @@ package com.regionalai.floatingball.server.modules.ai.websocket;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService.OutboundCall;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.service.ConfigService;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
@@ -20,7 +22,6 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,11 +41,15 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
 
     private final ConfigService configService;
     private final ObjectMapper objectMapper;
+    private final OutboundSecurityService outboundSecurityService;
     private final StandardWebSocketClient webSocketClient;
 
-    public RealtimeSpeechWebSocketHandler(ConfigService configService, ObjectMapper objectMapper) {
+    public RealtimeSpeechWebSocketHandler(ConfigService configService,
+                                          ObjectMapper objectMapper,
+                                          OutboundSecurityService outboundSecurityService) {
         this.configService = configService;
         this.objectMapper = objectMapper;
+        this.outboundSecurityService = outboundSecurityService;
         this.webSocketClient = new StandardWebSocketClient();
     }
 
@@ -184,6 +189,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         private final String taskId;
         private final List<byte[]> audioBuffer = new ArrayList<byte[]>();
         private final StringBuilder fullText = new StringBuilder();
+        private OutboundCall outboundCall;
         private WebSocketSession dashScopeSession;
         private boolean taskStarted;
         private boolean finishRequested;
@@ -200,16 +206,19 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
                 WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
                 headers.setBearerAuth(apiKey);
                 String endpoint = resolveDashScopeWsUrl(config);
+                outboundCall = outboundSecurityService.acquireWebSocket(endpoint, "speech-realtime-ws");
                 WebSocketHandler dashScopeHandler = new DashScopeWebSocketHandler(this);
-                webSocketClient.doHandshake(dashScopeHandler, headers, URI.create(endpoint))
+                webSocketClient.doHandshake(dashScopeHandler, headers, outboundCall.getUri())
                     .addCallback(this::onDashScopeConnected, this::onDashScopeConnectFailed);
             } catch (RuntimeException ex) {
+                markOutboundFailure(ex);
                 sendError("DashScope 实时语音连接创建失败：" + ex.getMessage());
             }
         }
 
         private synchronized void onDashScopeConnected(WebSocketSession session) {
             this.dashScopeSession = session;
+            markOutboundSuccess();
             try {
                 sendRunTask();
             } catch (IOException ex) {
@@ -218,6 +227,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         }
 
         private void onDashScopeConnectFailed(Throwable error) {
+            markOutboundFailure(error);
             sendError("DashScope 实时语音连接失败：" + error.getMessage());
         }
 
@@ -371,6 +381,18 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
             sendClient(errorPayload(message));
         }
 
+        private void markOutboundSuccess() {
+            if (outboundCall != null) {
+                outboundCall.success();
+            }
+        }
+
+        private void markOutboundFailure(Throwable error) {
+            if (outboundCall != null) {
+                outboundCall.failure(error);
+            }
+        }
+
         private void sendClient(Map<String, Object> payload) {
             try {
                 sendJson(clientSession, payload);
@@ -402,6 +424,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
 
         @Override
         public void handleTransportError(WebSocketSession session, Throwable exception) {
+            proxySession.markOutboundFailure(exception);
             proxySession.sendError("DashScope 实时语音连接异常：" + exception.getMessage());
         }
     }

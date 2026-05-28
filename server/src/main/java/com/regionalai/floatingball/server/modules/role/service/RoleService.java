@@ -9,7 +9,9 @@ import com.regionalai.floatingball.server.modules.role.entity.AiRole;
 import com.regionalai.floatingball.server.modules.role.mapper.AiRoleMapper;
 import com.regionalai.floatingball.server.modules.user.entity.AiUserRole;
 import com.regionalai.floatingball.server.modules.user.mapper.AiUserRoleMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -37,6 +39,7 @@ public class RoleService {
         return new PageResponse<AiRole>(result.getCurrent(), result.getSize(), result.getTotal(), result.getRecords());
     }
 
+    @Transactional
     public AiRole save(AdminRoleSaveRequest request) {
         validateSaveRequest(request);
         ensureUniqueCode(request.getCdRole(), null);
@@ -47,10 +50,15 @@ public class RoleService {
         role.setDesRole(request.getDesRole());
         role.setSdStatus(StringUtils.hasText(request.getSdStatus()) ? request.getSdStatus() : "1");
         role.setFgActive("1");
-        aiRoleMapper.insert(role);
+        try {
+            aiRoleMapper.insert(role);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("角色编码已存在");
+        }
         return role;
     }
 
+    @Transactional
     public AiRole update(String idRole, AdminRoleSaveRequest request) {
         AiRole existing = requireActiveRole(idRole);
         validateSaveRequest(request);
@@ -60,10 +68,15 @@ public class RoleService {
         existing.setNaRole(request.getNaRole().trim());
         existing.setDesRole(request.getDesRole());
         existing.setSdStatus(StringUtils.hasText(request.getSdStatus()) ? request.getSdStatus() : existing.getSdStatus());
-        aiRoleMapper.updateById(existing);
+        try {
+            aiRoleMapper.updateById(existing);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("角色编码已存在");
+        }
         return aiRoleMapper.selectById(idRole);
     }
 
+    @Transactional
     public void invalidate(String idRole) {
         AiRole role = requireActiveRole(idRole);
         role.setFgActive("0");

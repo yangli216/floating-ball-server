@@ -86,6 +86,9 @@ floating-ball-server/
 2. 服务启动前必须注入 `FB_DB_URL`、`FB_DB_USERNAME`、`FB_DB_PASSWORD`、`FB_AES_KEY`。
 3. PMPHAI 等上游服务地址在公开仓库中只保留示例地址；真实地址通过管理端配置或部署环境注入。
 4. 本地联调如需私有覆盖配置，应使用未入库文件或部署环境变量，不得直接改回仓库默认值。
+5. AI、语音、Reviewer、PMPHAI 等服务端出站地址必须经过统一出站安全门：仅允许 `floating-ball.outbound-security.allowed-hosts` 中声明的 host，默认拒绝本机、内网、链路本地、组播、共享地址空间等私网地址；确需本地联调时，必须显式开启 `allow-private-network` 与 `allow-insecure-http` 并把本地主机加入允许名单。
+6. `development` profile 为当前本地默认 DeepSeek / DashScope 配置预置公共 host allowlist，并允许代理软件 fake-ip 常用的 `198.18.0.0/15` DNS 解析结果；生产 profile 仍为空名单且不允许 fake-ip，必须由部署环境显式注入。
+7. 出站安全门按 host 做本地限流和熔断；上游失败达到阈值后短暂拒绝同 host 后续出站，防止 AI / 语音 / PMPHAI 配置异常拖垮后台线程与连接资源。
 
 ### 3.2 客户端安全基线
 
@@ -208,6 +211,7 @@ floating-ball-server/
 4. `bootstrap` 仅向桌面端暴露 `llm.model`、`llm.fastModel`、`llm.enableThinking`、`reviewer.enabled`、`reviewer.model`、`reviewer.checkExaminationEnabled` 等非敏感字段，不返回密钥
 5. `reviewer.checkExaminationEnabled` 只控制桌面端是否触发 `check_examination` 场景的独立审查，不影响诊断、用药、病历一致性等其他 reviewer 场景；默认开启以兼容旧配置
 6. 区域化模式下，`/v1/ai/chat` 与 `/v1/client/bootstrap` 的实际生效模型、thinking 开关和检查项目独立审查开关以服务端当前解析到的配置为准；桌面端不应再依赖本地缓存的 `model` 回传覆盖服务端配置，确保后台修改后下一次请求立即生效
+7. `/v1/ai/chat` 非流式、流式和 `configProfile=reviewer/fast/default` 都必须先通过出站安全门；流式 SSE 使用有界线程池转发上游事件，线程数与队列大小由 `floating-ball.ai.stream.*` 控制，线程池满时返回 SSE 错误帧而不是继续创建线程。
 
 语音代理补充约束：
 
@@ -218,6 +222,7 @@ floating-ball-server/
 5. 语音代理日志中的录音内容需要单独落为文件，默认写入 `floating-ball.audit.speech-file-dir` 指定目录；`c_ai_op_log` 只保存该录音文件路径，不把 base64 或二进制音频写入 `payload_json`
 6. 服务端实际访问语音上游时使用 `audio_base_url` / `audio_model` / `audio_api_key_encrypted`；语音独立密钥为空时回退主模型 `api_key_encrypted`
 7. `speech_provider` / `speech_model` 作为 bootstrap 下发给桌面端的语音提供方与实时识别模型；当 `speech_provider=aliyun-dashscope` 时，`speech_model` 也是服务端连接 DashScope `/api-ws/v1/inference` WebSocket 实时识别的模型名，默认 `paraformer-realtime-v2`，也可配置同协议 Fun-ASR / Gummy / Paraformer realtime 模型
+8. 批量语音转写 HTTP 出站与 DashScope 实时语音 WebSocket 出站都必须经过同一 host allowlist、私网拦截、限流与熔断策略；实时 WebSocket 只允许 `wss`，除非本地联调显式放宽不安全协议。
 
 ### 5.3 审计链路
 
@@ -274,6 +279,7 @@ floating-ball-server/
 
 1. PMPHAI 的 `appKey/appSecret` 只保留在服务端数据库或环境中，不能下发到桌面端
 2. 区域化模式下，桌面端不再依赖 `src-tauri/src/http_server.rs` 的本地 `/api/pmphai/*` 代理
+3. PMPHAI `baseUrl` 生成页面跳转 URL 前也要经过出站安全门校验，搜索、详情、列表、token 申请等真实出站请求还要命中限流和熔断；配置为私网、localhost、未允许 host 或非安全协议时直接拒绝。
 
 ## 6. MVP 范围
 
@@ -359,7 +365,9 @@ floating-ball-server/
 
 1. `c_ai_region`
 2. `c_ai_org`
+   - 激活机构通过 `uk_c_ai_org_code_active` 保证 `cd_org` 唯一
 3. `c_ai_device`
+   - 激活设备通过 `uk_c_ai_device_code_org_active` 保证同机构内 `cd_device` 唯一，通过 `uk_c_ai_device_token_active` 保证设备令牌唯一
 4. `c_ai_config`
 5. `c_ai_prompt`
 6. `c_ai_data_package`
@@ -378,21 +386,34 @@ floating-ball-server/
    - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）
    - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
    - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`（机构 ID 沿用 `id_org`），由桌面端 SDK handshake 解析的 `urt` 信息回填
-   - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`
+   - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`，并通过 `uk_c_ai_feedback_latest_scope` 保证同一设备、同一 `feedback_scope_key` 只有一条激活的最新版反馈
 11. `c_ai_user_consultation_log`
    - 按一次问诊聚合运维用户日志，关键列包括机构、医生、患者、问诊类型、问诊时间
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
-   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`
+   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`，并通过 `uk_c_ai_user_log_consultation_active` 保证激活记录中 `consultation_id + consultation_type + id_device` 唯一
 12. `c_ai_feature_event`
    - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
    - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次
    - 索引：`idx_c_ai_feature_event_time` / `_feature` / `_doctor` / `_org` / `_idem`
 13. `c_ai_user`
+   - 激活账号通过 `uk_c_ai_user_code_active` 保证 `cd_user` 唯一，用户资料与角色映射替换在同一事务内完成
 14. `c_ai_role`
+   - 激活角色通过 `uk_c_ai_role_code_active` 保证 `cd_role` 唯一
 15. `c_ai_user_role`
+   - 激活映射通过 `uk_c_ai_user_role_active` 保证 `id_user + id_role` 不重复
 
 扩展表如用户、角色、统计可在第二阶段补齐。
+
+### 7.1 写入一致性与唯一性约束
+
+多步业务写入必须以 Spring 事务作为边界，并以 Oracle 唯一索引作为并发最终防线：
+
+1. 用户新增、修改、停用：`c_ai_user` 与 `c_ai_user_role` 同事务提交或回滚；账号唯一性不只依赖代码检查。
+2. 机构维护、角色停用、设备注册/维护：涉及主表和关联状态变化时同事务提交；机构编码、设备编码、设备令牌、角色编码由数据库唯一索引兜底。
+3. 反馈提交：上一版 `fg_latest` 降级、新版插入、首版 root 回填必须同事务完成；`uk_c_ai_feedback_latest_scope` 防止并发提交产生两个最新版。
+4. 问诊日志保存：按 `consultation_id + consultation_type + id_device` 做事务化 upsert；并发首次创建由唯一索引兜底，服务端在唯一冲突后重读并重试一次更新。
+5. 存量库升级唯一约束前必须先清理重复激活数据；升级脚本会在发现重复时中止并提示具体对象。
 
 ## 8. Oracle 初始化约定
 

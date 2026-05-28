@@ -18,9 +18,11 @@ import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
+import org.springframework.dao.DuplicateKeyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Collections;
@@ -53,6 +55,7 @@ public class DeviceService {
         this.releaseService = releaseService;
     }
 
+    @Transactional
     public RegisterDeviceResponse register(RegisterDeviceRequest request) {
         AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getCdOrg, request.getCdOrg())
@@ -86,7 +89,11 @@ public class DeviceService {
             if (StringUtils.hasText(request.getPublicKey())) {
                 existing.setDevicePublicKey(request.getPublicKey());
             }
-            aiDeviceMapper.updateById(existing);
+            try {
+                aiDeviceMapper.updateById(existing);
+            } catch (DuplicateKeyException ex) {
+                throw new BusinessException("设备编码已存在");
+            }
             log.info("device re-registered. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
             return new RegisterDeviceResponse(existing.getIdDevice(), existing.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL, StringUtils.hasText(existing.getDevicePublicKey()));
         }
@@ -103,7 +110,11 @@ public class DeviceService {
         device.setClientVersion(request.getClientVersion());
         device.setOsInfo(request.getOsInfo());
         device.setFgActive("1");
-        aiDeviceMapper.insert(device);
+        try {
+            aiDeviceMapper.insert(device);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("设备编码已存在");
+        }
         log.info("device registered. idDevice={}, cdDevice={}, idOrg={}", device.getIdDevice(), device.getCdDevice(), device.getIdOrg());
         return new RegisterDeviceResponse(device.getIdDevice(), device.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL, StringUtils.hasText(device.getDevicePublicKey()));
     }
@@ -115,6 +126,7 @@ public class DeviceService {
             .last("FETCH FIRST 1 ROWS ONLY"));
     }
 
+    @Transactional
     public void heartbeat(AiDevice device) {
         device.setDtLastHeartbeat(LocalDateTime.now());
         device.setSdStatus("1");
@@ -134,6 +146,7 @@ public class DeviceService {
         return new PageResponse<AiDeviceView>(result.getCurrent(), result.getSize(), result.getTotal(), toViews(result.getRecords()));
     }
 
+    @Transactional
     public AiDeviceView save(AiDeviceSaveRequest request) {
         validateSaveRequest(request);
         AiOrg org = requireActiveOrg(request.getIdOrg());
@@ -150,10 +163,15 @@ public class DeviceService {
         device.setClientVersion(request.getClientVersion());
         device.setOsInfo(request.getOsInfo());
         device.setFgActive("1");
-        aiDeviceMapper.insert(device);
+        try {
+            aiDeviceMapper.insert(device);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("设备编码已存在");
+        }
         return toView(device, org, null);
     }
 
+    @Transactional
     public AiDeviceView update(String idDevice, AiDeviceSaveRequest request) {
         validateSaveRequest(request);
         AiDevice existing = aiDeviceMapper.selectById(idDevice);
@@ -171,10 +189,15 @@ public class DeviceService {
         existing.setSdStatus(StringUtils.hasText(request.getSdStatus()) ? request.getSdStatus() : existing.getSdStatus());
         existing.setClientVersion(request.getClientVersion());
         existing.setOsInfo(request.getOsInfo());
-        aiDeviceMapper.updateById(existing);
+        try {
+            aiDeviceMapper.updateById(existing);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("设备编码已存在");
+        }
         return toView(existing, org, null);
     }
 
+    @Transactional
     public void invalidate(String idDevice) {
         AiDevice device = aiDeviceMapper.selectById(idDevice);
         if (device == null) {

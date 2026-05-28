@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.util.Collections;
 
@@ -47,6 +48,20 @@ class RoleServiceTest {
 
         assertEquals("角色编码不能为空", ex.getMessage());
         verify(aiRoleMapper, never()).insert(any(AiRole.class));
+    }
+
+    @Test
+    void saveShouldTranslateDatabaseUniqueConflictToBusinessError() {
+        when(aiRoleMapper.selectOne(any())).thenReturn(null);
+        when(aiRoleMapper.insert(any(AiRole.class))).thenThrow(new DuplicateKeyException("uk_c_ai_role_code_active"));
+
+        AdminRoleSaveRequest request = new AdminRoleSaveRequest();
+        request.setCdRole("ADMIN");
+        request.setNaRole("系统管理员");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> roleService.save(request));
+
+        assertEquals("角色编码已存在", ex.getMessage());
     }
 
     @Test

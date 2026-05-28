@@ -18,7 +18,9 @@ import com.regionalai.floatingball.server.modules.userlog.entity.AiUserConsultat
 import com.regionalai.floatingball.server.modules.userlog.mapper.AiUserConsultationLogMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
@@ -63,6 +65,7 @@ public class UserConsultationLogService {
         this.audioLogStorageService = audioLogStorageService;
     }
 
+    @Transactional
     public AiUserConsultationLog save(AiDevice device, UserConsultationLogRequest request) {
         if (request == null) {
             throw new BusinessException("用户日志请求不能为空");
@@ -72,6 +75,14 @@ public class UserConsultationLogService {
             throw new BusinessException("问诊ID不能为空");
         }
         String consultationType = normalizeConsultationType(request.getConsultationType());
+        return saveResolved(device, request, consultationId, consultationType, false);
+    }
+
+    private AiUserConsultationLog saveResolved(AiDevice device,
+                                               UserConsultationLogRequest request,
+                                               String consultationId,
+                                               String consultationType,
+                                               boolean retryingAfterDuplicate) {
 
         AiUserConsultationLog entity = findExisting(device, consultationId, consultationType);
         boolean create = entity == null;
@@ -128,6 +139,9 @@ public class UserConsultationLogService {
             }
         } catch (RuntimeException ex) {
             audioLogStorageService.deleteQuietly(storedAudioPath);
+            if (create && !retryingAfterDuplicate && ex instanceof DuplicateKeyException) {
+                return saveResolved(device, request, consultationId, consultationType, true);
+            }
             log.error("user consultation log save failed. consultationId={}, error={}", consultationId, ex.getMessage());
             throw ex;
         }

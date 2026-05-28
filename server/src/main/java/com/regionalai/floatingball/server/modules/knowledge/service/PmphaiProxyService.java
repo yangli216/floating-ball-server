@@ -2,6 +2,8 @@ package com.regionalai.floatingball.server.modules.knowledge.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService.OutboundCall;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.service.ConfigService;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
@@ -37,35 +39,57 @@ public class PmphaiProxyService {
 
     private final ConfigService configService;
     private final WebClient webClient;
+    private final OutboundSecurityService outboundSecurityService;
     private final ConcurrentMap<String, TokenHolder> tokenCache = new ConcurrentHashMap<String, TokenHolder>();
 
-    public PmphaiProxyService(ConfigService configService, WebClient webClient) {
+    public PmphaiProxyService(ConfigService configService,
+                              WebClient webClient,
+                              OutboundSecurityService outboundSecurityService) {
         this.configService = configService;
         this.webClient = webClient;
+        this.outboundSecurityService = outboundSecurityService;
     }
 
     public JsonNode search(AiDevice device, PmphaiSearchRequest request) {
         PmphaiConfig config = resolvePmphaiConfig(device);
-        JsonNode response = webClient.post()
-            .uri(buildJsonApiUrl(config, getAccessToken(config), "aiKnowledge"))
-            .contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(buildSearchBody(request))
-            .retrieve()
-            .bodyToMono(JsonNode.class)
-            .block();
-        return extractData(response, "PMPHAI 搜索响应为空");
+        String endpoint = buildJsonApiUrl(config, getAccessToken(config), "aiKnowledge");
+        OutboundCall outboundCall = outboundSecurityService.acquireHttp(endpoint, "pmphai-search");
+        try {
+            JsonNode response = webClient.post()
+                .uri(outboundCall.getUrl())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(buildSearchBody(request))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+            JsonNode data = extractData(response, "PMPHAI 搜索响应为空");
+            outboundCall.success();
+            return data;
+        } catch (RuntimeException ex) {
+            outboundCall.failure(ex);
+            throw ex;
+        }
     }
 
     public JsonNode clip(AiDevice device, PmphaiClipRequest request) {
         PmphaiConfig config = resolvePmphaiConfig(device);
-        JsonNode response = webClient.post()
-            .uri(buildJsonApiUrl(config, getAccessToken(config), "aiKnowledgeClip"))
-            .contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(singleValueBody("id", request.getId()))
-            .retrieve()
-            .bodyToMono(JsonNode.class)
-            .block();
-        return extractData(response, "PMPHAI 详情响应为空");
+        String endpoint = buildJsonApiUrl(config, getAccessToken(config), "aiKnowledgeClip");
+        OutboundCall outboundCall = outboundSecurityService.acquireHttp(endpoint, "pmphai-clip");
+        try {
+            JsonNode response = webClient.post()
+                .uri(outboundCall.getUrl())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(singleValueBody("id", request.getId()))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+            JsonNode data = extractData(response, "PMPHAI 详情响应为空");
+            outboundCall.success();
+            return data;
+        } catch (RuntimeException ex) {
+            outboundCall.failure(ex);
+            throw ex;
+        }
     }
 
     public JsonNode list(AiDevice device, PmphaiListRequest request) {
@@ -82,18 +106,28 @@ public class PmphaiProxyService {
         addIfPresent(form, "sortField", request.getSortField());
         addIfPresent(form, "sortRule", request.getSortRule());
 
-        JsonNode response = webClient.post()
-            .uri(buildStandardApiUrl(config, getAccessToken(config)))
-            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-            .body(BodyInserters.fromFormData(form))
-            .retrieve()
-            .bodyToMono(JsonNode.class)
-            .block();
-        return extractData(response, "PMPHAI 列表响应为空");
+        String endpoint = buildStandardApiUrl(config, getAccessToken(config));
+        OutboundCall outboundCall = outboundSecurityService.acquireHttp(endpoint, "pmphai-list");
+        try {
+            JsonNode response = webClient.post()
+                .uri(outboundCall.getUrl())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(form))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+            JsonNode data = extractData(response, "PMPHAI 列表响应为空");
+            outboundCall.success();
+            return data;
+        } catch (RuntimeException ex) {
+            outboundCall.failure(ex);
+            throw ex;
+        }
     }
 
     public String generatePageUrl(AiDevice device, PmphaiPageUrlRequest request) {
         PmphaiConfig config = resolvePmphaiConfig(device);
+        outboundSecurityService.validateHttpUrl(config.getBaseUrl() + "/", "pmphai-page-url");
         long timestamp = System.currentTimeMillis();
 
         Map<String, String> redirectParams = new LinkedHashMap<String, String>();
@@ -128,14 +162,23 @@ public class PmphaiProxyService {
 
     public JsonNode knowledgeBases(AiDevice device, String kgBaseId) {
         PmphaiConfig config = resolvePmphaiConfig(device);
-        JsonNode response = webClient.post()
-            .uri(buildStandardApiUrl(config, getAccessToken(config)) + "&method=kgbases")
-            .contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(StringUtils.hasText(kgBaseId) ? singleValueBody("kgBaseId", kgBaseId) : new LinkedHashMap<String, String>())
-            .retrieve()
-            .bodyToMono(JsonNode.class)
-            .block();
-        return extractData(response, "PMPHAI 知识库列表响应为空");
+        String endpoint = buildStandardApiUrl(config, getAccessToken(config)) + "&method=kgbases";
+        OutboundCall outboundCall = outboundSecurityService.acquireHttp(endpoint, "pmphai-kgbases");
+        try {
+            JsonNode response = webClient.post()
+                .uri(outboundCall.getUrl())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(StringUtils.hasText(kgBaseId) ? singleValueBody("kgBaseId", kgBaseId) : new LinkedHashMap<String, String>())
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+            JsonNode data = extractData(response, "PMPHAI 知识库列表响应为空");
+            outboundCall.success();
+            return data;
+        } catch (RuntimeException ex) {
+            outboundCall.failure(ex);
+            throw ex;
+        }
     }
 
     public JsonNode categories(AiDevice device, String kgBaseId) {
@@ -179,20 +222,30 @@ public class PmphaiProxyService {
             form.add(entry.getKey(), entry.getValue());
         }
 
-        JsonNode response = webClient.post()
-            .uri(config.getBaseUrl() + "/oauth2/access_token")
-            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-            .body(BodyInserters.fromFormData(form))
-            .retrieve()
-            .bodyToMono(JsonNode.class)
-            .block();
+        String endpoint = config.getBaseUrl() + "/oauth2/access_token";
+        OutboundCall outboundCall = outboundSecurityService.acquireHttp(endpoint, "pmphai-token");
+        JsonNode response;
+        try {
+            response = webClient.post()
+                .uri(outboundCall.getUrl())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(form))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+        } catch (RuntimeException ex) {
+            outboundCall.failure(ex);
+            throw ex;
+        }
 
         JsonNode data = response == null ? null : response.path("data");
         String accessToken = data == null ? null : data.path("accessToken").asText(null);
         if (!StringUtils.hasText(accessToken)) {
+            outboundCall.failure(new BusinessException("获取 PMPHAI token 失败"));
             log.warn("pmphai access token request failed. baseUrl={}", config.getBaseUrl());
             throw new BusinessException("获取 PMPHAI token 失败");
         }
+        outboundCall.success();
         long expiresIn = data.path("expiresIn").asLong(3600L);
         long expiresAt = System.currentTimeMillis() + Math.max(60L, expiresIn - 300L) * 1000L;
         tokenCache.put(cacheKey, new TokenHolder(accessToken, expiresAt));

@@ -3,12 +3,15 @@ package com.regionalai.floatingball.server.modules.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService;
+import com.regionalai.floatingball.server.common.outbound.OutboundSecurityService.OutboundCall;
 import com.regionalai.floatingball.server.modules.ai.dto.ChatRequest;
 import com.regionalai.floatingball.server.modules.ai.dto.SpeechRequest;
 import com.regionalai.floatingball.server.modules.audit.service.AuditService;
 import com.regionalai.floatingball.server.modules.config.dto.ResolvedAiConfig;
 import com.regionalai.floatingball.server.modules.config.service.ConfigService;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ByteArrayResource;
@@ -39,6 +42,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class AiProxyService {
@@ -53,15 +58,21 @@ public class AiProxyService {
     private final AuditService auditService;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final OutboundSecurityService outboundSecurityService;
+    private final Executor aiStreamExecutor;
 
     public AiProxyService(ConfigService configService,
                           AuditService auditService,
                           RestTemplate restTemplate,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          OutboundSecurityService outboundSecurityService,
+                          @Qualifier("aiStreamExecutor") Executor aiStreamExecutor) {
         this.configService = configService;
         this.auditService = auditService;
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
+        this.outboundSecurityService = outboundSecurityService;
+        this.aiStreamExecutor = aiStreamExecutor;
     }
 
     public String chat(AiDevice device, ChatRequest request) {
@@ -70,7 +81,8 @@ public class AiProxyService {
     }
 
     public void validateChatConfig(AiDevice device, ChatRequest request) {
-        resolveChatConfig(device, request);
+        UpstreamChatConfig upstreamConfig = resolveChatConfig(device, request);
+        outboundSecurityService.validateHttpUrl(upstreamConfig.getBaseUrl() + "/chat/completions", "ai-chat");
     }
 
     public String testChatConnection(String baseUrl, String apiKey, String model, boolean enableThinking) {
@@ -102,15 +114,18 @@ public class AiProxyService {
                             List<Map<String, Object>> messages,
                             Double temperature) {
         Map<String, Object> payload = buildChatPayload(upstreamConfig.getModel(), messages, Boolean.FALSE, temperature, upstreamConfig.isEnableThinking());
+        OutboundCall outboundCall = null;
 
         try {
             log.info("ai chat request. model={}, baseUrl={}, stream=false", upstreamConfig.getModel(), upstreamConfig.getBaseUrl());
 
             StringBuilder responseTextBuilder = new StringBuilder();
             String[] rawLogHolder = new String[1];
+            outboundCall = outboundSecurityService.acquireHttp(upstreamConfig.getBaseUrl() + "/chat/completions", "ai-chat");
+            final OutboundCall activeOutboundCall = outboundCall;
 
             restTemplate.execute(
-                upstreamConfig.getBaseUrl() + "/chat/completions",
+                activeOutboundCall.getUrl(),
                 HttpMethod.POST,
                 requestCallback -> {
                     requestCallback.getHeaders().setContentType(MediaType.APPLICATION_JSON);
@@ -156,6 +171,7 @@ public class AiProxyService {
                     return null;
                 }
             );
+            activeOutboundCall.success();
 
             String responseText = responseTextBuilder.toString();
             String rawLog = rawLogHolder[0] != null ? rawLogHolder[0] : responseText;
@@ -171,6 +187,7 @@ public class AiProxyService {
             );
             return responseText;
         } catch (HttpStatusCodeException ex) {
+            markOutboundFailure(outboundCall, ex);
             log.error("ai chat upstream error. model={}, status={}", upstreamConfig.getModel(), ex.getStatusCode());
             auditService.saveSystemLog(
                 device,
@@ -182,6 +199,7 @@ public class AiProxyService {
             );
             throw new BusinessException(buildUpstreamErrorMessage("AI", ex));
         } catch (ResourceAccessException ex) {
+            markOutboundFailure(outboundCall, ex);
             log.error("ai chat upstream unreachable. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
             auditService.saveSystemLog(
                 device,
@@ -192,7 +210,19 @@ public class AiProxyService {
                 false
             );
             throw new BusinessException(buildUpstreamRequestErrorMessage("AI", ex));
+        } catch (BusinessException ex) {
+            markOutboundFailure(outboundCall, ex);
+            auditService.saveSystemLog(
+                device,
+                "ai_proxy",
+                "ai",
+                "chat",
+                buildChatLogPayload(request, upstreamConfig, payload, null, ex.getMessage(), null),
+                false
+            );
+            throw ex;
         } catch (RuntimeException ex) {
+            markOutboundFailure(outboundCall, ex);
             auditService.saveSystemLog(
                 device,
                 "ai_proxy",
@@ -208,7 +238,12 @@ public class AiProxyService {
     public SseEmitter chatStream(AiDevice device, ChatRequest request) {
         UpstreamChatConfig upstreamConfig = resolveChatConfig(device, request);
         SseEmitter emitter = new SseEmitter(120000L);
-        new Thread(() -> streamChat(device, request, upstreamConfig, emitter), "ai-chat-stream").start();
+        try {
+            aiStreamExecutor.execute(() -> streamChat(device, request, upstreamConfig, emitter));
+        } catch (RejectedExecutionException ex) {
+            log.warn("ai chat stream rejected by bounded executor. model={}", upstreamConfig.getModel());
+            sendErrorFrame(emitter, "AI流式请求过多，请稍后重试");
+        }
         return emitter;
     }
 
@@ -223,9 +258,12 @@ public class AiProxyService {
         );
 
         StringBuilder responseTextBuilder = new StringBuilder();
+        OutboundCall outboundCall = null;
         try {
+            outboundCall = outboundSecurityService.acquireHttp(upstreamConfig.getBaseUrl() + "/chat/completions", "ai-chat-stream");
+            final OutboundCall activeOutboundCall = outboundCall;
             restTemplate.execute(
-                upstreamConfig.getBaseUrl() + "/chat/completions",
+                activeOutboundCall.getUrl(),
                 HttpMethod.POST,
                 requestCallback -> {
                     requestCallback.getHeaders().setContentType(MediaType.APPLICATION_JSON);
@@ -236,6 +274,7 @@ public class AiProxyService {
                 response -> {
                     StreamForwardResult result = forwardSseBody(response.getBody(), emitter, responseTextBuilder);
                     log.info("ai chat stream completed. model={}, responseLength={}", upstreamConfig.getModel(), result.responseText.length());
+                    activeOutboundCall.success();
                     auditService.saveSystemLog(
                         device,
                         "ai_proxy",
@@ -248,6 +287,7 @@ public class AiProxyService {
                 }
             );
         } catch (HttpStatusCodeException ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = buildUpstreamErrorMessage("AI", ex);
             log.error("ai chat stream upstream error. model={}, status={}", upstreamConfig.getModel(), ex.getStatusCode());
             auditService.saveSystemLog(
@@ -260,6 +300,7 @@ public class AiProxyService {
             );
             sendErrorFrame(emitter, errorMessage);
         } catch (ResourceAccessException ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = buildUpstreamRequestErrorMessage("AI", ex);
             log.error("ai chat stream upstream unreachable. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
             auditService.saveSystemLog(
@@ -271,7 +312,20 @@ public class AiProxyService {
                 false
             );
             sendErrorFrame(emitter, errorMessage);
+        } catch (BusinessException ex) {
+            markOutboundFailure(outboundCall, ex);
+            log.warn("ai chat stream business rejected. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
+            auditService.saveSystemLog(
+                device,
+                "ai_proxy",
+                "ai",
+                "chat_stream",
+                buildChatLogPayload(request, upstreamConfig, payload, responseTextBuilder.toString(), ex.getMessage(), null),
+                false
+            );
+            sendErrorFrame(emitter, ex.getMessage());
         } catch (Exception ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = "AI流式响应封装失败：" + (StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "未知异常");
             log.error("ai chat stream internal error. model={}, error={}", upstreamConfig.getModel(), ex.getMessage());
             auditService.saveSystemLog(
@@ -374,6 +428,8 @@ public class AiProxyService {
                                                PreparedSpeechFile preparedFile,
                                                String audioModel,
                                                String audioApiKey) {
+        String endpoint = buildOpenAiSpeechEndpoint(config.getAudioBaseUrl());
+        OutboundCall outboundCall = null;
         try {
             MultiValueMap<String, Object> formData = new LinkedMultiValueMap<String, Object>();
             formData.add("file", new ByteArrayResource(preparedFile.audioBytes) {
@@ -388,9 +444,10 @@ public class AiProxyService {
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
             headers.setBearerAuth(audioApiKey);
 
-            String endpoint = buildOpenAiSpeechEndpoint(config.getAudioBaseUrl());
+            outboundCall = outboundSecurityService.acquireHttp(endpoint, "speech-" + action);
+            final OutboundCall activeOutboundCall = outboundCall;
             ResponseEntity<JsonNode> responseEntity = restTemplate.postForEntity(
-                endpoint,
+                activeOutboundCall.getUrl(),
                 new HttpEntity<MultiValueMap<String, Object>>(formData, headers),
                 JsonNode.class
             );
@@ -402,6 +459,7 @@ public class AiProxyService {
 
             JsonNode textNode = response.path("text");
             String text = textNode.isMissingNode() ? response.toString() : textNode.asText();
+            activeOutboundCall.success();
             auditService.saveSystemLogWithAudioFile(
                 device,
                 "speech_proxy",
@@ -414,38 +472,54 @@ public class AiProxyService {
             );
             return text;
         } catch (HttpStatusCodeException ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = buildUpstreamErrorMessage("语音服务", ex);
             auditService.saveSystemLogWithAudioFile(
                 device,
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, buildOpenAiSpeechEndpoint(config.getAudioBaseUrl()), audioModel, null, false, errorMessage, ex.getResponseBodyAsString()),
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, errorMessage, ex.getResponseBodyAsString()),
                 false,
                 preparedFile.audioBytes,
                 preparedFile.fileName
             );
             throw new BusinessException(errorMessage);
         } catch (ResourceAccessException ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = buildUpstreamRequestErrorMessage("语音服务", ex);
             auditService.saveSystemLogWithAudioFile(
                 device,
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, buildOpenAiSpeechEndpoint(config.getAudioBaseUrl()), audioModel, null, false, errorMessage, null),
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, errorMessage, null),
                 false,
                 preparedFile.audioBytes,
                 preparedFile.fileName
             );
             throw new BusinessException(errorMessage);
-        } catch (RuntimeException ex) {
+        } catch (BusinessException ex) {
+            markOutboundFailure(outboundCall, ex);
             auditService.saveSystemLogWithAudioFile(
                 device,
                 "speech_proxy",
                 "speech",
                 action,
-                buildSpeechLogPayload(request, preparedFile, buildOpenAiSpeechEndpoint(config.getAudioBaseUrl()), audioModel, null, false, ex.getMessage(), null),
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, ex.getMessage(), null),
+                false,
+                preparedFile.audioBytes,
+                preparedFile.fileName
+            );
+            throw ex;
+        } catch (RuntimeException ex) {
+            markOutboundFailure(outboundCall, ex);
+            auditService.saveSystemLogWithAudioFile(
+                device,
+                "speech_proxy",
+                "speech",
+                action,
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, ex.getMessage(), null),
                 false,
                 preparedFile.audioBytes,
                 preparedFile.fileName
@@ -463,14 +537,17 @@ public class AiProxyService {
                                         String audioApiKey) {
         String endpoint = buildDashScopeSpeechEndpoint(config.getAudioBaseUrl());
         Map<String, Object> payload = buildDashScopeSpeechPayload(preparedFile, audioModel);
+        OutboundCall outboundCall = null;
 
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(audioApiKey);
 
+            outboundCall = outboundSecurityService.acquireHttp(endpoint, "speech-" + action);
+            final OutboundCall activeOutboundCall = outboundCall;
             ResponseEntity<JsonNode> responseEntity = restTemplate.postForEntity(
-                endpoint,
+                activeOutboundCall.getUrl(),
                 new HttpEntity<Map<String, Object>>(payload, headers),
                 JsonNode.class
             );
@@ -481,6 +558,7 @@ public class AiProxyService {
             }
 
             String text = extractDashScopeSpeechText(response);
+            activeOutboundCall.success();
             auditService.saveSystemLogWithAudioFile(
                 device,
                 "speech_proxy",
@@ -493,6 +571,7 @@ public class AiProxyService {
             );
             return text;
         } catch (HttpStatusCodeException ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = buildUpstreamErrorMessage("语音服务", ex);
             auditService.saveSystemLogWithAudioFile(
                 device,
@@ -506,6 +585,7 @@ public class AiProxyService {
             );
             throw new BusinessException(errorMessage);
         } catch (ResourceAccessException ex) {
+            markOutboundFailure(outboundCall, ex);
             String errorMessage = buildUpstreamRequestErrorMessage("语音服务", ex);
             auditService.saveSystemLogWithAudioFile(
                 device,
@@ -518,7 +598,8 @@ public class AiProxyService {
                 preparedFile.fileName
             );
             throw new BusinessException(errorMessage);
-        } catch (RuntimeException ex) {
+        } catch (BusinessException ex) {
+            markOutboundFailure(outboundCall, ex);
             auditService.saveSystemLogWithAudioFile(
                 device,
                 "speech_proxy",
@@ -530,6 +611,25 @@ public class AiProxyService {
                 preparedFile.fileName
             );
             throw ex;
+        } catch (RuntimeException ex) {
+            markOutboundFailure(outboundCall, ex);
+            auditService.saveSystemLogWithAudioFile(
+                device,
+                "speech_proxy",
+                "speech",
+                action,
+                buildSpeechLogPayload(request, preparedFile, endpoint, audioModel, null, false, ex.getMessage(), null),
+                false,
+                preparedFile.audioBytes,
+                preparedFile.fileName
+            );
+            throw ex;
+        }
+    }
+
+    private void markOutboundFailure(OutboundCall outboundCall, Throwable error) {
+        if (outboundCall != null) {
+            outboundCall.failure(error);
         }
     }
 
@@ -638,14 +738,6 @@ public class AiProxyService {
             return "audio/pcm";
         }
         return MediaType.APPLICATION_OCTET_STREAM_VALUE;
-    }
-
-    private MediaType resolveMediaType(String mimeType) {
-        try {
-            return MediaType.parseMediaType(mimeType);
-        } catch (IllegalArgumentException ex) {
-            return MediaType.APPLICATION_OCTET_STREAM;
-        }
     }
 
     private String resolveAudioModel(ResolvedAiConfig config) {

@@ -51,9 +51,22 @@ floating-ball:
   ai:
     connect-timeout-ms: ${FB_AI_CONNECT_TIMEOUT_MS:30000}
     read-timeout-ms: ${FB_AI_READ_TIMEOUT_MS:120000}
+    stream:
+      core-pool-size: ${FB_AI_STREAM_CORE_POOL_SIZE:4}
+      max-pool-size: ${FB_AI_STREAM_MAX_POOL_SIZE:16}
+      queue-capacity: ${FB_AI_STREAM_QUEUE_CAPACITY:32}
+      keep-alive-seconds: ${FB_AI_STREAM_KEEP_ALIVE_SECONDS:60}
     proxy:
       enabled: ${FB_AI_PROXY_ENABLED:false}
       host: ${FB_AI_PROXY_HOST:}
       port: ${FB_AI_PROXY_PORT:7890}
       username: ${FB_AI_PROXY_USERNAME:}
       password: ${FB_AI_PROXY_PASSWORD:}
+  outbound-security:
+    allowed-hosts: ${FB_OUTBOUND_ALLOWED_HOSTS:}
+    allow-private-network: ${FB_OUTBOUND_ALLOW_PRIVATE_NETWORK:false}
+    allow-insecure-http: ${FB_OUTBOUND_ALLOW_INSECURE_HTTP:false}
+    allow-proxy-fake-ip: ${FB_OUTBOUND_ALLOW_PROXY_FAKE_IP:false}
+    rate-limit-per-minute: ${FB_OUTBOUND_RATE_LIMIT_PER_MINUTE:120}
+    circuit-failure-threshold: ${FB_OUTBOUND_CIRCUIT_FAILURE_THRESHOLD:5}
+    circuit-open-ms: ${FB_OUTBOUND_CIRCUIT_OPEN_MS:30000}

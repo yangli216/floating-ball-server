@@ -15,7 +15,9 @@ import com.regionalai.floatingball.server.modules.user.entity.AiUser;
 import com.regionalai.floatingball.server.modules.user.entity.AiUserRole;
 import com.regionalai.floatingball.server.modules.user.mapper.AiUserMapper;
 import com.regionalai.floatingball.server.modules.user.mapper.AiUserRoleMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -75,6 +77,7 @@ public class UserService {
         return new PageResponse<AdminUserView>(result.getCurrent(), result.getSize(), result.getTotal(), toViews(result.getRecords()));
     }
 
+    @Transactional
     public AdminUserView save(AdminUserSaveRequest request) {
         validateSaveRequest(request, true);
         ensureActiveOrg(request.getIdOrg());
@@ -88,11 +91,16 @@ public class UserService {
         user.setIdOrg(request.getIdOrg().trim());
         user.setSdStatus(StringUtils.hasText(request.getSdStatus()) ? request.getSdStatus() : "1");
         user.setFgActive("1");
-        aiUserMapper.insert(user);
-        replaceRoles(user.getIdUser(), roles);
+        try {
+            aiUserMapper.insert(user);
+            replaceRoles(user.getIdUser(), roles);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("登录账号已存在");
+        }
         return toView(aiUserMapper.selectById(user.getIdUser()), roles, null);
     }
 
+    @Transactional
     public AdminUserView update(String idUser, AdminUserSaveRequest request) {
         AiUser existing = requireActiveUser(idUser);
         validateSaveRequest(request, false);
@@ -107,11 +115,16 @@ public class UserService {
         }
         existing.setIdOrg(request.getIdOrg().trim());
         existing.setSdStatus(StringUtils.hasText(request.getSdStatus()) ? request.getSdStatus() : existing.getSdStatus());
-        aiUserMapper.updateById(existing);
-        replaceRoles(idUser, roles);
+        try {
+            aiUserMapper.updateById(existing);
+            replaceRoles(idUser, roles);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("登录账号已存在");
+        }
         return toView(aiUserMapper.selectById(idUser), roles, null);
     }
 
+    @Transactional
     public void invalidate(String idUser) {
         AiUser user = requireActiveUser(idUser);
         user.setFgActive("0");
