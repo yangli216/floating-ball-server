@@ -35,5 +35,8 @@ floating-ball:
       host: ${FB_AI_PROXY_HOST:127.0.0.1}
       port: ${FB_AI_PROXY_PORT:7890}
   outbound-security:
-    allowed-hosts: ${FB_OUTBOUND_ALLOWED_HOSTS:api.deepseek.com,dashscope.aliyuncs.com}
+    allowed-hosts: ${FB_OUTBOUND_ALLOWED_HOSTS:}
+    allow-all-hosts: ${FB_OUTBOUND_ALLOW_ALL_HOSTS:true}
+    allow-private-network: ${FB_OUTBOUND_ALLOW_PRIVATE_NETWORK:true}
+    allow-insecure-http: ${FB_OUTBOUND_ALLOW_INSECURE_HTTP:true}
     allow-proxy-fake-ip: ${FB_OUTBOUND_ALLOW_PROXY_FAKE_IP:true}

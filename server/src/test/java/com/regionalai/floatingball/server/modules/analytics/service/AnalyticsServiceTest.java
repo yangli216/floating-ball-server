@@ -97,6 +97,35 @@ class AnalyticsServiceTest {
     }
 
     @Test
+    void getFunctionUsageShouldResolveTreatmentPlanLegacyModuleFilter() {
+        FunctionUsageItemVO rankingItem = new FunctionUsageItemVO();
+        rankingItem.setModuleName("AI诊疗方案推荐");
+        rankingItem.setCallCount(5L);
+        rankingItem.setDoctorCount(1L);
+        rankingItem.setAvgPerDoctor(5L);
+
+        when(analyticsMapper.queryFunctionUsageRanking(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.singletonList(rankingItem));
+        when(analyticsMapper.queryFunctionUsagePreviousRanking(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.<FunctionUsageItemVO>emptyList());
+        when(analyticsMapper.queryFunctionUsageTrend(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.<Map<String, Object>>emptyList());
+        when(analyticsMapper.queryDistinctModules())
+            .thenReturn(Arrays.asList("语音问诊", "AI诊疗方案推荐"));
+
+        FunctionUsageQueryDTO query = new FunctionUsageQueryDTO();
+        query.setDateFrom("2026-05-01");
+        query.setDateTo("2026-05-01");
+        query.setFunctionModules(Collections.singletonList("treatment_plan"));
+
+        FunctionUsageResponseVO response = analyticsService.getFunctionUsage(query);
+
+        assertEquals("AI诊疗方案推荐", response.getRanking().get(0).getModuleName());
+        verify(analyticsMapper).queryFunctionUsageRanking(argThat(arg -> arg.getFunctionModules() != null
+            && arg.getFunctionModules().contains("AI诊疗方案推荐")));
+    }
+
+    @Test
     void getSummaryShouldCalculateCurrentRatesAndGrowthAgainstPreviousPeriod() {
         AnalyticsQueryDTO query = new AnalyticsQueryDTO();
         query.setDateFrom("2026-05-01");

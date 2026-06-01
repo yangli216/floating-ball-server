@@ -146,8 +146,8 @@ public class OutboundSecurityService {
 
     private boolean isAllowedHost(String host) {
         List<String> allowedHosts = normalizeAllowedHosts(properties.getAllowedHosts());
-        if (allowedHosts.isEmpty()) {
-            return false;
+        if (properties.isAllowAllHosts() || allowedHosts.isEmpty()) {
+            return true;
         }
         for (String allowedHost : allowedHosts) {
             if (allowedHost.startsWith("*.")) {

@@ -13,15 +13,24 @@
 
     <groupId>com.regionalai</groupId>
     <artifactId>floating-ball-server</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <name>floating-ball-server</name>
     <description>Floating Ball companion backend service</description>
+
+    <scm>
+        <connection>scm:git:https://github.com/yangli216/floating-ball-server.git</connection>
+        <developerConnection>scm:git:https://github.com/yangli216/floating-ball-server.git</developerConnection>
+        <url>https://github.com/yangli216/floating-ball-server</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <properties>
         <java.version>1.8</java.version>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <lombok.version>1.18.38</lombok.version>
         <frontend-maven-plugin.version>1.15.0</frontend-maven-plugin.version>
+        <maven-release-plugin.version>3.0.1</maven-release-plugin.version>
+        <versions-maven-plugin.version>2.16.2</versions-maven-plugin.version>
         <node.version>v20.19.0</node.version>
         <npm.version>10.8.2</npm.version>
     </properties>
@@ -139,6 +148,24 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>${maven-release-plugin.version}</version>
+                <configuration>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <preparationGoals>test</preparationGoals>
+                    <pushChanges>false</pushChanges>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>${versions-maven-plugin.version}</version>
+                <configuration>
+                    <generateBackupPoms>false</generateBackupPoms>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

@@ -17,6 +17,7 @@ public final class FeatureEventCatalog {
     public static final String EXAMINATION_RECOMMENDATION = "examination_recommendation";
     public static final String LAB_TEST_RECOMMENDATION = "lab_test_recommendation";
     public static final String PROCEDURE_RECOMMENDATION = "procedure_recommendation";
+    public static final String TREATMENT_PLAN_RECOMMENDATION = "treatment_plan_recommendation";
     public static final String KNOWLEDGE_USAGE = "knowledge_usage";
 
     private static final Map<String, String> FEATURE_NAMES = buildFeatureNames();
@@ -43,6 +44,7 @@ public final class FeatureEventCatalog {
             "AI推荐检查",
             "AI推荐检验",
             "AI推荐处置",
+            "AI诊疗方案推荐",
             "知识库使用"
         );
     }
@@ -59,6 +61,7 @@ public final class FeatureEventCatalog {
         names.put(EXAMINATION_RECOMMENDATION, "AI推荐检查");
         names.put(LAB_TEST_RECOMMENDATION, "AI推荐检验");
         names.put(PROCEDURE_RECOMMENDATION, "AI推荐处置");
+        names.put(TREATMENT_PLAN_RECOMMENDATION, "AI诊疗方案推荐");
         names.put(KNOWLEDGE_USAGE, "知识库使用");
         return names;
     }

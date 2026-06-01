@@ -138,6 +138,35 @@ class FeatureEventServiceTest {
     }
 
     @Test
+    void saveBatchShouldAcceptTreatmentPlanRecommendationEvent() {
+        when(featureEventMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+
+        FeatureEventBatchRequest.FeatureEventRequest event = new FeatureEventBatchRequest.FeatureEventRequest();
+        event.setEventId("EVENT-TREATMENT-001");
+        event.setFeatureCode(FeatureEventCatalog.TREATMENT_PLAN_RECOMMENDATION);
+        event.setEventAction("open_treatment_plan_assist");
+        event.setIdempotencyKey("assist:treatment_plan:CONSULT-001");
+        event.setConsultationId("CONSULT-001");
+
+        FeatureEventBatchRequest request = new FeatureEventBatchRequest();
+        request.setEvents(Collections.singletonList(event));
+
+        FeatureEventBatchResponse response = service.saveBatch(device, request);
+
+        assertEquals(1, response.getAccepted());
+        assertEquals(0, response.getSkipped());
+
+        ArgumentCaptor<AiFeatureEvent> captor = ArgumentCaptor.forClass(AiFeatureEvent.class);
+        verify(featureEventMapper).insert(captor.capture());
+        AiFeatureEvent saved = captor.getValue();
+        assertEquals(FeatureEventCatalog.TREATMENT_PLAN_RECOMMENDATION, saved.getFeatureCode());
+        assertEquals("AI诊疗方案推荐", saved.getFeatureName());
+        assertEquals("assist:treatment_plan:CONSULT-001", saved.getIdempotencyKey());
+    }
+
+    @Test
     void saveBatchShouldTreatUniqueConstraintAsSkipped() {
         when(featureEventMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
         when(featureEventMapper.insert(any(AiFeatureEvent.class))).thenThrow(new DuplicateKeyException("duplicate"));

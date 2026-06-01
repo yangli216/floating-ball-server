@@ -86,8 +86,8 @@ floating-ball-server/
 2. 服务启动前必须注入 `FB_DB_URL`、`FB_DB_USERNAME`、`FB_DB_PASSWORD`、`FB_AES_KEY`。
 3. PMPHAI 等上游服务地址在公开仓库中只保留示例地址；真实地址通过管理端配置或部署环境注入。
 4. 本地联调如需私有覆盖配置，应使用未入库文件或部署环境变量，不得直接改回仓库默认值。
-5. AI、语音、Reviewer、PMPHAI 等服务端出站地址必须经过统一出站安全门：仅允许 `floating-ball.outbound-security.allowed-hosts` 中声明的 host，默认拒绝本机、内网、链路本地、组播、共享地址空间等私网地址；确需本地联调时，必须显式开启 `allow-private-network` 与 `allow-insecure-http` 并把本地主机加入允许名单。
-6. `development` profile 为当前本地默认 DeepSeek / DashScope 配置预置公共 host allowlist，并允许代理软件 fake-ip 常用的 `198.18.0.0/15` DNS 解析结果；生产 profile 仍为空名单且不允许 fake-ip，必须由部署环境显式注入。
+5. AI、语音、Reviewer、PMPHAI 等服务端出站地址必须经过统一出站安全门；当前默认开启 `allow-all-hosts`、`allow-private-network`、`allow-insecure-http` 与代理软件 fake-ip 支持，不要求维护 host 白名单，适配医院内网 HTTP 上游。
+6. 如部署环境需要收紧出站边界，应显式设置 `FB_OUTBOUND_ALLOW_ALL_HOSTS=false`、`FB_OUTBOUND_ALLOW_PRIVATE_NETWORK=false`、`FB_OUTBOUND_ALLOW_INSECURE_HTTP=false`，并通过 `FB_OUTBOUND_ALLOWED_HOSTS` 指定允许访问的上游 host。
 7. 出站安全门按 host 做本地限流和熔断；上游失败达到阈值后短暂拒绝同 host 后续出站，防止 AI / 语音 / PMPHAI 配置异常拖垮后台线程与连接资源。
 
 ### 3.2 客户端安全基线
@@ -161,6 +161,14 @@ floating-ball-server/
 - 列表 CRUD 页新增状态、编码、分段开关时优先复用 `StatusPill`、`CodeTag`、`SegmentedSwitch`；确有复杂交互时可在页面内组合，但不得重新定义同义状态样式
 - 远端 `/v1/*` 默认 CORS 需要兼容 `floating-ball` 的 Tauri dev / desktop WebView origin，且 `OPTIONS` 预检请求不能被设备鉴权拦截
 - `floating-ball.cors.allowed-origins` 的本地配置只能做增量补充，不能覆盖掉桌面端默认 origin（`tauri://localhost`、`asset://localhost`、`https://tauri.localhost`、`http://tauri.localhost`、本地 localhost/127.0.0.1`），否则桌面端会在浏览器 Fetch 层直接报 `Load failed`
+
+### 4.4.1 后台发布版本号
+
+- 后台 release 版本源以 `server/pom.xml` 的 Maven 项目版本为准；管理端随 Spring Boot 同仓构建，不单独以 npm `package.json` 版本作为发布版本源。
+- `maven-release-plugin` 负责正式发布：从 `*-SNAPSHOT` 切到正式 `x.y.z`、执行 `test`、创建 `v@{project.version}` 标签，再推进到下一轮 `*-SNAPSHOT` 开发版本。
+- 当前 `maven-release-plugin` 配置 `pushChanges=false`，避免 release 命令自动推送远端；本地 tag 和提交确认后再人工执行 `git push && git push origin vX.Y.Z`。
+- `versions-maven-plugin` 负责手工调整开发版本号，默认不生成 `pom.xml.versionsBackup`。
+- 后台 Git tag 属于 `floating-ball-server` 独立仓库，不与桌面端客户端版本发布或内网安装包通道混用。
 
 ### 4.5 错误信息出口
 
@@ -247,9 +255,9 @@ floating-ball-server/
 1. 功能调用事件是面向统计的业务事实源，独立于审计日志和问诊用户日志。
 2. 桌面端在用户真实触发功能时调用 `POST /v1/client/feature-events/batch`，一次明确功能调用只提交一条事件。
 3. 服务端以 `idDevice + idempotencyKey` 幂等入库到 `c_ai_feature_event`，客户端离线重试或接口重试不会重复计数。
-4. 事件固定使用 `featureCode` 表示产品功能，服务端统一映射展示名：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用。
+4. 事件固定使用 `featureCode` 表示产品功能，服务端统一映射展示名：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用。
 5. `traceId`、`consultationId`、`sessionId` 只用于把功能事件关联回 `c_ai_op_log` 或 `c_ai_user_consultation_log`，不参与统计去重。
-6. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。
+6. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。来自 HIS Bridge 的入口在桌面端接诊上下文校验通过并准备打开目标界面时即按成功调用入库，后续 AI 生成和问诊提交使用稳定幂等键避免重复统计。
 7. 管理端“辅诊功能”统计只读 `c_ai_feature_event`；`c_ai_op_log` 保留为排障与审计，不再承担统计推断。
 
 ### 5.5 用户反馈链路
@@ -339,7 +347,7 @@ floating-ball-server/
    - 支持时间范围快捷切换（今日/本周/本月/本季度/本年/自定义）
    - 支持区域、机构下拉筛选
    - 支持统计分析、辅诊功能和用户活跃度 Excel 数据导出
-   - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
+   - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
 
 约束：
 

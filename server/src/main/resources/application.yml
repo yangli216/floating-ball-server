@@ -64,9 +64,10 @@ floating-ball:
       password: ${FB_AI_PROXY_PASSWORD:}
   outbound-security:
     allowed-hosts: ${FB_OUTBOUND_ALLOWED_HOSTS:}
-    allow-private-network: ${FB_OUTBOUND_ALLOW_PRIVATE_NETWORK:false}
-    allow-insecure-http: ${FB_OUTBOUND_ALLOW_INSECURE_HTTP:false}
-    allow-proxy-fake-ip: ${FB_OUTBOUND_ALLOW_PROXY_FAKE_IP:false}
+    allow-all-hosts: ${FB_OUTBOUND_ALLOW_ALL_HOSTS:true}
+    allow-private-network: ${FB_OUTBOUND_ALLOW_PRIVATE_NETWORK:true}
+    allow-insecure-http: ${FB_OUTBOUND_ALLOW_INSECURE_HTTP:true}
+    allow-proxy-fake-ip: ${FB_OUTBOUND_ALLOW_PROXY_FAKE_IP:true}
     rate-limit-per-minute: ${FB_OUTBOUND_RATE_LIMIT_PER_MINUTE:120}
     circuit-failure-threshold: ${FB_OUTBOUND_CIRCUIT_FAILURE_THRESHOLD:5}
     circuit-open-ms: ${FB_OUTBOUND_CIRCUIT_OPEN_MS:30000}

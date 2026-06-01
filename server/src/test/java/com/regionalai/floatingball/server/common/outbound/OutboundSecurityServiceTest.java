@@ -14,7 +14,9 @@ class OutboundSecurityServiceTest {
 
     @Test
     void validateHttpShouldRejectHostOutsideAllowlist() {
-        OutboundSecurityService service = new OutboundSecurityService(newProperties("example.com"));
+        OutboundSecurityProperties properties = newProperties("example.com");
+        properties.setAllowAllHosts(false);
+        OutboundSecurityService service = new OutboundSecurityService(properties);
 
         assertThatThrownBy(() -> service.validateHttpUrl("https://not-allowed.example/v1", "test"))
             .isInstanceOf(BusinessException.class)
@@ -22,8 +24,42 @@ class OutboundSecurityServiceTest {
     }
 
     @Test
-    void validateHttpShouldRejectPrivateAddressByDefault() {
-        OutboundSecurityService service = new OutboundSecurityService(newProperties("127.0.0.1"));
+    void validateHttpShouldAllowAllHostsWhenExplicitlyEnabled() {
+        OutboundSecurityProperties properties = newProperties(null);
+        properties.setAllowAllHosts(true);
+        OutboundSecurityService service = new OutboundSecurityService(properties);
+
+        assertThat(service.validateHttpUrl("https://1.1.1.1/v1", "test").toString())
+            .isEqualTo("https://1.1.1.1/v1");
+    }
+
+    @Test
+    void validateHttpShouldAllowEmptyAllowlistWhenAllHostsFlagIsDisabled() {
+        OutboundSecurityProperties properties = newProperties(null);
+        properties.setAllowAllHosts(false);
+        OutboundSecurityService service = new OutboundSecurityService(properties);
+
+        assertThat(service.validateHttpUrl("http://10.17.4.31/v1", "test").toString())
+            .isEqualTo("http://10.17.4.31/v1");
+    }
+
+    @Test
+    void allowAllHostsShouldNotBypassInsecureHttpPolicyWhenExplicitlyDisabled() {
+        OutboundSecurityProperties properties = newProperties(null);
+        properties.setAllowAllHosts(true);
+        properties.setAllowInsecureHttp(false);
+        OutboundSecurityService service = new OutboundSecurityService(properties);
+
+        assertThatThrownBy(() -> service.validateHttpUrl("http://example.com/v1", "test"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("上游服务地址必须使用 HTTPS");
+    }
+
+    @Test
+    void validateHttpShouldRejectPrivateAddressWhenExplicitlyDisabled() {
+        OutboundSecurityProperties properties = newProperties("127.0.0.1");
+        properties.setAllowPrivateNetwork(false);
+        OutboundSecurityService service = new OutboundSecurityService(properties);
 
         assertThatThrownBy(() -> service.validateHttpUrl("https://127.0.0.1/v1", "test"))
             .isInstanceOf(BusinessException.class)
@@ -43,6 +79,7 @@ class OutboundSecurityServiceTest {
     @Test
     void validateHttpShouldKeepRejectingPrivateAddressWhenProxyFakeIpEnabled() {
         OutboundSecurityProperties properties = newProperties("127.0.0.1");
+        properties.setAllowPrivateNetwork(false);
         properties.setAllowProxyFakeIp(true);
         OutboundSecurityService service = new OutboundSecurityService(properties);
 
@@ -52,8 +89,10 @@ class OutboundSecurityServiceTest {
     }
 
     @Test
-    void validateHttpShouldRejectInsecureHttpByDefault() {
-        OutboundSecurityService service = new OutboundSecurityService(newProperties("example.com"));
+    void validateHttpShouldRejectInsecureHttpWhenExplicitlyDisabled() {
+        OutboundSecurityProperties properties = newProperties("example.com");
+        properties.setAllowInsecureHttp(false);
+        OutboundSecurityService service = new OutboundSecurityService(properties);
 
         assertThatThrownBy(() -> service.validateHttpUrl("http://example.com/v1", "test"))
             .isInstanceOf(BusinessException.class)
@@ -106,9 +145,9 @@ class OutboundSecurityServiceTest {
     }
 
     @Test
-    void validateWebSocketShouldAllowOnlySecureSchemeByDefault() {
+    void validateWebSocketShouldAllowOnlySecureSchemeWhenExplicitlyDisabled() {
         OutboundSecurityProperties properties = newProperties("127.0.0.1");
-        properties.setAllowPrivateNetwork(true);
+        properties.setAllowInsecureHttp(false);
         OutboundSecurityService service = new OutboundSecurityService(properties);
 
         assertThatThrownBy(() -> service.validateWebSocketUrl("ws://127.0.0.1/realtime", "test"))

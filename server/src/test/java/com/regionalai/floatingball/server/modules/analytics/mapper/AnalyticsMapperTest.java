@@ -40,6 +40,7 @@ class AnalyticsMapperTest {
         assertTrue(sql.contains("语音问诊"));
         assertTrue(sql.contains("智能问诊"));
         assertTrue(sql.contains("AI推荐处置"));
+        assertTrue(sql.contains("AI诊疗方案推荐"));
         assertTrue(sql.contains("知识库使用"));
     }
 

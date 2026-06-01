@@ -445,10 +445,10 @@ Content-Type: application/json
 
 服务端出站安全约束：
 
-1. `apiBaseUrl`、`audioBaseUrl`、`reviewerBaseUrl`、`pmphaiBaseUrl` 只是候选上游地址；真实出站前服务端会按 `floating-ball.outbound-security.allowed-hosts` 做 host allowlist 校验。
-2. 默认只允许 HTTPS / WSS，拒绝 HTTP / WS；本机、私网、链路本地、组播、共享地址空间等地址默认拒绝，避免 SSRF。确需内网或本地联调时，必须在部署配置中同时显式放宽协议 / 私网并加入允许 host。
+1. `apiBaseUrl`、`audioBaseUrl`、`reviewerBaseUrl`、`pmphaiBaseUrl` 只是候选上游地址；当前默认开启 `floating-ball.outbound-security.allow-all-hosts` / `FB_OUTBOUND_ALLOW_ALL_HOSTS=true`，不要求维护 host 白名单。
+2. 当前默认允许 HTTP / WS 与私网地址，以适配医院内网模型服务；如需收紧安全边界，应显式关闭 `allow-all-hosts`、`allow-private-network` 与 `allow-insecure-http`，并配置 `allowed-hosts`。
 3. 服务端按 host 进行本地限流与熔断；限流或熔断命中时，对客户端返回可理解的业务错误，不继续访问上游。
-4. `development` profile 默认允许 `api.deepseek.com,dashscope.aliyuncs.com`，并允许代理软件 fake-ip 常用的 `198.18.0.0/15` DNS 解析结果，用于匹配本地默认 DeepSeek / DashScope 配置；其他模型供应商或生产部署必须显式覆盖 `FB_OUTBOUND_ALLOWED_HOSTS`。host 被拒绝时，业务错误会包含被拒绝的 host，便于定位应加入的允许名单项。
+4. `application.yml`、`development`、`test`、`product` profile 当前均默认放开 host 白名单、HTTP / WS、私网地址与代理 fake-ip；host 被拒绝通常表示部署环境显式覆盖了对应开关。
 
 ### 3.4 GET `/v1/client/prompts/delta`
 
@@ -587,10 +587,10 @@ Content-Type: application/json
 约束：
 
 1. 服务端以 `idDevice + idempotencyKey` 幂等，重复上报只跳过不重复计数。
-2. `featureCode` 当前固定支持：`voice_consultation`、`smart_consultation`、`report_interpretation`、`chat`、`diagnosis_checklist`、`diagnosis_recommendation`、`medication_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`knowledge_usage`。
-3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用。
+2. `featureCode` 当前固定支持：`voice_consultation`、`smart_consultation`、`report_interpretation`、`chat`、`diagnosis_checklist`、`diagnosis_recommendation`、`medication_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`treatment_plan_recommendation`、`knowledge_usage`。
+3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用。
 4. `traceId`、`consultationId`、`sessionId` 只用于关联审计链路，不参与调用次数累加。
-5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。
+5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
 
 ### 3.9 POST `/v1/client/user-logs/consultations`
 
@@ -858,7 +858,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 4. 当前仅在 `speechProvider=aliyun-dashscope` 时启用，服务端使用 `audioApiKey` 或主模型 `apiKey` 连接 DashScope WebSocket。
 5. 服务端向 DashScope `/api-ws/v1/inference` 发送 `run-task`，模型取 `speechModel`，默认 `paraformer-realtime-v2`；若配置其他同协议 Fun-ASR / Gummy / Paraformer realtime 模型则原样使用；音频格式为 `pcm` / `16000`。
 6. DashScope `qwen3-asr-flash-realtime` 属于另一套 `/api-ws/v1/realtime` session 协议，不属于当前代理通道；若后续要使用该模型，需要新增独立协议适配。
-7. 上游 WebSocket 地址同样走出站安全门；默认只允许 `wss` 且 host 必须在允许名单中，私网地址默认拒绝。
+7. 上游 WebSocket 地址同样走出站安全门；当前默认允许 `ws` / `wss`、私网地址与空 host 白名单，以适配医院内网实时语音上游；如需收紧，可显式关闭 `allow-insecure-http`、`allow-private-network` 并配置 `allowed-hosts`。
 
 客户端发送：
 
@@ -1166,7 +1166,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 响应 `data`：
 
 ```json
-["语音问诊", "智能问诊", "报告单解读", "聊天", "AI诊断鉴别", "AI推荐诊断", "AI推荐用药", "AI推荐检查", "AI推荐检验", "AI推荐处置", "知识库使用"]
+["语音问诊", "智能问诊", "报告单解读", "聊天", "AI诊断鉴别", "AI推荐诊断", "AI推荐用药", "AI推荐检查", "AI推荐检验", "AI推荐处置", "AI诊疗方案推荐", "知识库使用"]
 ```
 
 ### 5.9 GET `/admin/api/analytics/function-usage`
@@ -1214,10 +1214,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 约束：
 
 1. `ranking` 按 `callCount` 倒序排列，已计算增长率（与上一等长周期对比）
-2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、知识库使用
+2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用
 3. 调用次数来自 `c_ai_feature_event`，同一 `idDevice + idempotencyKey` 只入库一次，避免离线重传、接口重试和底层多条审计日志造成重复统计
 4. `c_ai_op_log` 仅用于审计与排障，不再作为辅诊功能统计的事实源
-5. 主流程内部自动 AI 推荐不重复拆分为 AI 推荐诊断/用药/检查/检验/处置；这些子功能只在医生显式触发对应独立辅助入口时计数
+5. 主流程内部自动 AI 推荐不重复拆分为 AI 推荐诊断/用药/检查/检验/处置/诊疗方案推荐；这些子功能只在医生显式触发对应独立辅助入口时计数，HIS Bridge 入口成功打开目标界面即计一次
 6. `doctorCount` 按事件中的医生 ID 优先统计；医生 ID 为空时回退设备 ID
 7. `trend` 仅包含排名前 5 的功能的逐日调用趋势
 8. `records` 为当前页数据，支持分页
@@ -1481,10 +1481,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 上游地址安全要求：
 
-1. 服务端部署时必须通过 `floating-ball.outbound-security.allowed-hosts` 或 `FB_OUTBOUND_ALLOWED_HOSTS` 明确允许 AI、语音、Reviewer、PMPHAI host，例如 `api.openai.com,dashscope.aliyuncs.com,pmphai.example.com`。
-2. 生产默认拒绝未加密协议与私网地址；本地联调要访问 `localhost` / `127.0.0.1` 时，应只在本地环境开启 `FB_OUTBOUND_ALLOW_PRIVATE_NETWORK=true` 与 `FB_OUTBOUND_ALLOW_INSECURE_HTTP=true`，并将对应 host 加入允许名单。
+1. 服务端默认不要求填写 `FB_OUTBOUND_ALLOWED_HOSTS`；代码默认值与 profile 配置均允许空白名单直接放行 host。
+2. 服务端默认允许未加密协议与私网地址，以适配医院内网 HTTP 模型服务；如需收紧，应显式设置 `FB_OUTBOUND_ALLOW_ALL_HOSTS=false`、`FB_OUTBOUND_ALLOW_PRIVATE_NETWORK=false`、`FB_OUTBOUND_ALLOW_INSECURE_HTTP=false` 并配置允许 host。
 3. 同一 host 的出站请求会被本地限流与熔断保护；超过阈值或短时间连续失败时，配置测试、AI 代理、语音代理和 PMPHAI 代理都会被拒绝访问上游。
-4. `development` profile 默认允许 `api.deepseek.com,dashscope.aliyuncs.com`，并允许代理软件 fake-ip 常用的 `198.18.0.0/15` DNS 解析结果，用于匹配本地默认 DeepSeek / DashScope 配置；其他模型供应商或生产部署必须显式覆盖 `FB_OUTBOUND_ALLOWED_HOSTS`。host 被拒绝时，业务错误会包含被拒绝的 host，便于定位应加入的允许名单项。
+4. `application.yml`、`development`、`test`、`product` profile 当前均默认放开 host 白名单、HTTP / WS、私网地址与代理 fake-ip；host 被拒绝通常表示部署环境显式覆盖了对应开关。
 
 ### 5.32 PUT `/admin/api/configs/{idConfig}`
 用途：修改 AI 配置；`apiKey`、`audioApiKey`、`reviewerApiKey`、`pmphaiAppKey`、`pmphaiAppSecret` 为空时保留原值。

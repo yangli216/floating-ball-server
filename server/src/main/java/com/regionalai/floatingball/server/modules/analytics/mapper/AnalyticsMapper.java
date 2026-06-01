@@ -220,6 +220,7 @@ public interface AnalyticsMapper {
         "SELECT 'AI推荐检查' FROM dual UNION ALL",
         "SELECT 'AI推荐检验' FROM dual UNION ALL",
         "SELECT 'AI推荐处置' FROM dual UNION ALL",
+        "SELECT 'AI诊疗方案推荐' FROM dual UNION ALL",
         "SELECT '知识库使用' FROM dual"
     })
     List<String> queryDistinctModules();

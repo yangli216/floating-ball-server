@@ -43,6 +43,14 @@
 2. 第二优先级：补最小管理端 CRUD，支撑令牌、配置、症状模板和日志管理。
 3. 第三优先级：逐步补用户、角色、统计等平台能力。
 
+## 版本发布与版本号
+
+1. 后台发布版本以 `server/pom.xml` 的 Maven 项目版本为唯一主版本源；管理端 npm 包作为内嵌前端构建元数据，不作为后台 release 版本源。
+2. 正式发版使用 Maven Release Plugin，例如从 `0.1.0-SNAPSHOT` 发布 `0.1.0` 并进入 `0.1.1-SNAPSHOT`：
+   `mvn -f server/pom.xml -DreleaseVersion=0.1.0 -DdevelopmentVersion=0.1.1-SNAPSHOT -Dtag=v0.1.0 release:prepare`
+3. `release:prepare` 会执行 `test`、提交正式版本、创建 `vX.Y.Z` 标签，并把 `server/pom.xml` 推进到下一个 `*-SNAPSHOT` 开发版本；当前配置 `pushChanges=false`，发布后由人工执行 `git push && git push origin vX.Y.Z`。
+4. 仅调整开发版本号时使用 Maven Versions Plugin：`mvn -f server/pom.xml versions:set -DnewVersion=0.2.0-SNAPSHOT`。
+
 ## 最小质量门禁
 
 1. `server` 至少执行 `mvn -f server/pom.xml test` 或 `mvn -f server/pom.xml package`，该流程会自动执行管理端 `npm ci` 与 `npm run build`
@@ -50,7 +58,8 @@
 3. 新增生产代码默认同步新增或更新单元测试；确实不适合自动化覆盖时，交付说明必须写明原因和替代验证方式
 4. 新增或修改核心 service/controller/security 逻辑时，默认新增或更新 JUnit 测试；确实不适合自动化时，必须在交付说明中写明原因
 5. 修改 `/v1/*` 契约、设备鉴权、请求签名、AI 代理或客户端 delta 链路时，必须按工作区 [TESTING_STRATEGY.md](../TESTING_STRATEGY.md) 补充对应单元测试、集成测试或联调记录
-6. 若无法完成构建或测试，必须说明阻塞原因，并补充静态审查结论
+6. 修改 Maven release/versions 配置或版本号规则时，至少执行 `mvn -f server/pom.xml test`；如需验证发版流程，必须在干净工作区执行 `mvn -f server/pom.xml -DdryRun=true -DreleaseVersion=X.Y.Z -DdevelopmentVersion=X.Y.(Z+1)-SNAPSHOT -Dtag=vX.Y.Z release:prepare` 后执行 `mvn -f server/pom.xml release:clean`
+7. 若无法完成构建或测试，必须说明阻塞原因，并补充静态审查结论
 
 ## 管理端 UED 与组件规则
 

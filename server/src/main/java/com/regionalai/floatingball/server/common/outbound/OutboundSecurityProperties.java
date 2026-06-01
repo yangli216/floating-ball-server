@@ -11,9 +11,10 @@ import java.util.List;
 public class OutboundSecurityProperties {
 
     private List<String> allowedHosts = new ArrayList<String>();
-    private boolean allowPrivateNetwork;
-    private boolean allowInsecureHttp;
-    private boolean allowProxyFakeIp;
+    private boolean allowAllHosts = true;
+    private boolean allowPrivateNetwork = true;
+    private boolean allowInsecureHttp = true;
+    private boolean allowProxyFakeIp = true;
     private int rateLimitPerMinute = 120;
     private int circuitFailureThreshold = 5;
     private long circuitOpenMs = 30000L;
@@ -24,6 +25,14 @@ public class OutboundSecurityProperties {
 
     public void setAllowedHosts(List<String> allowedHosts) {
         this.allowedHosts = allowedHosts == null ? new ArrayList<String>() : allowedHosts;
+    }
+
+    public boolean isAllowAllHosts() {
+        return allowAllHosts;
+    }
+
+    public void setAllowAllHosts(boolean allowAllHosts) {
+        this.allowAllHosts = allowAllHosts;
     }
 
     public boolean isAllowPrivateNetwork() {
