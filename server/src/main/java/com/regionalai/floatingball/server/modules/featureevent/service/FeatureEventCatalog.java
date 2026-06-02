@@ -44,7 +44,7 @@ public final class FeatureEventCatalog {
             "AI推荐检查",
             "AI推荐检验",
             "AI推荐处置",
-            "AI诊疗方案推荐",
+            "AI推荐治疗方案",
             "知识库使用"
         );
     }
@@ -61,7 +61,7 @@ public final class FeatureEventCatalog {
         names.put(EXAMINATION_RECOMMENDATION, "AI推荐检查");
         names.put(LAB_TEST_RECOMMENDATION, "AI推荐检验");
         names.put(PROCEDURE_RECOMMENDATION, "AI推荐处置");
-        names.put(TREATMENT_PLAN_RECOMMENDATION, "AI诊疗方案推荐");
+        names.put(TREATMENT_PLAN_RECOMMENDATION, "AI推荐治疗方案");
         names.put(KNOWLEDGE_USAGE, "知识库使用");
         return names;
     }

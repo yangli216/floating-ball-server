@@ -162,7 +162,7 @@ class FeatureEventServiceTest {
         verify(featureEventMapper).insert(captor.capture());
         AiFeatureEvent saved = captor.getValue();
         assertEquals(FeatureEventCatalog.TREATMENT_PLAN_RECOMMENDATION, saved.getFeatureCode());
-        assertEquals("AI诊疗方案推荐", saved.getFeatureName());
+        assertEquals("AI推荐治疗方案", saved.getFeatureName());
         assertEquals("assist:treatment_plan:CONSULT-001", saved.getIdempotencyKey());
     }
 

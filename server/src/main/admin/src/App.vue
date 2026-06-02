@@ -94,7 +94,7 @@ const menuItems = [
   { path: '/feedbacks', label: '反馈', icon: 'el-icon-chat-dot-square' },
   { path: '/analytics', label: '统计分析', icon: 'el-icon-data-analysis' },
   { path: '/function-usage', label: '辅诊功能', icon: 'el-icon-s-data' },
-  { path: '/user-activity', label: '用户活跃度', icon: 'el-icon-trend-charts' },
+  { path: '/user-activity', label: '用户活跃度', icon: 'el-icon-data-line' },
   { path: '/security-rejections', label: '安全拦截', icon: 'el-icon-lock' },
   { path: '/security-analytics', label: '安全分析', icon: 'el-icon-warning-outline' }
 ]

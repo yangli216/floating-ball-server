@@ -11,9 +11,9 @@ logging:
 
 spring:
   datasource:
-    url: ${FB_DB_URL:jdbc:oracle:thin:@10.19.40.42:1521:phis}
+    url: ${FB_DB_URL:jdbc:oracle:thin:@192.168.201.139:1521/test}
     username: ${FB_DB_USERNAME:RBMH_AI}
-    password: ${FB_DB_PASSWORD:RBMH_AI}
+    password: ${FB_DB_PASSWORD:BSOFT2023!}
 
 floating-ball:
   admin:

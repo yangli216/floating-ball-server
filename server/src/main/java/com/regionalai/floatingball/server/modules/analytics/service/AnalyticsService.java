@@ -54,7 +54,7 @@ public class AnalyticsService {
         "AI推荐检查",
         "AI推荐检验",
         "AI推荐处置",
-        "AI诊疗方案推荐",
+        "AI推荐治疗方案",
         "知识库使用"
     );
     private static final Map<String, String> FUNCTION_USAGE_ALIASES = buildFunctionUsageAliases();
@@ -638,8 +638,8 @@ public class AnalyticsService {
             "AI推荐处置", "处置推荐", "推荐处置", "generate_procedure_recommendation",
             "consultation-treatment-procedure", "voice-consultation-treatment-procedure"
         );
-        registerFunctionUsageAliases(aliases, "AI诊疗方案推荐",
-            "AI诊疗方案推荐", "诊疗方案推荐", "诊疗方案", "聚合诊疗方案", "treatment_plan_recommendation",
+        registerFunctionUsageAliases(aliases, "AI推荐治疗方案",
+            "AI推荐治疗方案", "AI诊疗方案推荐", "推荐治疗方案", "治疗方案推荐", "诊疗方案推荐", "诊疗方案", "聚合诊疗方案", "treatment_plan_recommendation",
             "treatment_plan", "consultation-treatment-plan", "consultation-assist-treatment-plan",
             "consultation-assist-treatment_plan", "open_treatment_plan_assist", "generate_treatment_plan_recommendation"
         );

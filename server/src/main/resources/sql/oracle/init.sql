@@ -90,6 +90,7 @@ CREATE TABLE c_ai_device (
     id_region            VARCHAR2(32),
     id_bind_user         VARCHAR2(32),
     device_token         VARCHAR2(64) NOT NULL,
+    device_public_key    VARCHAR2(1000),
     sd_status            VARCHAR2(2) DEFAULT '0' NOT NULL,
     dt_last_heartbeat    TIMESTAMP,
     dt_registered        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -108,6 +109,7 @@ COMMENT ON COLUMN c_ai_device.id_org IS '所属机构ID';
 COMMENT ON COLUMN c_ai_device.id_region IS '所属区域ID';
 COMMENT ON COLUMN c_ai_device.id_bind_user IS '绑定用户ID';
 COMMENT ON COLUMN c_ai_device.device_token IS '设备令牌';
+COMMENT ON COLUMN c_ai_device.device_public_key IS '设备ECDSA P-256公钥（SPKI DER base64）';
 COMMENT ON COLUMN c_ai_device.sd_status IS '设备状态';
 COMMENT ON COLUMN c_ai_device.dt_last_heartbeat IS '最后心跳时间';
 COMMENT ON COLUMN c_ai_device.dt_registered IS '注册时间';
@@ -441,6 +443,8 @@ CREATE TABLE c_ai_user_consultation_log (
     first_snapshot_json  CLOB,
     final_snapshot_json  CLOB,
     selection_json       CLOB,
+    change_summary_json  CLOB,
+    total_changes        NUMBER(5),
     status               VARCHAR2(32) DEFAULT 'generated',
     fg_active            CHAR(1) DEFAULT '1' NOT NULL,
     insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -471,6 +475,8 @@ COMMENT ON COLUMN c_ai_user_consultation_log.audio_size IS '语音问诊录音�
 COMMENT ON COLUMN c_ai_user_consultation_log.first_snapshot_json IS '首次AI生成内容JSON';
 COMMENT ON COLUMN c_ai_user_consultation_log.final_snapshot_json IS '医生最终修改内容JSON';
 COMMENT ON COLUMN c_ai_user_consultation_log.selection_json IS '最终选中状态JSON';
+COMMENT ON COLUMN c_ai_user_consultation_log.change_summary_json IS '变更汇总JSON（含各类别变更数）';
+COMMENT ON COLUMN c_ai_user_consultation_log.total_changes IS '变更总项数';
 COMMENT ON COLUMN c_ai_user_consultation_log.status IS '状态：generated已生成 completed已完成';
 COMMENT ON COLUMN c_ai_user_consultation_log.fg_active IS '逻辑删除标记';
 COMMENT ON COLUMN c_ai_user_consultation_log.insert_time IS '创建时间';
@@ -543,6 +549,56 @@ CREATE INDEX idx_c_ai_feature_event_time ON c_ai_feature_event (event_time, fg_a
 CREATE INDEX idx_c_ai_feature_event_feature ON c_ai_feature_event (feature_name, event_time, fg_active);
 CREATE INDEX idx_c_ai_feature_event_doctor ON c_ai_feature_event (id_doctor, event_time, fg_active);
 CREATE INDEX idx_c_ai_feature_event_org ON c_ai_feature_event (id_org, id_region, event_time, fg_active);
+
+
+CREATE TABLE c_security_rejection_log (
+    id_log               VARCHAR2(32) PRIMARY KEY,
+    rejection_type       VARCHAR2(64) NOT NULL,
+    request_method       VARCHAR2(16),
+    request_path         VARCHAR2(512),
+    client_ip            VARCHAR2(64),
+    id_device            VARCHAR2(32),
+    cd_device            VARCHAR2(128),
+    id_org               VARCHAR2(32),
+    request_id           VARCHAR2(64),
+    reject_reason        VARCHAR2(255),
+    reject_detail        VARCHAR2(500),
+    has_signature        CHAR(1) DEFAULT '0',
+    timestamp_header     VARCHAR2(32),
+    nonce_header         VARCHAR2(64),
+    client_version       VARCHAR2(32),
+    update_channel       VARCHAR2(32),
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_security_rejection_log IS '安全拒绝日志表';
+COMMENT ON COLUMN c_security_rejection_log.id_log IS '日志主键ID';
+COMMENT ON COLUMN c_security_rejection_log.rejection_type IS '拒绝类型';
+COMMENT ON COLUMN c_security_rejection_log.request_method IS '请求方法';
+COMMENT ON COLUMN c_security_rejection_log.request_path IS '请求路径';
+COMMENT ON COLUMN c_security_rejection_log.client_ip IS '客户端IP';
+COMMENT ON COLUMN c_security_rejection_log.id_device IS '设备ID';
+COMMENT ON COLUMN c_security_rejection_log.cd_device IS '设备编码';
+COMMENT ON COLUMN c_security_rejection_log.id_org IS '机构ID';
+COMMENT ON COLUMN c_security_rejection_log.request_id IS '请求ID';
+COMMENT ON COLUMN c_security_rejection_log.reject_reason IS '拒绝原因';
+COMMENT ON COLUMN c_security_rejection_log.reject_detail IS '拒绝详情';
+COMMENT ON COLUMN c_security_rejection_log.has_signature IS '是否携带签名';
+COMMENT ON COLUMN c_security_rejection_log.timestamp_header IS '请求时间戳头';
+COMMENT ON COLUMN c_security_rejection_log.nonce_header IS '请求nonce头';
+COMMENT ON COLUMN c_security_rejection_log.client_version IS '客户端版本';
+COMMENT ON COLUMN c_security_rejection_log.update_channel IS '更新通道';
+COMMENT ON COLUMN c_security_rejection_log.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_security_rejection_log.insert_time IS '创建时间';
+COMMENT ON COLUMN c_security_rejection_log.update_time IS '更新时间';
+
+CREATE INDEX idx_c_security_rej_time ON c_security_rejection_log (insert_time, fg_active);
+CREATE INDEX idx_c_security_rej_type ON c_security_rejection_log (rejection_type, insert_time, fg_active);
+CREATE INDEX idx_c_security_rej_ip ON c_security_rejection_log (client_ip, insert_time, fg_active);
+CREATE INDEX idx_c_security_rej_device ON c_security_rejection_log (id_device, insert_time, fg_active);
+CREATE INDEX idx_c_security_rej_path ON c_security_rejection_log (request_path, insert_time, fg_active);
 
 
 CREATE TABLE c_ai_feedback (

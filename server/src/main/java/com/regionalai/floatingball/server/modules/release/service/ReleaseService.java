@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.release.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseDownloadItem;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseHistoryView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyUpdateRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
@@ -88,6 +89,31 @@ public class ReleaseService {
         }
         views.sort(historyUpdatedAtDesc());
         return views;
+    }
+
+    public List<ReleaseDownloadItem> downloadItems(String channel, String baseUrl) {
+        String normalizedChannel = normalizePolicyChannel(channel);
+        TauriLatestJson latestJson = getAvailableLatestJson(normalizedChannel, baseUrl);
+        if (latestJson == null || latestJson.getPlatforms() == null || latestJson.getPlatforms().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ReleaseDownloadItem> items = new ArrayList<ReleaseDownloadItem>();
+        for (String target : latestJson.getPlatforms().keySet()) {
+            TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
+            String fileName = platformInfo == null ? "" : extractFileName(platformInfo.getUrl());
+            ReleaseDownloadItem item = new ReleaseDownloadItem();
+            item.setChannel(normalizedChannel);
+            item.setVersion(latestJson.getVersion());
+            item.setTarget(target);
+            item.setFileName(fileName);
+            item.setDownloadUrl(platformInfo == null ? "" : platformInfo.getUrl());
+            item.setPubDate(latestJson.getPubDate());
+            item.setNotes(latestJson.getNotes());
+            item.setFileSize(resolveFileSize(normalizedChannel, target, fileName));
+            items.add(item);
+        }
+        return items;
     }
 
     public ReleaseView rollback(ReleaseRollbackRequest request) {
@@ -390,17 +416,25 @@ public class ReleaseService {
         String fileName = extractFileName(platformInfo.getUrl());
         Long fileSize = null;
         if (StringUtils.hasText(fileName)) {
-            Path filePath = storageRoot.resolve(channel).resolve(target).resolve(fileName).normalize();
-            if (Files.isRegularFile(filePath)) {
-                try {
-                    fileSize = Files.size(filePath);
-                } catch (IOException ex) {
-                    log.debug("release file size check failed. path={}", filePath);
-                    fileSize = null;
-                }
-            }
+            fileSize = resolveFileSize(channel, target, fileName);
         }
         return toReleaseView(channel, latestJson.getVersion(), target, fileName, fileSize, platformInfo.getUrl(), latestJson.getPubDate(), latestJson.getNotes(), readPolicy(channel));
+    }
+
+    private Long resolveFileSize(String channel, String target, String fileName) {
+        if (!StringUtils.hasText(fileName)) {
+            return null;
+        }
+        try {
+            Path filePath = storageRoot.resolve(channel).resolve(target).resolve(fileName).normalize();
+            ensureInsideStorage(filePath);
+            if (Files.isRegularFile(filePath)) {
+                return Files.size(filePath);
+            }
+        } catch (IOException ex) {
+            log.debug("release file size check failed. channel={}, target={}, fileName={}", channel, target, fileName);
+        }
+        return null;
     }
 
     private List<ReleaseHistoryView> readHistoryViews(String channel) {

@@ -14,6 +14,22 @@ import java.util.Map;
 @Mapper
 public interface AnalyticsMapper {
 
+    String FUNCTION_USAGE_MODULE_EXPR = "CASE "
+        + "WHEN feature_code = 'voice_consultation' THEN '语音问诊' "
+        + "WHEN feature_code = 'smart_consultation' THEN '智能问诊' "
+        + "WHEN feature_code = 'report_interpretation' THEN '报告单解读' "
+        + "WHEN feature_code = 'chat' THEN '聊天' "
+        + "WHEN feature_code = 'diagnosis_checklist' THEN 'AI诊断鉴别' "
+        + "WHEN feature_code = 'diagnosis_recommendation' THEN 'AI推荐诊断' "
+        + "WHEN feature_code = 'medication_recommendation' THEN 'AI推荐用药' "
+        + "WHEN feature_code = 'examination_recommendation' THEN 'AI推荐检查' "
+        + "WHEN feature_code = 'lab_test_recommendation' THEN 'AI推荐检验' "
+        + "WHEN feature_code = 'procedure_recommendation' THEN 'AI推荐处置' "
+        + "WHEN feature_code = 'treatment_plan_recommendation' THEN 'AI推荐治疗方案' "
+        + "WHEN feature_code = 'knowledge_usage' THEN '知识库使用' "
+        + "WHEN feature_name = 'AI诊疗方案推荐' THEN 'AI推荐治疗方案' "
+        + "ELSE feature_name END";
+
     @Select({
         "<script>",
         "SELECT COUNT(1) AS cnt FROM c_ai_feature_event WHERE fg_active = '1' AND LOWER(event_status) = 'success'",
@@ -220,14 +236,14 @@ public interface AnalyticsMapper {
         "SELECT 'AI推荐检查' FROM dual UNION ALL",
         "SELECT 'AI推荐检验' FROM dual UNION ALL",
         "SELECT 'AI推荐处置' FROM dual UNION ALL",
-        "SELECT 'AI诊疗方案推荐' FROM dual UNION ALL",
+        "SELECT 'AI推荐治疗方案' FROM dual UNION ALL",
         "SELECT '知识库使用' FROM dual"
     })
     List<String> queryDistinctModules();
 
     @Select({
         "<script>",
-        "SELECT feature_name AS moduleName, COUNT(1) AS callCount, COUNT(DISTINCT NVL(TRIM(id_doctor), id_device)) AS doctorCount,",
+        "SELECT " + FUNCTION_USAGE_MODULE_EXPR + " AS moduleName, COUNT(1) AS callCount, COUNT(DISTINCT NVL(TRIM(id_doctor), id_device)) AS doctorCount,",
         "  NVL(ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT NVL(TRIM(id_doctor), id_device)), 0)), 0) AS avgPerDoctor",
         "FROM c_ai_feature_event",
         "WHERE fg_active = '1' AND LOWER(event_status) = 'success'",
@@ -244,10 +260,10 @@ public interface AnalyticsMapper {
         "  AND id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.functionModules != null and query.functionModules.size() > 0'>",
-        "  AND feature_name IN",
+        "  AND " + FUNCTION_USAGE_MODULE_EXPR + " IN",
         "  <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>",
         "</if>",
-        "GROUP BY feature_name",
+        "GROUP BY " + FUNCTION_USAGE_MODULE_EXPR,
         "ORDER BY callCount DESC",
         "</script>"
     })
@@ -255,7 +271,7 @@ public interface AnalyticsMapper {
 
     @Select({
         "<script>",
-        "SELECT feature_name AS moduleName, COUNT(1) AS callCount, COUNT(DISTINCT NVL(TRIM(id_doctor), id_device)) AS doctorCount,",
+        "SELECT " + FUNCTION_USAGE_MODULE_EXPR + " AS moduleName, COUNT(1) AS callCount, COUNT(DISTINCT NVL(TRIM(id_doctor), id_device)) AS doctorCount,",
         "  NVL(ROUND(COUNT(1) / NULLIF(COUNT(DISTINCT NVL(TRIM(id_doctor), id_device)), 0)), 0) AS avgPerDoctor",
         "FROM c_ai_feature_event",
         "WHERE fg_active = '1' AND LOWER(event_status) = 'success'",
@@ -272,10 +288,10 @@ public interface AnalyticsMapper {
         "  AND id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.functionModules != null and query.functionModules.size() > 0'>",
-        "  AND feature_name IN",
+        "  AND " + FUNCTION_USAGE_MODULE_EXPR + " IN",
         "  <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>",
         "</if>",
-        "GROUP BY feature_name",
+        "GROUP BY " + FUNCTION_USAGE_MODULE_EXPR,
         "ORDER BY callCount DESC",
         "</script>"
     })
@@ -283,7 +299,7 @@ public interface AnalyticsMapper {
 
     @Select({
         "<script>",
-        "SELECT TO_CHAR(TRUNC(event_time), 'yyyy-MM-dd') AS dayStr, feature_name AS moduleName, COUNT(1) AS cnt",
+        "SELECT TO_CHAR(TRUNC(event_time), 'yyyy-MM-dd') AS dayStr, " + FUNCTION_USAGE_MODULE_EXPR + " AS moduleName, COUNT(1) AS cnt",
         "FROM c_ai_feature_event",
         "WHERE fg_active = '1' AND LOWER(event_status) = 'success'",
         "<if test='query.dateFrom != null and query.dateFrom != \"\"'>",
@@ -299,11 +315,11 @@ public interface AnalyticsMapper {
         "  AND id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.functionModules != null and query.functionModules.size() > 0'>",
-        "  AND feature_name IN",
+        "  AND " + FUNCTION_USAGE_MODULE_EXPR + " IN",
         "  <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>",
         "</if>",
-        "GROUP BY TRUNC(event_time), feature_name",
-        "ORDER BY TRUNC(event_time), feature_name",
+        "GROUP BY TRUNC(event_time), " + FUNCTION_USAGE_MODULE_EXPR,
+        "ORDER BY TRUNC(event_time), " + FUNCTION_USAGE_MODULE_EXPR,
         "</script>"
     })
     List<Map<String, Object>> queryFunctionUsageTrend(@Param("query") FunctionUsageQueryDTO query);

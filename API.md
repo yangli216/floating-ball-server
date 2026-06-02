@@ -158,6 +158,8 @@ BODY_SHA256
 
 部署说明：生产/内网环境推荐设置 `FB_RELEASE_PUBLIC_BASE_URL=http://后端内网IP:8080`，确保管理端展示、复制的更新源以及 `latest.json` 内下载地址都不出现 `localhost`。
 
+首次安装说明：管理员上传当前通道安装包后，管理端“版本发布”列表会展示 `downloadUrl`，可直接复制给新电脑浏览器下载；也可访问 `/client-download?channel=production` 打开公开下载页，由使用者按平台选择安装包。
+
 响应 `data`：
 
 ```json
@@ -181,6 +183,8 @@ BODY_SHA256
 `GET /admin/api/releases?channel=production`
 
 用途：返回指定通道当前可见版本；`channel` 为空时返回所有通道。
+
+返回的 `downloadUrl` 为当前版本当前平台安装包的公开下载地址，可用于首次安装分发；`latestJsonUrl` 仍用于 Tauri updater 自动更新。
 
 ### 3.3 管理端切换强制更新策略
 
@@ -253,7 +257,25 @@ BODY_SHA256
 2. 如果当前发布目录中没有历史快照，服务端会把当前 `latest.json` 作为兼容历史记录展示；但只有已写入快照的版本才能执行回滚。
 3. 从一个版本切换到另一个版本时，服务端会先保存当前版本快照，确保刚发错的新版本也能被再次回滚回来。
 
-### 3.6 客户端检查更新策略
+### 3.6 公开首次安装下载页
+
+`GET /client-download?channel=production`
+
+用途：公开展示指定通道当前已上传的客户端安装包下载入口，便于首次安装机器直接通过浏览器下载，不需要管理员登录后台或使用 U 盘拷贝。
+
+查询参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| channel | string | 否 | 发布通道：`production` 或 `testing`，默认 `production` |
+
+说明：
+
+1. 该页面不需要设备令牌或管理员令牌，只展示当前通道的版本号、发布时间、平台 target、文件名和下载按钮。
+2. 若当前通道尚未上传安装包，页面展示“暂无可下载客户端”，并保留正式/测试通道切换入口。
+3. 下载按钮指向同一套公开文件接口：`/v1/client/releases/{channel}/files/{target}/{fileName}`。
+
+### 3.7 客户端检查更新策略
 
 `GET /v1/client/releases/{channel}/policy.json`
 
@@ -296,7 +318,7 @@ Content-Type: application/json
 }
 ```
 
-### 3.7 客户端检查更新元数据
+### 3.8 客户端检查更新元数据
 
 `GET /v1/client/releases/{channel}/latest.json`
 
@@ -320,7 +342,7 @@ Content-Type: application/json
 }
 ```
 
-### 3.8 客户端下载安装包
+### 3.9 客户端下载安装包
 
 `GET /v1/client/releases/{channel}/files/{target}/{fileName}`
 
@@ -588,7 +610,7 @@ Content-Type: application/json
 
 1. 服务端以 `idDevice + idempotencyKey` 幂等，重复上报只跳过不重复计数。
 2. `featureCode` 当前固定支持：`voice_consultation`、`smart_consultation`、`report_interpretation`、`chat`、`diagnosis_checklist`、`diagnosis_recommendation`、`medication_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`treatment_plan_recommendation`、`knowledge_usage`。
-3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用。
+3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用。
 4. `traceId`、`consultationId`、`sessionId` 只用于关联审计链路，不参与调用次数累加。
 5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
 
@@ -1166,7 +1188,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 响应 `data`：
 
 ```json
-["语音问诊", "智能问诊", "报告单解读", "聊天", "AI诊断鉴别", "AI推荐诊断", "AI推荐用药", "AI推荐检查", "AI推荐检验", "AI推荐处置", "AI诊疗方案推荐", "知识库使用"]
+["语音问诊", "智能问诊", "报告单解读", "聊天", "AI诊断鉴别", "AI推荐诊断", "AI推荐用药", "AI推荐检查", "AI推荐检验", "AI推荐处置", "AI推荐治疗方案", "知识库使用"]
 ```
 
 ### 5.9 GET `/admin/api/analytics/function-usage`
@@ -1214,7 +1236,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 约束：
 
 1. `ranking` 按 `callCount` 倒序排列，已计算增长率（与上一等长周期对比）
-2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用
+2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用
 3. 调用次数来自 `c_ai_feature_event`，同一 `idDevice + idempotencyKey` 只入库一次，避免离线重传、接口重试和底层多条审计日志造成重复统计
 4. `c_ai_op_log` 仅用于审计与排障，不再作为辅诊功能统计的事实源
 5. 主流程内部自动 AI 推荐不重复拆分为 AI 推荐诊断/用药/检查/检验/处置/诊疗方案推荐；这些子功能只在医生显式触发对应独立辅助入口时计数，HIS Bridge 入口成功打开目标界面即计一次

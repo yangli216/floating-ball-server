@@ -37,6 +37,13 @@
 5. 未经明确要求，不引入 Redis、RocketMQ、微服务拆分等额外依赖。
 6. **请求签名校验禁止绕过**：`DeviceAuthFilter` 和 `RealtimeSpeechHandshakeInterceptor` 必须校验 ECDSA P-256 签名；新增 `/v1/*` 接口必须经过 `DeviceAuthFilter`，不得私自添加绕过路径。
 
+## Oracle SQL 交付规则
+
+1. `server/src/main/resources/sql/oracle/init.sql` 是业务 schema 的唯一初始化基线，新增表、字段、索引、注释和默认种子数据必须直接折叠进该文件。
+2. 工程交付默认只保留 `bootstrap.sql` 与 `init.sql`；不得在仓库中长期保留 `upgrade_*.sql` 补丁脚本。
+3. 现场旧库无法重建时，由 DBA 基于当前 `init.sql` 和现场库结构生成一次性迁移脚本；该脚本不作为常驻工程资产提交，除非用户明确要求纳入版本交付。
+4. 修改 `init.sql` 后必须同步更新 `server/src/main/resources/sql/oracle/README.md`，并维护 schema 测试，防止补丁文件回流。
+
 ## 当前阶段目标
 
 1. 第一优先级：跑通 `floating-ball` 的远端客户端接口。

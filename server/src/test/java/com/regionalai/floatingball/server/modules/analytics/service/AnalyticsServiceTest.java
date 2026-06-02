@@ -99,7 +99,7 @@ class AnalyticsServiceTest {
     @Test
     void getFunctionUsageShouldResolveTreatmentPlanLegacyModuleFilter() {
         FunctionUsageItemVO rankingItem = new FunctionUsageItemVO();
-        rankingItem.setModuleName("AI诊疗方案推荐");
+        rankingItem.setModuleName("AI推荐治疗方案");
         rankingItem.setCallCount(5L);
         rankingItem.setDoctorCount(1L);
         rankingItem.setAvgPerDoctor(5L);
@@ -111,7 +111,7 @@ class AnalyticsServiceTest {
         when(analyticsMapper.queryFunctionUsageTrend(any(FunctionUsageQueryDTO.class)))
             .thenReturn(Collections.<Map<String, Object>>emptyList());
         when(analyticsMapper.queryDistinctModules())
-            .thenReturn(Arrays.asList("语音问诊", "AI诊疗方案推荐"));
+            .thenReturn(Arrays.asList("语音问诊", "AI推荐治疗方案"));
 
         FunctionUsageQueryDTO query = new FunctionUsageQueryDTO();
         query.setDateFrom("2026-05-01");
@@ -120,9 +120,29 @@ class AnalyticsServiceTest {
 
         FunctionUsageResponseVO response = analyticsService.getFunctionUsage(query);
 
-        assertEquals("AI诊疗方案推荐", response.getRanking().get(0).getModuleName());
+        assertEquals("AI推荐治疗方案", response.getRanking().get(0).getModuleName());
         verify(analyticsMapper).queryFunctionUsageRanking(argThat(arg -> arg.getFunctionModules() != null
-            && arg.getFunctionModules().contains("AI诊疗方案推荐")));
+            && arg.getFunctionModules().contains("AI推荐治疗方案")));
+    }
+
+    @Test
+    void getFunctionUsageShouldResolveTreatmentPlanOldChineseModuleFilter() {
+        when(analyticsMapper.queryFunctionUsageRanking(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.<FunctionUsageItemVO>emptyList());
+        when(analyticsMapper.queryFunctionUsagePreviousRanking(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.<FunctionUsageItemVO>emptyList());
+        when(analyticsMapper.queryFunctionUsageTrend(any(FunctionUsageQueryDTO.class)))
+            .thenReturn(Collections.<Map<String, Object>>emptyList());
+        when(analyticsMapper.queryDistinctModules())
+            .thenReturn(Arrays.asList("语音问诊", "AI推荐治疗方案"));
+
+        FunctionUsageQueryDTO query = new FunctionUsageQueryDTO();
+        query.setFunctionModules(Collections.singletonList("AI诊疗方案推荐"));
+
+        analyticsService.getFunctionUsage(query);
+
+        verify(analyticsMapper).queryFunctionUsageRanking(argThat(arg -> arg.getFunctionModules() != null
+            && arg.getFunctionModules().contains("AI推荐治疗方案")));
     }
 
     @Test

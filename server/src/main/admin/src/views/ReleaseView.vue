@@ -8,7 +8,10 @@
           </el-select>
           <el-button @click="loadData">刷新</el-button>
         </div>
-        <el-button type="primary" icon="el-icon-upload" @click="openUpload">上传新版本</el-button>
+        <div class="release-toolbar__actions">
+          <el-button icon="el-icon-link" @click="openDownloadPage">打开下载页</el-button>
+          <el-button type="primary" icon="el-icon-upload" @click="openUpload">上传新版本</el-button>
+        </div>
       </div>
     </admin-filter-bar>
 
@@ -45,6 +48,18 @@
             <span v-if="row.fileSize" class="muted">（{{ formatFileSize(row.fileSize) }}）</span>
           </template>
         </el-table-column>
+        <el-table-column label="客户端下载" min-width="320">
+          <template slot-scope="{ row }">
+            <template v-if="row.downloadUrl">
+              <code-tag :value="row.downloadUrl" />
+              <div class="release-link-actions">
+                <table-action @click="copy(row.downloadUrl, '客户端下载链接')">复制</table-action>
+                <table-action @click="openUrl(row.downloadUrl)">打开</table-action>
+              </div>
+            </template>
+            <span v-else class="muted">暂无下载链接</span>
+          </template>
+        </el-table-column>
         <el-table-column label="更新源" min-width="300">
           <template slot-scope="{ row }">
             <code-tag :value="row.latestJsonUrl" />
@@ -55,7 +70,7 @@
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template slot-scope="{ row }">
-            <table-action :disabled="!row.latestJsonUrl" @click="copy(row.latestJsonUrl)">复制源</table-action>
+            <table-action :disabled="!row.latestJsonUrl" @click="copy(row.latestJsonUrl, '更新源')">复制源</table-action>
           </template>
         </el-table-column>
       </el-table>
@@ -271,6 +286,16 @@ export default {
       }
       this.dialogVisible = true
     },
+    openDownloadPage() {
+      const channel = this.filters.channel || 'production'
+      this.openUrl(`/client-download?channel=${encodeURIComponent(channel)}`)
+    },
+    openUrl(value) {
+      if (!value) {
+        return
+      }
+      window.open(value, '_blank', 'noopener')
+    },
     resetForm() {
       this.form = createDefaultForm()
       if (this.$refs.fileInput) {
@@ -354,10 +379,10 @@ export default {
         }
       })
     },
-    async copy(value) {
+    async copy(value, label = '链接') {
       try {
         await navigator.clipboard.writeText(value)
-        this.$message.success('已复制更新源')
+        this.$message.success(`已复制${label}`)
       } catch (error) {
         this.$message.error('复制失败，请手动选择文本复制')
       }
@@ -431,6 +456,20 @@ export default {
 
 .release-table-card {
   padding: 0;
+}
+
+.release-toolbar__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.release-link-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
 }
 
 .history-header {

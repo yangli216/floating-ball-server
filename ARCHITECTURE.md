@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-05-22
+> 更新日期：2026-06-02
 
 ## 1. 项目定位
 
@@ -19,7 +19,7 @@
 - Java 8
 - Spring Boot 2.7.x
 - MyBatis-Plus
-- Oracle 19c
+- Oracle 19c；运行包必须同时携带 `ojdbc8` 与 `orai18n`，以兼容 `ZHS16GBK` 等非 UTF 数据库字符集
 - Maven
 - WebClient / RestTemplate 用于上游 AI 与语音代理
 
@@ -89,6 +89,7 @@ floating-ball-server/
 5. AI、语音、Reviewer、PMPHAI 等服务端出站地址必须经过统一出站安全门；当前默认开启 `allow-all-hosts`、`allow-private-network`、`allow-insecure-http` 与代理软件 fake-ip 支持，不要求维护 host 白名单，适配医院内网 HTTP 上游。
 6. 如部署环境需要收紧出站边界，应显式设置 `FB_OUTBOUND_ALLOW_ALL_HOSTS=false`、`FB_OUTBOUND_ALLOW_PRIVATE_NETWORK=false`、`FB_OUTBOUND_ALLOW_INSECURE_HTTP=false`，并通过 `FB_OUTBOUND_ALLOWED_HOSTS` 指定允许访问的上游 host。
 7. 出站安全门按 host 做本地限流和熔断；上游失败达到阈值后短暂拒绝同 host 后续出站，防止 AI / 语音 / PMPHAI 配置异常拖垮后台线程与连接资源。
+8. 连接使用 `ZHS16GBK` 等 Oracle 非 UTF 字符集的医院库时，发布包内必须包含与 `ojdbc8` 同版本的 `orai18n` 运行时依赖；否则服务可能在启动期读取初始化数据时因 `Non supported character set` 退出，导致 8080 端口未监听。
 
 ### 3.2 客户端安全基线
 
@@ -123,6 +124,7 @@ floating-ball-server/
 - 对外更新源地址可通过 `FB_RELEASE_PUBLIC_BASE_URL` / `floating-ball.release.public-base-url` 固定指定；为空时若请求 Host 为 `localhost` / `127.0.0.1`，服务端会尽量自动替换为本机局域网 IPv4
 - 上传大小由 `FB_RELEASE_MAX_FILE_SIZE` / `FB_RELEASE_MAX_REQUEST_SIZE` 控制，默认 `2048MB`
 - 管理端通过 `/admin/api/releases` 查看当前发布，通过 `/admin/api/releases/upload` 上传 Tauri `latest.json` 与安装包；服务端自动解析版本号、平台 target、签名和更新说明，并重写为内网下载地址；上传时可勾选强制更新，服务端会把当前发布版本写入 `policy.json` 的 `minSupportedVersion`
+- 管理端“版本发布”列表展示当前安装包的公开下载地址，支持复制链接和浏览器直接打开；首次部署新客户端时可直接访问 `/client-download?channel=production` 选择平台下载安装包，无需 U 盘拷贝
 - 管理端通过 `/admin/api/releases/policy` 独立开启或关闭当前通道强制更新，不需要重新上传安装包；开启时最低可用版本固定为当前通道 `latestVersion`，关闭时清空 `minSupportedVersion`
 - 管理端通过 `/admin/api/releases/history` 查看历史发布快照，通过 `/admin/api/releases/rollback` 回滚到历史版本；回滚只恢复当前通道的 `latest.json` 与 `policy.json`，不会重新上传安装包
 - 每次上传新版本前，服务端会先把当前发布保存为历史快照；上传后也保存新版本快照。若同一版本分平台多次上传，服务端会合并同版本平台；若版本号变化，则重新开始该版本的 `platforms` 集合，避免把上一版本平台误混入新版本 `latest.json`
@@ -255,7 +257,7 @@ floating-ball-server/
 1. 功能调用事件是面向统计的业务事实源，独立于审计日志和问诊用户日志。
 2. 桌面端在用户真实触发功能时调用 `POST /v1/client/feature-events/batch`，一次明确功能调用只提交一条事件。
 3. 服务端以 `idDevice + idempotencyKey` 幂等入库到 `c_ai_feature_event`，客户端离线重试或接口重试不会重复计数。
-4. 事件固定使用 `featureCode` 表示产品功能，服务端统一映射展示名：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用。
+4. 事件固定使用 `featureCode` 表示产品功能，服务端统一映射展示名：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用。
 5. `traceId`、`consultationId`、`sessionId` 只用于把功能事件关联回 `c_ai_op_log` 或 `c_ai_user_consultation_log`，不参与统计去重。
 6. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。来自 HIS Bridge 的入口在桌面端接诊上下文校验通过并准备打开目标界面时即按成功调用入库，后续 AI 生成和问诊提交使用稳定幂等键避免重复统计。
 7. 管理端“辅诊功能”统计只读 `c_ai_feature_event`；`c_ai_op_log` 保留为排障与审计，不再承担统计推断。
@@ -274,7 +276,14 @@ floating-ball-server/
 2. 桌面端区域化模式下，语音问诊停止录音后先上报 `speechText` 与录音 base64；服务端将录音文件落到 `floating-ball.audit.speech-file-dir`，表内仅保存 `audio_file_path`、原文件名、MIME 和大小，避免把原始音频写入 JSON。
 3. 桌面端区域化模式下，在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交时上报 `finalSnapshot` 与 `selectionSnapshot`。
 4. 服务端按 `consultationId + consultationType + idDevice` upsert 到 `c_ai_user_consultation_log`，保证“一个病人一次问诊一条记录”，不记录医生每次中间编辑。
-5. 管理端新增“用户日志”模块，列表列为机构、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
+5. 服务端在写入最终快照时同步计算 `change_summary_json` 与 `total_changes`，供统计分析计算诊断符合率与用户日志变更筛选使用。
+6. 管理端新增“用户日志”模块，列表列为机构、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
+
+### 5.7 安全拒绝日志链路
+
+1. `DeviceAuthFilter` 与 `RealtimeSpeechHandshakeInterceptor` 对设备令牌、ECDSA P-256 请求签名、强制更新门禁等失败场景写入 `c_security_rejection_log`。
+2. 安全拒绝日志记录拒绝类型、请求方法、路径、客户端 IP、设备、机构、请求 ID、拒绝原因、签名头、客户端版本和更新通道；敏感 token 与完整签名不入库。
+3. 管理端“安全拦截”列表、“安全分析”概览/趋势/分布统一读取 `c_security_rejection_log`，不从普通审计日志或 HTTP 异常日志反推安全事件。
 
 ### 5.4 PMPHAI 知识库代理链路
 
@@ -347,7 +356,7 @@ floating-ball-server/
    - 支持时间范围快捷切换（今日/本周/本月/本季度/本年/自定义）
    - 支持区域、机构下拉筛选
    - 支持统计分析、辅诊功能和用户活跃度 Excel 数据导出
-   - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI诊疗方案推荐、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
+   - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
 
 约束：
 
@@ -376,6 +385,7 @@ floating-ball-server/
    - 激活机构通过 `uk_c_ai_org_code_active` 保证 `cd_org` 唯一
 3. `c_ai_device`
    - 激活设备通过 `uk_c_ai_device_code_org_active` 保证同机构内 `cd_device` 唯一，通过 `uk_c_ai_device_token_active` 保证设备令牌唯一
+   - `device_public_key` 保存桌面端注册时上传的 ECDSA P-256 SPKI 公钥，供后续 `/v1/*` 请求签名验签使用；已绑定公钥的设备不允许匿名重新注册覆盖
 4. `c_ai_config`
 5. `c_ai_prompt`
 6. `c_ai_data_package`
@@ -399,16 +409,21 @@ floating-ball-server/
    - 按一次问诊聚合运维用户日志，关键列包括机构、医生、患者、问诊类型、问诊时间
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
+   - `change_summary_json` 保存主诉、现病史、诊断、用药、检查、检验、处置和选中状态等类别变更计数，`total_changes` 保存总变更数，统计分析诊断符合率依赖其中的 `diagnosisChanges`
    - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`，并通过 `uk_c_ai_user_log_consultation_active` 保证激活记录中 `consultation_id + consultation_type + id_device` 唯一
 12. `c_ai_feature_event`
    - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
    - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次
    - 索引：`idx_c_ai_feature_event_time` / `_feature` / `_doctor` / `_org` / `_idem`
-13. `c_ai_user`
+13. `c_security_rejection_log`
+   - 记录设备鉴权、请求签名、强制更新门禁和实时语音握手等安全拒绝事件
+   - 关键列包括 `rejection_type`、`request_method`、`request_path`、`client_ip`、`id_device`、`cd_device`、`id_org`、`request_id`、`reject_reason`、`reject_detail`、`has_signature`、`timestamp_header`、`nonce_header`、`client_version`、`update_channel`
+   - 索引：`idx_c_security_rej_time` / `_type` / `_ip` / `_device` / `_path`
+14. `c_ai_user`
    - 激活账号通过 `uk_c_ai_user_code_active` 保证 `cd_user` 唯一，用户资料与角色映射替换在同一事务内完成
-14. `c_ai_role`
+15. `c_ai_role`
    - 激活角色通过 `uk_c_ai_role_code_active` 保证 `cd_role` 唯一
-15. `c_ai_user_role`
+16. `c_ai_user_role`
    - 激活映射通过 `uk_c_ai_user_role_active` 保证 `id_user + id_role` 不重复
 
 扩展表如用户、角色、统计可在第二阶段补齐。
@@ -421,7 +436,7 @@ floating-ball-server/
 2. 机构维护、角色停用、设备注册/维护：涉及主表和关联状态变化时同事务提交；机构编码、设备编码、设备令牌、角色编码由数据库唯一索引兜底。
 3. 反馈提交：上一版 `fg_latest` 降级、新版插入、首版 root 回填必须同事务完成；`uk_c_ai_feedback_latest_scope` 防止并发提交产生两个最新版。
 4. 问诊日志保存：按 `consultation_id + consultation_type + id_device` 做事务化 upsert；并发首次创建由唯一索引兜底，服务端在唯一冲突后重读并重试一次更新。
-5. 存量库升级唯一约束前必须先清理重复激活数据；升级脚本会在发现重复时中止并提示具体对象。
+5. 现场旧库一次性迁移添加唯一约束前必须先清理重复激活数据；迁移脚本应在发现重复时中止并提示具体对象。
 
 ## 8. Oracle 初始化约定
 
@@ -434,6 +449,7 @@ Oracle 初始化拆成两步：
    - 由当前应用连接账号登录后执行
    - 负责创建业务表、索引和种子数据
    - 不显式声明 `TABLESPACE`，由执行前切换好的 schema/默认表空间决定对象落点
+   - 作为工程交付的唯一业务初始化基线；历史补丁已折叠进该文件，仓库不再长期保留 `upgrade_*.sql`
 
 说明：
 

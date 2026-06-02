@@ -56,116 +56,35 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 @init.sql
 ```
 
-`init.sql` 当前是“删库重建”的权威基线，已包含：
+`init.sql` 当前是工程交付的权威基线，已包含：
 
-1. `c_ai_config` 的语音独立密钥、PMPHAI / Reviewer 服务端托管字段
-2. 默认区域 `REGION001`
-3. 默认机构 `ORG001`
-4. 默认管理员 `admin`
-5. 默认 AI 配置 `CFG001`
-6. 脚本末尾显式 `COMMIT`
+1. `c_ai_config` 的语音独立密钥、PMPHAI / Reviewer 服务端托管字段、思考模式、fast model 和检查项目独立审查开关
+2. `c_ai_device.device_public_key` 请求签名公钥字段
+3. 症状模板、模板变更日志、辅诊功能事件、安全拒绝日志等业务表
+4. 操作日志、问诊日志、反馈日志的结构化查询列、语音复盘字段、变更摘要字段和并发唯一索引
+5. 默认区域 `REGION001`
+6. 默认机构 `ORG001`
+7. 默认管理员 `admin`
+8. 默认 AI 配置 `CFG001`
+9. 脚本末尾显式 `COMMIT`
 
 说明：
 
 1. 默认 AI 配置仅用于打通 `register -> bootstrap -> audit` 的启动联调链路
 2. 真正的上游 AI 地址、密钥、模型请在删库重建后再通过管理端修改
-3. 初始开发阶段优先采用“删库重建 + 重跑 `init.sql`”，不要优先走增量补丁思路
+3. 当前工程交付采用“目标 schema 初始化/重建 + 重跑 `init.sql`”，不再在仓库中保留常驻增量补丁脚本
 4. 执行 `init.sql` 前请确认当前登录 schema 就是 `RBMH_AI`；脚本本身不再依赖 SQL*Plus 变量做前置校验
 
-## 存量库升级
+## 存量库处理
 
-如果库里已经存在旧版 `c_ai_config`，且当前环境明确不能删库重建，再使用当前应用账号执行：
+当前仓库不再保留 `upgrade_*.sql` 常驻补丁文件。各历史补丁已经折叠进 `init.sql`，工程交付时只交付 `bootstrap.sql` 与 `init.sql` 两个 Oracle 脚本。
 
-```sql
-@upgrade_20260421_ai_config_server_managed.sql
-@upgrade_20260428_ai_config_audio_key.sql
-@upgrade_20260511_ai_config_reviewer_check_examination.sql
-```
+如果现场库已经存在旧版本业务表，处理原则如下：
 
-这些脚本会为旧表补齐以下服务端托管字段：
-
-1. `pmphai_enabled`
-2. `pmphai_base_url`
-3. `pmphai_app_key_encrypted`
-4. `pmphai_app_secret_encrypted`
-5. `reviewer_enabled`
-6. `reviewer_base_url`
-7. `reviewer_api_key_encrypted`
-8. `reviewer_model`
-9. `audio_api_key_encrypted`
-10. `reviewer_check_examination_enabled`
-
-## 症状模板表升级
-
-如果库里已经存在旧版业务表，但还没有症状模板表，请继续使用当前应用账号执行：
-
-```sql
-@upgrade_20260421_symptom_template.sql
-```
-
-说明：
-
-1. 该脚本会补建 `c_ai_symptom_template`、`c_ai_symptom_template_change_log` 及相关索引
-2. `c_ai_symptom_template` 采用“一条症状一条记录”的结构，承接桌面端 disease editor 的后台化改造
-3. 模板的复杂字段（`config`、`applicablePopulation`、`tcmMetadata`、系统分类/部位数组）会以 JSON 片段方式存入表字段
-4. `c_ai_symptom_template_change_log` 记录症状模板新增、修改、删除、内置导入和 JSON 导入的操作者、时间、前后快照和字段级差异
-5. 表结构创建完成后，可在管理端“症状模板”页面使用“导入内置模板”把 `template-seeds` 的西医/中医基线导入指定作用域
-
-## 语音代理日志录音路径升级
-
-如果库里已经存在旧版 `c_ai_op_log`，但还没有录音文件路径字段，请继续使用当前应用账号执行：
-
-```sql
-@upgrade_20260422_op_log_audio_file_path.sql
-```
-
-说明：
-
-1. 该脚本会为 `c_ai_op_log` 补齐 `audio_file_path`
-2. 升级完成后，语音代理日志不再把原始 base64 音频写入 `payload_json`
-3. 录音内容会单独落为文件，数据库只保存对应文件路径
-
-## 结构化操作日志查询列升级
-
-如果库里已经存在旧版 `c_ai_op_log`，但还没有结构化查询列，请继续使用当前应用账号执行：
-
-```sql
-@upgrade_20260506_op_log_structured_query.sql
-```
-
-说明：
-
-1. 该脚本会为 `c_ai_op_log` 补齐 `op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`
-2. 升级完成后，管理端操作日志页可直接按动作编码、标题、来源模块、场景、traceId 查询
-3. 旧数据不会自动回填这些新列；如需对历史日志做精细查询，可执行额外数据修复脚本或接受仅对新日志生效
-
-## 运维用户日志语音复盘升级
-
-如果库里已经存在旧版 `c_ai_user_consultation_log`，但还没有语音问诊录音和 ASR 文本字段，请继续使用当前应用账号执行：
-
-```sql
-@upgrade_20260428_user_consultation_log_audio.sql
-```
-
-说明：
-
-1. 该脚本会为 `c_ai_user_consultation_log` 补齐 `speech_text`、`audio_file_path`、`audio_file_name`、`audio_mime_type`、`audio_size`
-2. 升级完成后，桌面端语音问诊会把录音和识别文字追加到同一条用户日志
-3. 录音内容会单独落为文件，数据库只保存对应文件路径和元数据，后台详情通过鉴权接口播放
-
-## 辅诊功能调用事件升级
-
-如果库里已经存在旧版业务表，但还没有辅诊功能调用事件表，请继续使用当前应用账号执行：
-
-```sql
-@upgrade_20260519_feature_event.sql
-```
-
-说明：
-
-1. 该脚本会补建 `c_ai_feature_event` 及相关索引
-2. 升级完成后，后台“辅诊功能”统计只读取该表，不再从 `c_ai_op_log` 审计日志推断调用次数
-3. `id_device + idempotency_key` 唯一索引用于保障客户端离线重传和接口重试不会重复计数
+1. 能重建的开发/联调环境，先备份必要数据，再清理目标 schema 并执行 `init.sql`
+2. 不能重建的生产/准生产环境，由 DBA 基于当前 `init.sql` 与现场库结构生成一次性迁移脚本
+3. 一次性迁移脚本必须先清理重复激活数据，再添加唯一索引，例如设备编码、设备令牌、反馈最新版、问诊日志幂等键等约束
+4. 迁移完成后，需要确认 `c_ai_device.device_public_key`、`c_ai_user_consultation_log.change_summary_json`、`c_ai_user_consultation_log.total_changes`、`c_security_rejection_log` 以及安全分析相关索引均已存在
 
 ## 如果暂时继续使用 `SYSTEM`
 

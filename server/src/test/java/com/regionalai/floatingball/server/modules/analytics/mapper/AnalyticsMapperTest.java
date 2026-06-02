@@ -25,11 +25,11 @@ class AnalyticsMapperTest {
 
         Method functionRanking = AnalyticsMapper.class.getMethod("queryFunctionUsageRanking", FunctionUsageQueryDTO.class);
         assertHasQueryParam(functionRanking);
-        assertSelectContains(functionRanking, "feature_name AS moduleName", "functionModules", "ORDER BY callCount DESC");
+        assertSelectContains(functionRanking, "CASE", "treatment_plan_recommendation", "ORDER BY callCount DESC");
 
         Method functionTrend = AnalyticsMapper.class.getMethod("queryFunctionUsageTrend", FunctionUsageQueryDTO.class);
         assertHasQueryParam(functionTrend);
-        assertSelectContains(functionTrend, "TO_CHAR(TRUNC(event_time)", "feature_name AS moduleName", "dayStr");
+        assertSelectContains(functionTrend, "TO_CHAR(TRUNC(event_time)", "AS moduleName", "dayStr");
     }
 
     @Test
@@ -40,8 +40,18 @@ class AnalyticsMapperTest {
         assertTrue(sql.contains("语音问诊"));
         assertTrue(sql.contains("智能问诊"));
         assertTrue(sql.contains("AI推荐处置"));
-        assertTrue(sql.contains("AI诊疗方案推荐"));
+        assertTrue(sql.contains("AI推荐治疗方案"));
         assertTrue(sql.contains("知识库使用"));
+    }
+
+    @Test
+    void diagnosisMatchedSqlShouldUseChangeSummary() throws Exception {
+        Method method = AnalyticsMapper.class.getMethod("countDiagnosisMatchedConsultations", AnalyticsQueryDTO.class);
+        String sql = joinedSql(method);
+
+        assertTrue(sql.contains("c_ai_user_consultation_log"));
+        assertTrue(sql.contains("change_summary_json"));
+        assertTrue(sql.contains("$.diagnosisChanges"));
     }
 
     private void assertHasQueryParam(Method method) {

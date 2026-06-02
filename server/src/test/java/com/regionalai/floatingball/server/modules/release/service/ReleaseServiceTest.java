@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.release.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseDownloadItem;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseHistoryView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyUpdateRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
@@ -82,6 +83,24 @@ class ReleaseServiceTest {
         ReleasePolicyView disabledPolicy = releaseService.getPolicy("production");
         assertFalse(Boolean.TRUE.equals(disabledPolicy.getForceUpdate()));
         assertNull(disabledPolicy.getMinSupportedVersion());
+    }
+
+    @Test
+    void downloadItemsShouldExposeCurrentReleaseFilesForFirstInstall() {
+        upload("1.2.15", "darwin-aarch64", "MedHermes_1.2.15_aarch64.app.tar.gz", false);
+        upload("1.2.15", "windows-x86_64", "MedHermes_1.2.15_x64-setup.nsis.zip", false);
+
+        List<ReleaseDownloadItem> items = releaseService.downloadItems("production", "http://release.lan:8080");
+
+        assertEquals(2, items.size());
+        ReleaseDownloadItem macItem = items.stream()
+            .filter(item -> "darwin-aarch64".equals(item.getTarget()))
+            .findFirst()
+            .orElseThrow(AssertionError::new);
+        assertEquals("1.2.15", macItem.getVersion());
+        assertEquals("MedHermes_1.2.15_aarch64.app.tar.gz", macItem.getFileName());
+        assertTrue(macItem.getDownloadUrl().startsWith("http://release.lan:8080/v1/client/releases/production/files/darwin-aarch64/"));
+        assertTrue(macItem.getFileSize() > 0);
     }
 
     private void upload(String version, String target, String fileName, boolean forceUpdate) {
