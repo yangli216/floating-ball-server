@@ -576,8 +576,8 @@ Content-Type: application/json
     {
       "eventId": "uuid",
       "featureCode": "voice_consultation",
-      "eventAction": "submit_voice_recording",
-      "idempotencyKey": "consultation:voice:CONSULT-001",
+      "eventAction": "open_voice_consultation",
+      "idempotencyKey": "voice_consultation:open_voice_consultation:EVENT-001",
       "traceId": "TRACE-001",
       "consultationId": "CONSULT-001",
       "sessionId": "SESSION-001",
@@ -612,7 +612,7 @@ Content-Type: application/json
 2. `featureCode` 当前固定支持：`voice_consultation`、`smart_consultation`、`report_interpretation`、`chat`、`diagnosis_checklist`、`diagnosis_recommendation`、`medication_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`treatment_plan_recommendation`、`knowledge_usage`。
 3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用。
 4. `traceId`、`consultationId`、`sessionId` 只用于关联审计链路，不参与调用次数累加。
-5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
+5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；同一就诊再次显式触发入口按新调用计数，后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
 
 ### 3.9 POST `/v1/client/user-logs/consultations`
 
@@ -1239,7 +1239,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 2. `moduleName`、`trend.modules` 和 `function-modules` 接口返回的名称均为产品功能维度，当前固定归并为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用
 3. 调用次数来自 `c_ai_feature_event`，同一 `idDevice + idempotencyKey` 只入库一次，避免离线重传、接口重试和底层多条审计日志造成重复统计
 4. `c_ai_op_log` 仅用于审计与排障，不再作为辅诊功能统计的事实源
-5. 主流程内部自动 AI 推荐不重复拆分为 AI 推荐诊断/用药/检查/检验/处置/诊疗方案推荐；这些子功能只在医生显式触发对应独立辅助入口时计数，HIS Bridge 入口成功打开目标界面即计一次
+5. 主流程内部自动 AI 推荐不重复拆分为 AI 推荐诊断/用药/检查/检验/处置/诊疗方案推荐；这些子功能只在医生显式触发对应独立辅助入口时计数，HIS Bridge 入口成功打开目标界面即计一次；同一条功能事件离线重试或接口重试不重复入库，同一就诊再次显式触发入口按新调用计数
 6. `doctorCount` 按事件中的医生 ID 优先统计；医生 ID 为空时回退设备 ID
 7. `trend` 仅包含排名前 5 的功能的逐日调用趋势
 8. `records` 为当前页数据，支持分页

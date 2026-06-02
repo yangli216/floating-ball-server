@@ -52,8 +52,8 @@ class FeatureEventServiceTest {
         FeatureEventBatchRequest.FeatureEventRequest event = new FeatureEventBatchRequest.FeatureEventRequest();
         event.setEventId("EVENT-001");
         event.setFeatureCode(FeatureEventCatalog.VOICE_CONSULTATION);
-        event.setEventAction("submit_voice_consultation");
-        event.setIdempotencyKey("consultation:voice:CONSULT-001");
+        event.setEventAction("open_voice_consultation");
+        event.setIdempotencyKey("voice_consultation:open_voice_consultation:EVENT-001");
         event.setTraceId("TRACE-001");
         event.setConsultationId("CONSULT-001");
         event.setSessionId("SESSION-001");
@@ -85,8 +85,8 @@ class FeatureEventServiceTest {
         assertEquals("REG001", saved.getIdRegion());
         assertEquals(FeatureEventCatalog.VOICE_CONSULTATION, saved.getFeatureCode());
         assertEquals("语音问诊", saved.getFeatureName());
-        assertEquals("submit_voice_consultation", saved.getEventAction());
-        assertEquals("consultation:voice:CONSULT-001", saved.getIdempotencyKey());
+        assertEquals("open_voice_consultation", saved.getEventAction());
+        assertEquals("voice_consultation:open_voice_consultation:EVENT-001", saved.getIdempotencyKey());
         assertEquals("TRACE-001", saved.getTraceId());
         assertEquals("CONSULT-001", saved.getConsultationId());
         assertEquals("SESSION-001", saved.getSessionId());
@@ -147,7 +147,7 @@ class FeatureEventServiceTest {
         event.setEventId("EVENT-TREATMENT-001");
         event.setFeatureCode(FeatureEventCatalog.TREATMENT_PLAN_RECOMMENDATION);
         event.setEventAction("open_treatment_plan_assist");
-        event.setIdempotencyKey("assist:treatment_plan:CONSULT-001");
+        event.setIdempotencyKey("treatment_plan_recommendation:open_treatment_plan_assist:EVENT-TREATMENT-001");
         event.setConsultationId("CONSULT-001");
 
         FeatureEventBatchRequest request = new FeatureEventBatchRequest();
@@ -163,7 +163,7 @@ class FeatureEventServiceTest {
         AiFeatureEvent saved = captor.getValue();
         assertEquals(FeatureEventCatalog.TREATMENT_PLAN_RECOMMENDATION, saved.getFeatureCode());
         assertEquals("AI推荐治疗方案", saved.getFeatureName());
-        assertEquals("assist:treatment_plan:CONSULT-001", saved.getIdempotencyKey());
+        assertEquals("treatment_plan_recommendation:open_treatment_plan_assist:EVENT-TREATMENT-001", saved.getIdempotencyKey());
     }
 
     @Test
@@ -175,7 +175,7 @@ class FeatureEventServiceTest {
 
         FeatureEventBatchRequest.FeatureEventRequest event = new FeatureEventBatchRequest.FeatureEventRequest();
         event.setFeatureCode(FeatureEventCatalog.SMART_CONSULTATION);
-        event.setIdempotencyKey("consultation:smart:CONSULT-001");
+        event.setIdempotencyKey("smart_consultation:open_smart_consultation:EVENT-001");
 
         FeatureEventBatchRequest request = new FeatureEventBatchRequest();
         request.setEvents(Collections.singletonList(event));
