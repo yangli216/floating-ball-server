@@ -18,6 +18,8 @@ public class AiDeviceView {
     private String sdStatus;
     private String clientVersion;
     private String osInfo;
+    private String registerIp;
+    private String lastSeenIp;
     private LocalDateTime dtLastHeartbeat;
     private LocalDateTime dtRegistered;
 }

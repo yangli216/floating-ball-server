@@ -74,7 +74,7 @@ class DeviceServiceTest {
         request.setOsInfo("Windows 11");
         request.setPublicKey("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtest-public-key-base64");
 
-        RegisterDeviceResponse response = deviceService.register(request);
+        RegisterDeviceResponse response = deviceService.register(request, "10.10.1.8");
 
         assertEquals("DEV001", response.getIdDevice());
         assertEquals(30, response.getHeartbeatInterval().intValue());
@@ -85,6 +85,8 @@ class DeviceServiceTest {
         assertEquals("1.0.0", existing.getClientVersion());
         assertEquals("Windows 11", existing.getOsInfo());
         assertEquals("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtest-public-key-base64", existing.getDevicePublicKey());
+        assertEquals("10.10.1.8", existing.getRegisterIp());
+        assertEquals("10.10.1.8", existing.getLastSeenIp());
         verify(aiDeviceMapper, times(1)).updateById(existing);
     }
 
@@ -114,6 +116,67 @@ class DeviceServiceTest {
         assertEquals("existing-token", existing.getDeviceToken());
         assertEquals("existing-public-key", existing.getDevicePublicKey());
         verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
+        verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
+    }
+
+    @Test
+    void registerShouldRejectDisabledDeviceCode() {
+        AiOrg org = buildOrg("ORG001", "REG001");
+        AiDevice disabled = new AiDevice();
+        disabled.setIdDevice("DEV-DISABLED");
+        disabled.setCdDevice("DEV-CODE");
+        disabled.setFgActive("0");
+        disabled.setDeviceToken("disabled-token");
+        disabled.setDevicePublicKey("old-public-key");
+
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiDeviceMapper.selectOne(any())).thenReturn(null, disabled);
+
+        RegisterDeviceRequest request = new RegisterDeviceRequest();
+        request.setCdOrg("ORG-CODE");
+        request.setCdDevice("DEV-CODE");
+        request.setNaDevice("旧版本终端");
+        request.setClientVersion("1.0.0");
+        request.setOsInfo("Windows 11");
+        request.setPublicKey("new-public-key");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> deviceService.register(request));
+
+        assertEquals("DEVICE-DISABLED", ex.getCode());
+        assertEquals("设备已被管理员停用，请联系管理员重新发放令牌后再连接", ex.getMessage());
+        verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
+        verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
+    }
+
+    @Test
+    void registerShouldAllowAdminIssuedActivePlaceholderWhenDisabledHistoryExists() {
+        AiOrg org = buildOrg("ORG001", "REG001");
+        AiDevice activePlaceholder = new AiDevice();
+        activePlaceholder.setIdDevice("DEV-NEW");
+        activePlaceholder.setCdDevice("DEV-CODE");
+        activePlaceholder.setFgActive("1");
+        activePlaceholder.setDeviceToken("active-token");
+
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiDeviceMapper.selectOne(any())).thenReturn(activePlaceholder);
+
+        RegisterDeviceRequest request = new RegisterDeviceRequest();
+        request.setCdOrg("ORG-CODE");
+        request.setCdDevice("DEV-CODE");
+        request.setNaDevice("恢复终端");
+        request.setClientVersion("1.2.13");
+        request.setOsInfo("Windows 11");
+        request.setPublicKey("restored-public-key");
+
+        RegisterDeviceResponse response = deviceService.register(request, "172.16.0.9");
+
+        assertEquals("DEV-NEW", response.getIdDevice());
+        assertEquals("active-token", response.getDeviceToken());
+        assertTrue(response.getHasPublicKey());
+        assertEquals("restored-public-key", activePlaceholder.getDevicePublicKey());
+        assertEquals("172.16.0.9", activePlaceholder.getRegisterIp());
+        assertEquals("172.16.0.9", activePlaceholder.getLastSeenIp());
+        verify(aiDeviceMapper).updateById(activePlaceholder);
         verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
     }
 
@@ -210,9 +273,25 @@ class DeviceServiceTest {
         device.setIdDevice("DEV001");
         device.setSdStatus("0");
 
-        deviceService.heartbeat(device);
+        deviceService.heartbeat(device, "192.168.1.23");
 
         assertEquals("1", device.getSdStatus());
+        assertEquals("192.168.1.23", device.getLastSeenIp());
+        assertTrue(device.getDtLastHeartbeat() != null);
+        verify(aiDeviceMapper).updateById(device);
+    }
+
+    @Test
+    void heartbeatShouldKeepLastSeenIpWhenClientIpUnknown() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setSdStatus("0");
+        device.setLastSeenIp("192.168.1.23");
+
+        deviceService.heartbeat(device, "unknown");
+
+        assertEquals("1", device.getSdStatus());
+        assertEquals("192.168.1.23", device.getLastSeenIp());
         assertTrue(device.getDtLastHeartbeat() != null);
         verify(aiDeviceMapper).updateById(device);
     }

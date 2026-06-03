@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.ApiResponse;
 import com.regionalai.floatingball.server.common.util.RequestIdUtils;
+import com.regionalai.floatingball.server.common.web.ClientIpUtils;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.service.DeviceService;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
@@ -220,7 +221,7 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
     private void recordRejection(String type, HttpServletRequest request, AiDevice device,
                                   String reason, String detail, boolean hasSignature,
                                   String timestamp, String nonce) {
-        String clientIp = resolveClientIp(request);
+        String clientIp = ClientIpUtils.resolve(request);
         SecurityRejectionLogService.RejectionRecord record = SecurityRejectionLogService.RejectionRecord
             .of(type, request.getMethod(), request.getRequestURI(), clientIp)
             .device(device)
@@ -231,19 +232,6 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
             .clientInfo(request.getHeader("X-Client-Version"), request.getHeader("X-Update-Channel"));
 
         rejectionLogService.logRejection(record);
-    }
-
-    private String resolveClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(ip)) {
-            int commaIdx = ip.indexOf(',');
-            return commaIdx > 0 ? ip.substring(0, commaIdx).trim() : ip.trim();
-        }
-        ip = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(ip)) {
-            return ip.trim();
-        }
-        return request.getRemoteAddr();
     }
 
     private void writeUnauthorized(HttpServletResponse response,

@@ -96,6 +96,8 @@ CREATE TABLE c_ai_device (
     dt_registered        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     client_version       VARCHAR2(64),
     os_info              VARCHAR2(500),
+    register_ip          VARCHAR2(64),
+    last_seen_ip         VARCHAR2(64),
     fg_active            CHAR(1) DEFAULT '1' NOT NULL,
     insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -115,12 +117,16 @@ COMMENT ON COLUMN c_ai_device.dt_last_heartbeat IS '最后心跳时间';
 COMMENT ON COLUMN c_ai_device.dt_registered IS '注册时间';
 COMMENT ON COLUMN c_ai_device.client_version IS '客户端版本';
 COMMENT ON COLUMN c_ai_device.os_info IS '操作系统信息';
+COMMENT ON COLUMN c_ai_device.register_ip IS '注册来源IP';
+COMMENT ON COLUMN c_ai_device.last_seen_ip IS '最近访问来源IP';
 COMMENT ON COLUMN c_ai_device.fg_active IS '逻辑删除标记';
 COMMENT ON COLUMN c_ai_device.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_device.update_time IS '更新时间';
 
 CREATE INDEX idx_c_ai_device_org ON c_ai_device (id_org, fg_active);
 CREATE INDEX idx_c_ai_device_token ON c_ai_device (device_token, fg_active);
+CREATE INDEX idx_c_ai_device_register_ip ON c_ai_device (register_ip, fg_active);
+CREATE INDEX idx_c_ai_device_last_seen_ip ON c_ai_device (last_seen_ip, fg_active);
 CREATE UNIQUE INDEX uk_c_ai_device_code_org_active ON c_ai_device (
     CASE WHEN fg_active = '1' THEN id_org END,
     CASE WHEN fg_active = '1' THEN cd_device END

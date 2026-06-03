@@ -61,6 +61,8 @@ class AdminDeviceControllerTest {
         device.setNaRegion("默认区域");
         device.setSdStatus("1");
         device.setDeviceTokenMasked("abcd****wxyz");
+        device.setRegisterIp("10.0.0.10");
+        device.setLastSeenIp("10.0.0.11");
 
         PageResponse<AiDeviceView> page = new PageResponse<AiDeviceView>(2, 20, 1, Collections.singletonList(device));
         when(deviceService.list(2, 20, "clinic")).thenReturn(page);
@@ -78,7 +80,9 @@ class AdminDeviceControllerTest {
             .andExpect(jsonPath("$.data.total").value(1))
             .andExpect(jsonPath("$.data.records[0].idDevice").value("DEV001"))
             .andExpect(jsonPath("$.data.records[0].naOrg").value("默认机构"))
-            .andExpect(jsonPath("$.data.records[0].deviceTokenMasked").value("abcd****wxyz"));
+            .andExpect(jsonPath("$.data.records[0].deviceTokenMasked").value("abcd****wxyz"))
+            .andExpect(jsonPath("$.data.records[0].registerIp").value("10.0.0.10"))
+            .andExpect(jsonPath("$.data.records[0].lastSeenIp").value("10.0.0.11"));
     }
 
     @Test

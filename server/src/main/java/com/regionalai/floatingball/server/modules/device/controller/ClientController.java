@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.device.controller;
 
 import com.regionalai.floatingball.server.common.api.ApiResponse;
 import com.regionalai.floatingball.server.common.util.RequestIdUtils;
+import com.regionalai.floatingball.server.common.web.ClientIpUtils;
 import com.regionalai.floatingball.server.modules.audit.dto.AuditBatchRequest;
 import com.regionalai.floatingball.server.modules.audit.dto.AuditBatchResponse;
 import com.regionalai.floatingball.server.modules.audit.service.AuditService;
@@ -58,14 +59,14 @@ public class ClientController {
     @PostMapping("/register")
     public ApiResponse<RegisterDeviceResponse> register(@Validated @RequestBody RegisterDeviceRequest request,
                                                         HttpServletRequest httpServletRequest) {
-        return ApiResponse.success(deviceService.register(request), RequestIdUtils.resolve(httpServletRequest));
+        return ApiResponse.success(deviceService.register(request, ClientIpUtils.resolve(httpServletRequest)), RequestIdUtils.resolve(httpServletRequest));
     }
 
     @PostMapping("/heartbeat")
     public ApiResponse<HeartbeatResponse> heartbeat(@RequestBody(required = false) HeartbeatRequest request,
                                                     HttpServletRequest httpServletRequest) {
         AiDevice device = DeviceContextHolder.get();
-        deviceService.heartbeat(device);
+        deviceService.heartbeat(device, ClientIpUtils.resolve(httpServletRequest));
         return ApiResponse.success(new HeartbeatResponse("ok", System.currentTimeMillis()), RequestIdUtils.resolve(httpServletRequest));
     }
 

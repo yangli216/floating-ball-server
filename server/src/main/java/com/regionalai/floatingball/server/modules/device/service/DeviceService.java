@@ -39,6 +39,9 @@ public class DeviceService {
     private static final Logger log = LoggerFactory.getLogger(DeviceService.class);
 
     private static final int DEFAULT_HEARTBEAT_INTERVAL = 30;
+    private static final String UNKNOWN_IP = "unknown";
+    private static final String DEVICE_DISABLED_CODE = "DEVICE-DISABLED";
+    private static final String DEVICE_DISABLED_MESSAGE = "设备已被管理员停用，请联系管理员重新发放令牌后再连接";
 
     private final AiDeviceMapper aiDeviceMapper;
     private final AiOrgMapper aiOrgMapper;
@@ -57,6 +60,12 @@ public class DeviceService {
 
     @Transactional
     public RegisterDeviceResponse register(RegisterDeviceRequest request) {
+        return register(request, null);
+    }
+
+    @Transactional
+    public RegisterDeviceResponse register(RegisterDeviceRequest request, String clientIp) {
+        String normalizedClientIp = normalizeIp(clientIp);
         AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getCdOrg, request.getCdOrg())
             .eq(AiOrg::getFgActive, "1"));
@@ -69,11 +78,7 @@ public class DeviceService {
             throw new UpdateRequiredException(policy.getMinSupportedVersion());
         }
 
-        AiDevice existing = aiDeviceMapper.selectOne(new LambdaQueryWrapper<AiDevice>()
-            .eq(AiDevice::getCdDevice, request.getCdDevice())
-            .eq(AiDevice::getIdOrg, org.getIdOrg())
-            .eq(AiDevice::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+        AiDevice existing = findDeviceByCodeAndOrg(request.getCdDevice(), org.getIdOrg(), "1");
 
         if (existing != null) {
             if (StringUtils.hasText(existing.getDevicePublicKey())) {
@@ -83,6 +88,10 @@ public class DeviceService {
             existing.setNaDevice(request.getNaDevice());
             existing.setClientVersion(request.getClientVersion());
             existing.setOsInfo(request.getOsInfo());
+            if (!StringUtils.hasText(existing.getRegisterIp())) {
+                existing.setRegisterIp(normalizedClientIp);
+            }
+            existing.setLastSeenIp(normalizedClientIp);
             if (!StringUtils.hasText(existing.getDeviceToken())) {
                 existing.setDeviceToken(generateToken());
             }
@@ -98,6 +107,13 @@ public class DeviceService {
             return new RegisterDeviceResponse(existing.getIdDevice(), existing.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL, StringUtils.hasText(existing.getDevicePublicKey()));
         }
 
+        AiDevice disabled = findDeviceByCodeAndOrg(request.getCdDevice(), org.getIdOrg(), "0");
+        if (disabled != null) {
+            log.warn("device register rejected: disabled device code. disabledIdDevice={}, cdDevice={}, idOrg={}",
+                disabled.getIdDevice(), disabled.getCdDevice(), org.getIdOrg());
+            throw new BusinessException(DEVICE_DISABLED_CODE, DEVICE_DISABLED_MESSAGE);
+        }
+
         AiDevice device = new AiDevice();
         device.setCdDevice(request.getCdDevice());
         device.setNaDevice(request.getNaDevice());
@@ -109,6 +125,8 @@ public class DeviceService {
         device.setDtRegistered(LocalDateTime.now());
         device.setClientVersion(request.getClientVersion());
         device.setOsInfo(request.getOsInfo());
+        device.setRegisterIp(normalizedClientIp);
+        device.setLastSeenIp(normalizedClientIp);
         device.setFgActive("1");
         try {
             aiDeviceMapper.insert(device);
@@ -128,8 +146,17 @@ public class DeviceService {
 
     @Transactional
     public void heartbeat(AiDevice device) {
+        heartbeat(device, null);
+    }
+
+    @Transactional
+    public void heartbeat(AiDevice device, String clientIp) {
         device.setDtLastHeartbeat(LocalDateTime.now());
         device.setSdStatus("1");
+        String normalizedClientIp = normalizeIp(clientIp);
+        if (StringUtils.hasText(normalizedClientIp) && !UNKNOWN_IP.equalsIgnoreCase(normalizedClientIp)) {
+            device.setLastSeenIp(normalizedClientIp);
+        }
         aiDeviceMapper.updateById(device);
         log.debug("device heartbeat. idDevice={}", device.getIdDevice());
     }
@@ -245,6 +272,14 @@ public class DeviceService {
         }
     }
 
+    private AiDevice findDeviceByCodeAndOrg(String cdDevice, String idOrg, String activeFlag) {
+        return aiDeviceMapper.selectOne(new LambdaQueryWrapper<AiDevice>()
+            .eq(AiDevice::getCdDevice, cdDevice)
+            .eq(AiDevice::getIdOrg, idOrg)
+            .eq(AiDevice::getFgActive, activeFlag)
+            .last("FETCH FIRST 1 ROWS ONLY"));
+    }
+
     private List<AiDeviceView> toViews(List<AiDevice> records) {
         if (records == null || records.isEmpty()) {
             return Collections.emptyList();
@@ -282,9 +317,16 @@ public class DeviceService {
         view.setSdStatus(device.getSdStatus());
         view.setClientVersion(device.getClientVersion());
         view.setOsInfo(device.getOsInfo());
+        view.setRegisterIp(device.getRegisterIp());
+        view.setLastSeenIp(device.getLastSeenIp());
         view.setDtLastHeartbeat(device.getDtLastHeartbeat());
         view.setDtRegistered(device.getDtRegistered());
         return view;
+    }
+
+    private String normalizeIp(String clientIp) {
+        String ip = StringUtils.hasText(clientIp) ? clientIp.trim() : UNKNOWN_IP;
+        return ip.length() > 64 ? ip.substring(0, 64) : ip;
     }
 
     private String generateToken() {

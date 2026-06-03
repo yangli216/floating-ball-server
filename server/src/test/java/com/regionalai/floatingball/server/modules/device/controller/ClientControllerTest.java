@@ -88,12 +88,13 @@ class ClientControllerTest {
         request.setClientVersion("1.2.3");
         request.setPublicKey("public-key");
 
-        when(deviceService.register(any(RegisterDeviceRequest.class)))
+        when(deviceService.register(any(RegisterDeviceRequest.class), eq("10.0.0.10")))
             .thenReturn(new RegisterDeviceResponse("DEV001", "token-1", 30, true));
 
         mockMvc.perform(post("/v1/client/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Request-Id", "RID-client-register")
+                .header("X-Forwarded-For", "10.0.0.10, 10.0.0.1")
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("0"))
@@ -102,6 +103,8 @@ class ClientControllerTest {
             .andExpect(jsonPath("$.data.deviceToken").value("token-1"))
             .andExpect(jsonPath("$.data.heartbeatInterval").value(30))
             .andExpect(jsonPath("$.data.hasPublicKey").value(true));
+
+        verify(deviceService).register(any(RegisterDeviceRequest.class), eq("10.0.0.10"));
     }
 
     @Test
@@ -176,6 +179,7 @@ class ClientControllerTest {
         mockMvc.perform(post("/v1/client/heartbeat")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Request-Id", "RID-client-heartbeat")
+                .header("X-Real-IP", "10.0.0.11")
                 .content("{}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("0"))
@@ -190,7 +194,7 @@ class ClientControllerTest {
             .andExpect(jsonPath("$.requestId").value("RID-client-audit"))
             .andExpect(jsonPath("$.data.accepted").value(3));
 
-        verify(deviceService).heartbeat(device);
+        verify(deviceService).heartbeat(device, "10.0.0.11");
         verify(auditService).saveBatch(eq(device), any(AuditBatchRequest.class));
     }
 

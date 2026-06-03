@@ -53,4 +53,10 @@ public class AiDevice extends BaseEntity {
 
     @TableField("device_public_key")
     private String devicePublicKey;
+
+    @TableField("register_ip")
+    private String registerIp;
+
+    @TableField("last_seen_ip")
+    private String lastSeenIp;
 }

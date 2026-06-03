@@ -59,7 +59,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 `init.sql` 当前是工程交付的权威基线，已包含：
 
 1. `c_ai_config` 的语音独立密钥、PMPHAI / Reviewer 服务端托管字段、思考模式、fast model 和检查项目独立审查开关
-2. `c_ai_device.device_public_key` 请求签名公钥字段
+2. `c_ai_device.device_public_key` 请求签名公钥字段，以及 `register_ip` / `last_seen_ip` 注册与最近访问来源字段
 3. 症状模板、模板变更日志、辅诊功能事件、安全拒绝日志等业务表
 4. 操作日志、问诊日志、反馈日志的结构化查询列、语音复盘字段、变更摘要字段和并发唯一索引
 5. 默认区域 `REGION001`
@@ -84,7 +84,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 1. 能重建的开发/联调环境，先备份必要数据，再清理目标 schema 并执行 `init.sql`
 2. 不能重建的生产/准生产环境，由 DBA 基于当前 `init.sql` 与现场库结构生成一次性迁移脚本
 3. 一次性迁移脚本必须先清理重复激活数据，再添加唯一索引，例如设备编码、设备令牌、反馈最新版、问诊日志幂等键等约束
-4. 迁移完成后，需要确认 `c_ai_device.device_public_key`、`c_ai_user_consultation_log.change_summary_json`、`c_ai_user_consultation_log.total_changes`、`c_security_rejection_log` 以及安全分析相关索引均已存在
+4. 迁移完成后，需要确认 `c_ai_device.device_public_key`、`c_ai_device.register_ip`、`c_ai_device.last_seen_ip`、`c_ai_user_consultation_log.change_summary_json`、`c_ai_user_consultation_log.total_changes`、`c_security_rejection_log` 以及安全分析相关索引均已存在
 
 ## 如果暂时继续使用 `SYSTEM`
 

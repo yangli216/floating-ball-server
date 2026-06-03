@@ -95,9 +95,10 @@ floating-ball-server/
 
 1. `/v1/client/register` 与 `/v1/client/releases/*` 是客户端侧仅有的未签名入口；其他 `/v1/*` 必须同时校验 `deviceToken` 与 ECDSA P-256 请求签名。
 2. 签名必须绑定实际请求体：服务端用收到的 body 重算 SHA-256，并用该 hash 参与验签，不信任客户端单独声明的 body hash。
-3. 已绑定公钥的设备不允许通过匿名注册覆盖公钥或取回旧 token；本地 token/key 丢失时，桌面端重新生成兜底设备编码注册为新设备，以降低弱运维场景下的人工介入。
-4. 实时语音 WebSocket 握手同样校验设备令牌、签名与客户端版本门禁；日志不得输出完整 token 或签名。
-5. 所有 `ApiResponse.timestamp` 均为服务端 epoch 毫秒时间，桌面端可用它维护签名时钟偏移；服务端仍按固定时钟窗口验签，不因客户端本地时区或系统时间漂移绕过签名校验。
+3. 已绑定公钥的激活设备不允许通过匿名注册覆盖公钥或取回旧 token；本地 token/key 丢失时，桌面端重新生成兜底设备编码注册为新设备，以降低弱运维场景下的人工介入。
+4. 管理端停用设备令牌后，服务端把同机构同 `cdDevice` 的停用记录视为封禁记录；`/v1/client/register` 必须拒绝该设备编码重新领取 token，避免指定旧客户端在 401 后自动重注册绕过禁用。
+5. 实时语音 WebSocket 握手同样校验设备令牌、签名与客户端版本门禁；日志不得输出完整 token 或签名。
+6. 所有 `ApiResponse.timestamp` 均为服务端 epoch 毫秒时间，桌面端可用它维护签名时钟偏移；服务端仍按固定时钟窗口验签，不因客户端本地时区或系统时间漂移绕过签名校验。
 
 ## 4. 后端分层
 
@@ -385,7 +386,9 @@ floating-ball-server/
    - 激活机构通过 `uk_c_ai_org_code_active` 保证 `cd_org` 唯一
 3. `c_ai_device`
    - 激活设备通过 `uk_c_ai_device_code_org_active` 保证同机构内 `cd_device` 唯一，通过 `uk_c_ai_device_token_active` 保证设备令牌唯一
-   - `device_public_key` 保存桌面端注册时上传的 ECDSA P-256 SPKI 公钥，供后续 `/v1/*` 请求签名验签使用；已绑定公钥的设备不允许匿名重新注册覆盖
+   - `device_public_key` 保存桌面端注册时上传的 ECDSA P-256 SPKI 公钥，供后续 `/v1/*` 请求签名验签使用；已绑定公钥的激活设备不允许匿名重新注册覆盖
+   - `fg_active='0'` 的同机构同 `cd_device` 设备记录用于表达后台停用/封禁，注册接口必须拒绝其重新领取 token；若管理员需要恢复该设备，应先新增同 `cd_device` 的激活令牌占位，再由客户端注册补录公钥
+   - `register_ip` 记录注册请求来源 IP，`last_seen_ip` 随注册和心跳刷新；两者用于后台定位旧客户端、异常终端和网段，不参与设备身份认证或签名校验
 4. `c_ai_config`
 5. `c_ai_prompt`
 6. `c_ai_data_package`

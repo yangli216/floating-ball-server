@@ -34,6 +34,12 @@
         <el-table-column label="客户端版本" width="120">
           <template slot-scope="{ row }"><code-tag :value="row.clientVersion" /></template>
         </el-table-column>
+        <el-table-column label="注册 IP" min-width="130">
+          <template slot-scope="{ row }"><code-tag :value="row.registerIp" /></template>
+        </el-table-column>
+        <el-table-column label="最近 IP" min-width="130">
+          <template slot-scope="{ row }"><code-tag :value="row.lastSeenIp" /></template>
+        </el-table-column>
         <el-table-column label="最后心跳" min-width="160">
           <template slot-scope="{ row }">
             {{ formatDateTime(row.dtLastHeartbeat) }}

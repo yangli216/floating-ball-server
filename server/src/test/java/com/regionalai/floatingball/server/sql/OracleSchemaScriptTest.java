@@ -41,7 +41,11 @@ class OracleSchemaScriptTest {
         String initSql = readSql(ORACLE_SQL_DIR.resolve("init.sql"));
 
         assertContains(initSql, "device_public_key    VARCHAR2(1000)");
+        assertContains(initSql, "register_ip          VARCHAR2(64)");
+        assertContains(initSql, "last_seen_ip         VARCHAR2(64)");
         assertContains(initSql, "COMMENT ON COLUMN c_ai_device.device_public_key");
+        assertContains(initSql, "COMMENT ON COLUMN c_ai_device.register_ip");
+        assertContains(initSql, "COMMENT ON COLUMN c_ai_device.last_seen_ip");
 
         assertContains(initSql, "fast_model_name          VARCHAR2(128)");
         assertContains(initSql, "enable_thinking          CHAR(1) DEFAULT '0' NOT NULL");
@@ -74,6 +78,8 @@ class OracleSchemaScriptTest {
 
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_device_code_org_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_device_token_active");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_device_register_ip");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_device_last_seen_ip");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feature_event_idem");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_log_consultation_active");

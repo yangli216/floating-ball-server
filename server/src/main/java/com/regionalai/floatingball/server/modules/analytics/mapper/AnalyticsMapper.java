@@ -232,10 +232,6 @@ public interface AnalyticsMapper {
         "SELECT '聊天' FROM dual UNION ALL",
         "SELECT 'AI诊断鉴别' FROM dual UNION ALL",
         "SELECT 'AI推荐诊断' FROM dual UNION ALL",
-        "SELECT 'AI推荐用药' FROM dual UNION ALL",
-        "SELECT 'AI推荐检查' FROM dual UNION ALL",
-        "SELECT 'AI推荐检验' FROM dual UNION ALL",
-        "SELECT 'AI推荐处置' FROM dual UNION ALL",
         "SELECT 'AI推荐治疗方案' FROM dual UNION ALL",
         "SELECT '知识库使用' FROM dual"
     })
