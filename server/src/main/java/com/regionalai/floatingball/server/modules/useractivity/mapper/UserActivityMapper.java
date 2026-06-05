@@ -11,10 +11,15 @@ import java.util.Map;
 @Mapper
 public interface UserActivityMapper {
 
+    String DEVICE_SCOPE_JOIN = "JOIN c_ai_org o ON o.id_org = d.id_org AND o.fg_active = '1' AND o.sd_status = '1'";
+    String DEVICE_REGION_JOIN = "JOIN c_ai_region r ON r.id_region = o.id_region AND r.fg_active = '1' AND r.sd_status = '1'";
+
     @Select({
         "<script>",
         "SELECT COUNT(DISTINCT d.id_device) AS cnt",
         "FROM c_ai_device d",
+        DEVICE_SCOPE_JOIN,
+        DEVICE_REGION_JOIN,
         "WHERE d.fg_active = '1'",
         "  AND EXISTS (",
         "    SELECT 1 FROM c_ai_user_consultation_log ucl",
@@ -27,10 +32,10 @@ public interface UserActivityMapper {
         "    </if>",
         "  )",
         "<if test='query.idRegion != null and query.idRegion != \"\"'>",
-        "  AND d.id_region = #{query.idRegion}",
+        "  AND o.id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND d.id_org = #{query.idOrg}",
+        "  AND o.id_org = #{query.idOrg}",
         "</if>",
         "</script>"
     })
@@ -40,12 +45,14 @@ public interface UserActivityMapper {
         "<script>",
         "SELECT COUNT(1) AS cnt",
         "FROM c_ai_device d",
+        DEVICE_SCOPE_JOIN,
+        DEVICE_REGION_JOIN,
         "WHERE d.fg_active = '1'",
         "<if test='query.idRegion != null and query.idRegion != \"\"'>",
-        "  AND d.id_region = #{query.idRegion}",
+        "  AND o.id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND d.id_org = #{query.idOrg}",
+        "  AND o.id_org = #{query.idOrg}",
         "</if>",
         "</script>"
     })
@@ -55,9 +62,10 @@ public interface UserActivityMapper {
         "<script>",
         "SELECT COUNT(1) AS cnt",
         "FROM c_ai_user_consultation_log ucl",
-        "LEFT JOIN c_ai_device d ON d.id_device = ucl.id_device AND d.fg_active = '1'",
+        "JOIN c_ai_device d ON d.id_device = ucl.id_device AND d.fg_active = '1'",
+        DEVICE_SCOPE_JOIN,
+        DEVICE_REGION_JOIN,
         "WHERE ucl.fg_active = '1'",
-        "  AND d.id_device IS NOT NULL",
         "  AND ucl.status = 'completed'",
         "<if test='query.dateFrom != null and query.dateFrom != \"\"'>",
         "  AND ucl.consultation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
@@ -66,10 +74,10 @@ public interface UserActivityMapper {
         "  AND ucl.consultation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
         "</if>",
         "<if test='query.idRegion != null and query.idRegion != \"\"'>",
-        "  AND d.id_region = #{query.idRegion}",
+        "  AND o.id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND d.id_org = #{query.idOrg}",
+        "  AND o.id_org = #{query.idOrg}",
         "</if>",
         "</script>"
     })
@@ -79,9 +87,10 @@ public interface UserActivityMapper {
         "<script>",
         "SELECT COUNT(1) AS cnt",
         "FROM c_ai_user_consultation_log ucl",
-        "LEFT JOIN c_ai_device d ON d.id_device = ucl.id_device AND d.fg_active = '1'",
+        "JOIN c_ai_device d ON d.id_device = ucl.id_device AND d.fg_active = '1'",
+        DEVICE_SCOPE_JOIN,
+        DEVICE_REGION_JOIN,
         "WHERE ucl.fg_active = '1'",
-        "  AND d.id_device IS NOT NULL",
         "<if test='query.dateFrom != null and query.dateFrom != \"\"'>",
         "  AND ucl.consultation_time &gt;= TO_DATE(#{query.dateFrom}, 'yyyy-MM-dd')",
         "</if>",
@@ -89,10 +98,10 @@ public interface UserActivityMapper {
         "  AND ucl.consultation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
         "</if>",
         "<if test='query.idRegion != null and query.idRegion != \"\"'>",
-        "  AND d.id_region = #{query.idRegion}",
+        "  AND o.id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND d.id_org = #{query.idOrg}",
+        "  AND o.id_org = #{query.idOrg}",
         "</if>",
         "</script>"
     })
@@ -107,8 +116,10 @@ public interface UserActivityMapper {
 
     @Select({
         "<script>",
-        "SELECT d.id_region, COUNT(DISTINCT d.id_device) AS cnt",
+        "SELECT o.id_region, COUNT(DISTINCT d.id_device) AS cnt",
         "FROM c_ai_device d",
+        DEVICE_SCOPE_JOIN,
+        DEVICE_REGION_JOIN,
         "WHERE d.fg_active = '1'",
         "  AND EXISTS (",
         "    SELECT 1 FROM c_ai_user_consultation_log ucl",
@@ -120,10 +131,13 @@ public interface UserActivityMapper {
         "      AND ucl.consultation_time &lt; TO_DATE(#{query.dateTo}, 'yyyy-MM-dd') + 1",
         "    </if>",
         "  )",
-        "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND d.id_org = #{query.idOrg}",
+        "<if test='query.idRegion != null and query.idRegion != \"\"'>",
+        "  AND o.id_region = #{query.idRegion}",
         "</if>",
-        "GROUP BY d.id_region",
+        "<if test='query.idOrg != null and query.idOrg != \"\"'>",
+        "  AND o.id_org = #{query.idOrg}",
+        "</if>",
+        "GROUP BY o.id_region",
         "</script>"
     })
     List<Map<String, Object>> countActiveUsersByRegion(@Param("query") UserActivityQueryDTO query);
@@ -131,7 +145,7 @@ public interface UserActivityMapper {
     @Select({
         "<script>",
         "SELECT d.id_device AS idDevice, d.cd_device AS cdDevice, d.na_device AS naDevice,",
-        "  d.id_org AS idOrg, o.na_org AS naOrg, d.id_region AS idRegion, r.na_region AS naRegion,",
+        "  o.id_org AS idOrg, o.na_org AS naOrg, o.id_region AS idRegion, r.na_region AS naRegion,",
         "  (SELECT na_doctor FROM (",
         "    SELECT ucl5.na_doctor FROM c_ai_user_consultation_log ucl5",
         "    WHERE ucl5.fg_active = '1' AND ucl5.id_device = d.id_device",
@@ -165,14 +179,14 @@ public interface UserActivityMapper {
         "   </if>",
         "  ) AS effectiveConsultationCount",
         "FROM c_ai_device d",
-        "LEFT JOIN c_ai_org o ON o.id_org = d.id_org AND o.fg_active = '1'",
-        "LEFT JOIN c_ai_region r ON r.id_region = d.id_region AND r.fg_active = '1'",
+        DEVICE_SCOPE_JOIN,
+        DEVICE_REGION_JOIN,
         "WHERE d.fg_active = '1'",
         "<if test='query.idRegion != null and query.idRegion != \"\"'>",
-        "  AND d.id_region = #{query.idRegion}",
+        "  AND o.id_region = #{query.idRegion}",
         "</if>",
         "<if test='query.idOrg != null and query.idOrg != \"\"'>",
-        "  AND d.id_org = #{query.idOrg}",
+        "  AND o.id_org = #{query.idOrg}",
         "</if>",
         "<if test='query.activeStatus == \"active\"'>",
         "  AND EXISTS (",

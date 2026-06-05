@@ -53,7 +53,7 @@ class OrgServiceTest {
 
         when(aiOrgMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mapperResult);
 
-        PageResponse<AiOrg> response = orgService.list(2, 5, "人民");
+        PageResponse<AiOrg> response = orgService.list(2, 5, "人民", "REG001", "1");
 
         assertEquals(2L, response.getCurrent());
         assertEquals(5L, response.getSize());
@@ -68,6 +68,8 @@ class OrgServiceTest {
         String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
         long likeCount = sqlSegment.split("LIKE", -1).length - 1;
         assertTrue(sqlSegment.contains("LIKE"));
+        assertTrue(sqlSegment.contains("id_region"));
+        assertTrue(sqlSegment.contains("sd_status"));
         assertEquals(2L, likeCount);
     }
 
@@ -134,14 +136,30 @@ class OrgServiceTest {
     }
 
     @Test
-    void invalidateShouldMarkOrgInactive() {
+    void invalidateShouldDisableOrgStatus() {
         AiOrg org = buildOrg("ORG001", "ORG-CODE", "区域总院");
         org.setFgActive("1");
+        org.setSdStatus("1");
         when(aiOrgMapper.selectById("ORG001")).thenReturn(org);
 
         orgService.invalidate("ORG001");
 
-        assertEquals("0", org.getFgActive());
+        assertEquals("1", org.getFgActive());
+        assertEquals("0", org.getSdStatus());
+        verify(aiOrgMapper).updateById(org);
+    }
+
+    @Test
+    void enableShouldEnableOrgStatus() {
+        AiOrg org = buildOrg("ORG001", "ORG-CODE", "区域总院");
+        org.setFgActive("1");
+        org.setSdStatus("0");
+        when(aiOrgMapper.selectById("ORG001")).thenReturn(org);
+
+        orgService.enable("ORG001");
+
+        assertEquals("1", org.getFgActive());
+        assertEquals("1", org.getSdStatus());
         verify(aiOrgMapper).updateById(org);
     }
 

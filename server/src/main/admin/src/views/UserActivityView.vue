@@ -15,7 +15,7 @@
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
-          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="search">
+          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="handleRegionChange">
             <el-option
               v-for="r in regionOptions"
               :key="r.id"
@@ -28,7 +28,7 @@
           <div class="filter-label">机构选择</div>
           <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" class="filter-select" @change="search">
             <el-option
-              v-for="o in orgOptions"
+              v-for="o in filteredOrgOptions"
               :key="o.id"
               :label="o.name"
               :value="o.id"
@@ -101,7 +101,7 @@
 
 <script>
 import http from '../api/http'
-import { refOptions } from '../api/reference'
+import { activeRefOptions } from '../api/reference'
 import { AdminFilterBar, MetricCard, StatusPill, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
@@ -142,6 +142,12 @@ export default {
     }
   },
   computed: {
+    filteredOrgOptions() {
+      if (!this.query.idRegion) {
+        return this.orgOptions
+      }
+      return this.orgOptions.filter(item => item.idRegion === this.query.idRegion)
+    },
     cardCompareLabel() {
       const m = {
         today: '较昨日',
@@ -246,12 +252,19 @@ export default {
     },
     async loadRefOptions() {
       try {
-        const refs = await refOptions()
+        const refs = await activeRefOptions()
         this.regionOptions = (refs.regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
-        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg }))
+        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg, idRegion: o.idRegion }))
       } catch (e) {
         // degrade gracefully
       }
+    },
+    handleRegionChange() {
+      const selectedOrg = this.orgOptions.find(item => item.id === this.query.idOrg)
+      if (this.query.idRegion && selectedOrg && selectedOrg.idRegion !== this.query.idRegion) {
+        this.query.idOrg = ''
+      }
+      this.search()
     },
     onPageChange(page) {
       this.userPage.current = page

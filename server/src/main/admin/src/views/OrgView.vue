@@ -50,7 +50,7 @@
         <template slot-scope="{ row }">
           <div class="table-actions">
             <table-action @click="openEdit(row)">编辑</table-action>
-            <table-action danger @click="removeRecord(row)">停用</table-action>
+            <table-action :danger="isEnabled(row)" @click="toggleStatus(row)">{{ isEnabled(row) ? '停用' : '启用' }}</table-action>
           </div>
         </template>
       </el-table-column>
@@ -190,6 +190,9 @@ export default {
     statusMeta(value) {
       return findStatusMeta(configStatusOptions, value)
     },
+    isEnabled(row) {
+      return row && row.sdStatus === '1'
+    },
     resolveRegionName(idRegion) {
       return idRegion ? this.regionMap[idRegion] || idRegion : '--'
     },
@@ -302,17 +305,23 @@ export default {
         }
       })
     },
-    removeRecord(row) {
-      this.$confirm(`确认停用机构「${row.naOrg || row.cdOrg}」吗？`, '提示', {
+    toggleStatus(row) {
+      const enable = !this.isEnabled(row)
+      const actionText = enable ? '启用' : '停用'
+      this.$confirm(`确认${actionText}机构「${row.naOrg || row.cdOrg}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {
-          await http.delete(`/admin/api/orgs/${row.idOrg}`)
-          this.$message.success('停用成功')
+          if (enable) {
+            await http.post(`/admin/api/orgs/${row.idOrg}/enable`)
+          } else {
+            await http.delete(`/admin/api/orgs/${row.idOrg}`)
+          }
+          this.$message.success(`${actionText}成功`)
           await this.loadReferences()
           this.loadData()
         } catch (error) {
-          this.$message.error(error.message || '停用失败')
+          this.$message.error(error.message || `${actionText}失败`)
         }
       }).catch(() => {})
     }

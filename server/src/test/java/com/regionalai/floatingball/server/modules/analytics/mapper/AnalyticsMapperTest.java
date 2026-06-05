@@ -29,7 +29,7 @@ class AnalyticsMapperTest {
 
         Method functionTrend = AnalyticsMapper.class.getMethod("queryFunctionUsageTrend", FunctionUsageQueryDTO.class);
         assertHasQueryParam(functionTrend);
-        assertSelectContains(functionTrend, "TO_CHAR(TRUNC(event_time)", "AS moduleName", "dayStr");
+        assertSelectContains(functionTrend, "TO_CHAR(TRUNC(e.event_time)", "AS moduleName", "dayStr");
     }
 
     @Test
@@ -54,6 +54,17 @@ class AnalyticsMapperTest {
         assertTrue(sql.contains("$.diagnosisChanges"));
     }
 
+    @Test
+    void analyticsSqlShouldJoinEnabledRegionAndOrgForScopeFilters() throws Exception {
+        Method summary = AnalyticsMapper.class.getMethod("countAiService", AnalyticsQueryDTO.class);
+        Method consultation = AnalyticsMapper.class.getMethod("countConsultation", AnalyticsQueryDTO.class);
+        Method functionUsage = AnalyticsMapper.class.getMethod("queryFunctionUsageRanking", FunctionUsageQueryDTO.class);
+
+        assertEnabledScopeJoin(summary);
+        assertEnabledScopeJoin(consultation);
+        assertEnabledScopeJoin(functionUsage);
+    }
+
     private void assertHasQueryParam(Method method) {
         Parameter parameter = method.getParameters()[0];
         Param annotation = parameter.getAnnotation(Param.class);
@@ -65,6 +76,15 @@ class AnalyticsMapperTest {
         assertTrue(sql.contains(first));
         assertTrue(sql.contains(second));
         assertTrue(sql.contains(third));
+    }
+
+    private void assertEnabledScopeJoin(Method method) {
+        String sql = joinedSql(method);
+        assertTrue(sql.contains("JOIN c_ai_org"));
+        assertTrue(sql.contains("JOIN c_ai_region"));
+        assertTrue(sql.contains("o.sd_status = '1'"));
+        assertTrue(sql.contains("r.sd_status = '1'"));
+        assertTrue(sql.contains("o.id_region = #{query.idRegion}"));
     }
 
     private String joinedSql(Method method) {

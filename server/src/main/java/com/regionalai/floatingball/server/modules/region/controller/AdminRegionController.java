@@ -31,8 +31,9 @@ public class AdminRegionController {
     public ApiResponse<PageResponse<AiRegion>> list(@RequestParam(defaultValue = "1") long current,
                                                     @RequestParam(defaultValue = "10") long size,
                                                     @RequestParam(required = false) String keyword,
+                                                    @RequestParam(required = false) String sdStatus,
                                                     HttpServletRequest request) {
-        return ApiResponse.success(regionService.list(current, size, keyword), RequestIdUtils.resolve(request));
+        return ApiResponse.success(regionService.list(current, size, keyword, sdStatus), RequestIdUtils.resolve(request));
     }
 
     @PostMapping
@@ -50,6 +51,12 @@ public class AdminRegionController {
     @DeleteMapping("/{idRegion}")
     public ApiResponse<Void> invalidate(@PathVariable String idRegion, HttpServletRequest request) {
         regionService.invalidate(idRegion);
+        return ApiResponse.success(null, RequestIdUtils.resolve(request));
+    }
+
+    @PostMapping("/{idRegion}/enable")
+    public ApiResponse<Void> enable(@PathVariable String idRegion, HttpServletRequest request) {
+        regionService.enable(idRegion);
         return ApiResponse.success(null, RequestIdUtils.resolve(request));
     }
 }

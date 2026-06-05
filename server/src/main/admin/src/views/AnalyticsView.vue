@@ -15,7 +15,7 @@
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
-          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="search">
+          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="handleRegionChange">
             <el-option
               v-for="r in regionOptions"
               :key="r.id"
@@ -28,7 +28,7 @@
           <div class="filter-label">机构选择</div>
           <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" class="filter-select" @change="search">
             <el-option
-              v-for="o in orgOptions"
+              v-for="o in filteredOrgOptions"
               :key="o.id"
               :label="o.name"
               :value="o.id"
@@ -93,7 +93,7 @@
 <script>
 import * as echarts from 'echarts'
 import http from '../api/http'
-import { refOptions } from '../api/reference'
+import { activeRefOptions } from '../api/reference'
 import { AdminFilterBar, ChartPanel, MetricCard, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
@@ -110,8 +110,8 @@ const CARD_DEFS = [
   { key: 'avgDailyAiService', label: '日均功能调用量', desc: '功能调用总量 ÷ 所选时间段的天数' },
   { key: 'aiAdoptionRate', label: 'AI诊断建议采纳率', desc: '医生采纳AI推荐诊断的次数占比', isPct: true },
   { key: 'diagnosisMatchRate', label: '诊断符合率', desc: '医生确认诊断与AI推荐完全一致的病例占比', isPct: true },
-  { key: 'activeDoctorCount', label: '活跃医生数', desc: '每月登录≥10次且完成≥5次有效操作的医生' },
-  { key: 'consultationTotal', label: '问诊总数', desc: '完成并回写的问诊记录总数' }
+  { key: 'activeDoctorCount', label: '活跃医生数', desc: '进行问诊操作的医生' },
+  { key: 'consultationTotal', label: '问诊总数', desc: '问诊记录总数' }
 ]
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#EC4899']
@@ -204,6 +204,12 @@ export default {
         color: COLORS[idx % COLORS.length]
       }))
     },
+    filteredOrgOptions() {
+      if (!this.query.idRegion) {
+        return this.orgOptions
+      }
+      return this.orgOptions.filter(item => item.idRegion === this.query.idRegion)
+    },
     isTrendEmpty() {
       const values = this.trendMetric === 'ai'
         ? (this.trendData.aiServiceValues || [])
@@ -278,12 +284,19 @@ export default {
     },
     async loadRefOptions() {
       try {
-        const refs = await refOptions()
+        const refs = await activeRefOptions()
         this.regionOptions = (refs.regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
-        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg }))
+        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg, idRegion: o.idRegion }))
       } catch (e) {
         // degrade gracefully
       }
+    },
+    handleRegionChange() {
+      const selectedOrg = this.orgOptions.find(item => item.id === this.query.idOrg)
+      if (this.query.idRegion && selectedOrg && selectedOrg.idRegion !== this.query.idRegion) {
+        this.query.idOrg = ''
+      }
+      this.search()
     },
     async search() {
       this.loading = true

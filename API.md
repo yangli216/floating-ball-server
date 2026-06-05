@@ -1100,6 +1100,12 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `idRegion` — 区域ID（可选）
 - `idOrg` — 机构ID（可选）
 
+筛选约束：
+
+1. 统计分析、辅诊功能、用户活跃度三组统计接口只统计启用范围内的数据：区域与机构均需满足 `fg_active='1' AND sd_status='1'`。
+2. 当同时传入 `idRegion` 与 `idOrg` 时，机构必须归属该区域；若不匹配，查询返回空统计结果。
+3. 管理端区域/机构下拉只展示启用项，并按“区域 -> 机构”配置关系做联动过滤。
+
 响应 `data`：
 
 ```json
@@ -1246,6 +1252,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 6. `doctorCount` 按事件中的医生 ID 优先统计；医生 ID 为空时回退设备 ID
 7. `trend` 仅包含排名前 5 的功能的逐日调用趋势
 8. `records` 为当前页数据，支持分页
+9. 区域/机构筛选遵循 5.5 的启用状态与归属校验约束。
 
 ### 5.9.1 GET `/admin/api/analytics/function-usage/export`
 
@@ -1336,6 +1343,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `size`
 - `keyword`
 
+说明：默认返回 `fg_active='1'` 的区域，包括启用与停用状态；引用下拉可传 `sdStatus=1` 仅取启用区域。
+
 ### 5.19 POST `/admin/api/regions`
 用途：新增区域。
 
@@ -1357,7 +1366,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 用途：修改区域信息。
 
 ### 5.21 DELETE `/admin/api/regions/{idRegion}`
-用途：逻辑停用区域。
+用途：停用区域，等价于把 `sdStatus` 改为 `0`，不修改 `fgActive`。
+
+### 5.21.1 POST `/admin/api/regions/{idRegion}/enable`
+用途：启用区域，等价于把 `sdStatus` 改为 `1`，不修改 `fgActive`。
 
 ### 5.22 GET `/admin/api/orgs`
 用途：分页查询机构列表。
@@ -1367,6 +1379,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `current`
 - `size`
 - `keyword`
+- `idRegion`（可选）
+- `sdStatus`（可选）
+
+说明：默认返回 `fg_active='1'` 的机构，包括启用与停用状态；引用下拉可传 `sdStatus=1` 仅取启用机构，传 `idRegion` 时只返回该区域下机构。
 
 ### 5.23 POST `/admin/api/orgs`
 用途：新增机构。
@@ -1390,7 +1406,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 用途：修改机构信息。
 
 ### 5.25 DELETE `/admin/api/orgs/{idOrg}`
-用途：逻辑停用机构。
+用途：停用机构，等价于把 `sdStatus` 改为 `0`，不修改 `fgActive`。
+
+### 5.25.1 POST `/admin/api/orgs/{idOrg}/enable`
+用途：启用机构，等价于把 `sdStatus` 改为 `1`，不修改 `fgActive`。
 
 ### 5.26 GET `/admin/api/devices`
 用途：分页查询令牌列表。接口路径保持 `/devices` 以兼容既有管理端调用，页面呈现为“令牌管理”。
@@ -2002,6 +2021,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | idOrg | string | 否 | 机构 ID，为空时统计全部 |
 | timeRange | string | 否 | 时间范围：today / week / month / quarter / year / custom |
 
+说明：区域/机构筛选遵循 5.5 的启用状态与归属校验约束。
+
 响应 `data`：
 
 ```json
@@ -2081,6 +2102,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | activeStatus | string | 否 | 活跃状态筛选：active / inactive |
 | current | long | 否 | 页码，默认 1 |
 | size | long | 否 | 每页条数，默认 10 |
+
+说明：区域/机构筛选遵循 5.5 的启用状态与归属校验约束。
 
 响应 `data`：
 

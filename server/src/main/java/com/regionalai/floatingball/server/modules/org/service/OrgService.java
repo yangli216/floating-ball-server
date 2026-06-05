@@ -20,7 +20,7 @@ public class OrgService {
         this.aiOrgMapper = aiOrgMapper;
     }
 
-    public PageResponse<AiOrg> list(long current, long size, String keyword) {
+    public PageResponse<AiOrg> list(long current, long size, String keyword, String idRegion, String sdStatus) {
         Page<AiOrg> page = new Page<AiOrg>(current, size);
         LambdaQueryWrapper<AiOrg> wrapper = new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getFgActive, "1")
@@ -28,6 +28,12 @@ public class OrgService {
             .orderByDesc(AiOrg::getUpdateTime);
         if (StringUtils.hasText(keyword)) {
             wrapper.and(q -> q.like(AiOrg::getNaOrg, keyword).or().like(AiOrg::getCdOrg, keyword));
+        }
+        if (StringUtils.hasText(idRegion)) {
+            wrapper.eq(AiOrg::getIdRegion, idRegion.trim());
+        }
+        if (StringUtils.hasText(sdStatus)) {
+            wrapper.eq(AiOrg::getSdStatus, sdStatus.trim());
         }
         Page<AiOrg> result = aiOrgMapper.selectPage(page, wrapper);
         return new PageResponse<AiOrg>(result.getCurrent(), result.getSize(), result.getTotal(), result.getRecords());
@@ -65,11 +71,20 @@ public class OrgService {
 
     @Transactional
     public void invalidate(String idOrg) {
+        updateStatus(idOrg, "0");
+    }
+
+    @Transactional
+    public void enable(String idOrg) {
+        updateStatus(idOrg, "1");
+    }
+
+    private void updateStatus(String idOrg, String sdStatus) {
         AiOrg org = aiOrgMapper.selectById(idOrg);
         if (org == null) {
             throw new BusinessException("机构不存在");
         }
-        org.setFgActive("0");
+        org.setSdStatus(sdStatus);
         aiOrgMapper.updateById(org);
     }
 }

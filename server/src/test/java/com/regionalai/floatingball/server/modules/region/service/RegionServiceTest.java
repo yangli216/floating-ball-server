@@ -52,7 +52,7 @@ class RegionServiceTest {
 
         when(aiRegionMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mapperResult);
 
-        PageResponse<AiRegion> response = regionService.list(1, 10, "华东");
+        PageResponse<AiRegion> response = regionService.list(1, 10, "华东", "1");
 
         assertEquals(1L, response.getCurrent());
         assertEquals(10L, response.getSize());
@@ -67,6 +67,7 @@ class RegionServiceTest {
         String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
         long likeCount = sqlSegment.split("LIKE", -1).length - 1;
         assertTrue(sqlSegment.contains("LIKE"));
+        assertTrue(sqlSegment.contains("sd_status"));
         assertEquals(1L, likeCount);
     }
 
@@ -121,14 +122,30 @@ class RegionServiceTest {
     }
 
     @Test
-    void invalidateShouldMarkRegionInactive() {
+    void invalidateShouldDisableRegionStatus() {
         AiRegion region = buildRegion("REG001", "REG-CODE", "华北区域");
         region.setFgActive("1");
+        region.setSdStatus("1");
         when(aiRegionMapper.selectById("REG001")).thenReturn(region);
 
         regionService.invalidate("REG001");
 
-        assertEquals("0", region.getFgActive());
+        assertEquals("1", region.getFgActive());
+        assertEquals("0", region.getSdStatus());
+        verify(aiRegionMapper).updateById(region);
+    }
+
+    @Test
+    void enableShouldEnableRegionStatus() {
+        AiRegion region = buildRegion("REG001", "REG-CODE", "华北区域");
+        region.setFgActive("1");
+        region.setSdStatus("0");
+        when(aiRegionMapper.selectById("REG001")).thenReturn(region);
+
+        regionService.enable("REG001");
+
+        assertEquals("1", region.getFgActive());
+        assertEquals("1", region.getSdStatus());
         verify(aiRegionMapper).updateById(region);
     }
 

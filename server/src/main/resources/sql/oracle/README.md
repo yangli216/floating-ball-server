@@ -74,6 +74,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 2. 真正的上游 AI 地址、密钥、模型请在删库重建后再通过管理端修改
 3. 当前工程交付采用“目标 schema 初始化/重建 + 重跑 `init.sql`”，不再在仓库中保留常驻增量补丁脚本
 4. 执行 `init.sql` 前请确认当前登录 schema 就是 `RBMH_AI`；脚本本身不再依赖 SQL*Plus 变量做前置校验
+5. 区域与机构的 `sd_status` 是启用/停用状态；`fg_active` 只表示逻辑删除/无效记录。管理端统计筛选只统计 `fg_active='1' AND sd_status='1'` 的区域和机构。
 
 ## 存量库处理
 

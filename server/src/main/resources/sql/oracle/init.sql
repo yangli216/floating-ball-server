@@ -36,10 +36,10 @@ COMMENT ON COLUMN c_ai_region.cd_region IS '区域编码';
 COMMENT ON COLUMN c_ai_region.na_region IS '区域名称';
 COMMENT ON COLUMN c_ai_region.id_parent IS '上级区域ID';
 COMMENT ON COLUMN c_ai_region.sd_region_type IS '区域类型';
-COMMENT ON COLUMN c_ai_region.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_region.sd_status IS '启停状态：1启用 0停用';
 COMMENT ON COLUMN c_ai_region.sort_order IS '排序号';
 COMMENT ON COLUMN c_ai_region.des_region IS '区域说明';
-COMMENT ON COLUMN c_ai_region.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_region.fg_active IS '逻辑删除标记，不用于启停状态';
 COMMENT ON COLUMN c_ai_region.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_region.update_time IS '更新时间';
 
@@ -68,10 +68,10 @@ COMMENT ON COLUMN c_ai_org.na_org IS '机构名称';
 COMMENT ON COLUMN c_ai_org.id_parent IS '上级机构ID';
 COMMENT ON COLUMN c_ai_org.id_region IS '所属区域ID';
 COMMENT ON COLUMN c_ai_org.sd_org_type IS '机构类型';
-COMMENT ON COLUMN c_ai_org.sd_status IS '状态';
+COMMENT ON COLUMN c_ai_org.sd_status IS '启停状态：1启用 0停用';
 COMMENT ON COLUMN c_ai_org.sort_order IS '排序号';
 COMMENT ON COLUMN c_ai_org.des_org IS '机构说明';
-COMMENT ON COLUMN c_ai_org.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_org.fg_active IS '逻辑删除标记，不用于启停状态';
 COMMENT ON COLUMN c_ai_org.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_org.update_time IS '更新时间';
 

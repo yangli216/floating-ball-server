@@ -31,8 +31,10 @@ public class AdminOrgController {
     public ApiResponse<PageResponse<AiOrg>> list(@RequestParam(defaultValue = "1") long current,
                                                  @RequestParam(defaultValue = "10") long size,
                                                  @RequestParam(required = false) String keyword,
+                                                 @RequestParam(required = false) String idRegion,
+                                                 @RequestParam(required = false) String sdStatus,
                                                  HttpServletRequest request) {
-        return ApiResponse.success(orgService.list(current, size, keyword), RequestIdUtils.resolve(request));
+        return ApiResponse.success(orgService.list(current, size, keyword, idRegion, sdStatus), RequestIdUtils.resolve(request));
     }
 
     @PostMapping
@@ -50,6 +52,12 @@ public class AdminOrgController {
     @DeleteMapping("/{idOrg}")
     public ApiResponse<Void> invalidate(@PathVariable String idOrg, HttpServletRequest request) {
         orgService.invalidate(idOrg);
+        return ApiResponse.success(null, RequestIdUtils.resolve(request));
+    }
+
+    @PostMapping("/{idOrg}/enable")
+    public ApiResponse<Void> enable(@PathVariable String idOrg, HttpServletRequest request) {
+        orgService.enable(idOrg);
         return ApiResponse.success(null, RequestIdUtils.resolve(request));
     }
 }
