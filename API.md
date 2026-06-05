@@ -556,7 +556,24 @@ Content-Type: application/json
         "operationName": "reference_feedback:diagnosis",
         "details": {
           "consultationId": "CONSULT-001",
-          "traceId": "TRACE-001"
+          "traceId": "TRACE-001",
+          "requestSummary": "1 条消息，最新输入：请分析以下初步诊断的鉴别排查需求",
+          "responseSummary": "{\"isNeeded\":true,\"severity\":\"critical\"}",
+          "requestPayload": {
+            "configProfile": "fast",
+            "messages": [
+              { "role": "system", "content": "..." },
+              { "role": "user", "content": "..." }
+            ],
+            "stream": false,
+            "traceId": "TRACE-001",
+            "scene": "standalone-differential-diagnosis-checklist",
+            "sourceModule": "differential_diagnosis_modal",
+            "sessionId": "SESSION-001"
+          },
+          "responsePayload": {
+            "content": "{\"isNeeded\":true,\"severity\":\"critical\"}"
+          }
         }
       },
       "timestamp": 1770000000000
@@ -566,6 +583,22 @@ Content-Type: application/json
 ```
 
 说明：审计事件用于链路排障、操作追踪和反馈关联，不作为辅诊功能调用次数的统计事实源。
+
+落表约定：
+
+- `sdLogType` ← `eventType`
+- `naModule` ← `payload.module`，若缺失则回退 `operationType / metricType / targetType / sessionType`
+- `opAction` / `desOp` ← `payload.action`，若缺失则回退 `operationName / feedbackType / recType`
+- `opResult` ← `payload.result`，若缺失则回退 `success`
+- `traceId` / `consultationId` 优先从顶层字段提取，缺失时回退 `details.traceId / details.consultationId`
+- `payloadJson` 保留完整原始 payload，供管理端详情查看和兼容后续扩展
+
+AI 调用类 `operation` 事件补充约束：
+
+1. `details.requestSummary` / `details.responseSummary` 只作为列表与详情摘要，不得替代完整排障数据。
+2. `details.requestPayload` / `details.responsePayload` 必须记录实际业务入参和业务出参；聊天代理场景记录发给 `/v1/ai/chat` 的请求体和返回 `content`，流式场景记录 `stream: true` 请求体和完整拼接后的响应文本。
+3. API Key、Bearer Token、Cookie、签名、身份证号、手机号等敏感字段不得进入 payload；语音原始 base64 / 二进制音频不得进入 payload，语音日志只记录文件名、MIME、大小、转写文本和上游回文。
+4. 管理端日志详情必须分区展示“完整入参”“完整出参”“原始 payload”，不能只展示 `requestSummary/responseSummary`。
 
 ### 3.8 POST `/v1/client/feature-events/batch`
 
@@ -749,14 +782,6 @@ Content-Type: application/json
   "status": "accepted"
 }
 ```
-
-落表约定：
-
-- `sdLogType` ← `eventType`
-- `naModule` ← `payload.module`，若缺失则回退 `operationType / metricType / targetType / sessionType`
-- `desOp` ← `payload.action`，若缺失则回退 `operationName / feedbackType / recType`
-- `opResult` ← `payload.result`，若缺失则回退 `success`
-- `payloadJson` 保留完整原始 payload，供详情查看和兼容后续扩展
 
 版本持久化约定：
 

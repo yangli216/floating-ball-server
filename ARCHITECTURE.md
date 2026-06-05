@@ -240,15 +240,16 @@ floating-ball-server/
 1. 客户端本地缓存事件
 2. 客户端对区域化操作日志不再依赖本地 SQLite，直接调用 `POST /v1/client/audit/events/batch`；启动时补传遗留队列，新事件入队后异步立即尝试一次，失败或离线时继续保留队列并按固定周期重试
 3. 客户端对 `operation` 事件优先上报 `{ module, action, title, sourceModule, scene, result, operationType, operationName, details }`；其中 `module/action/title/sourceModule/scene/result` 会被服务端提取到结构化列，`operationType/operationName/details` 继续保留在原始 payload
-4. 客户端本地只保留轻量失败重试队列，不再把区域化操作日志落本地 SQLite；服务端仍按同一批量接口落库
-5. 服务端兼容旧载荷：若未显式提供 `module/action/title/sourceModule/scene/result`，则回退从 `operationType/operationName/success` 与 `details.traceId / details.consultationId` 等字段推导
-6. 服务端写入 `c_ai_op_log`
-7. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选
-8. `c_ai_op_log` 是审计事实源，只回答“发生过哪些技术/业务操作、链路如何排障”，不得直接作为辅诊功能调用次数统计源
+4. AI 调用类 `operation` 事件必须同时保留摘要与完整出入参：`details.requestSummary/responseSummary` 用于列表摘要，`details.requestPayload/responsePayload` 用于详情排障。`requestPayload` 应记录实际发送给 `/v1/ai/chat` 或语音代理的业务请求体；`responsePayload` 应记录业务回文或错误对象。API Key、Bearer Token 等凭据不得进入 payload；语音原始 base64 / 二进制音频不得进入 payload。
+5. 客户端本地只保留轻量失败重试队列，不再把区域化操作日志落本地 SQLite；服务端仍按同一批量接口落库
+6. 服务端兼容旧载荷：若未显式提供 `module/action/title/sourceModule/scene/result`，则回退从 `operationType/operationName/success` 与 `details.traceId / details.consultationId` 等字段推导
+7. 服务端写入 `c_ai_op_log`
+8. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选；详情弹窗必须把完整入参、完整出参与原始 payload 分区展示，不能只展示摘要字段。
+9. `c_ai_op_log` 是审计事实源，只回答“发生过哪些技术/业务操作、链路如何排障”，不得直接作为辅诊功能调用次数统计源
 
 代理日志补充约束：
 
-1. 服务端对 `/v1/ai/chat`、`/v1/ai/speech/*` 等上游代理请求，除了成功/失败结果外，还应在 `payload_json` 中保留请求元数据与上游回文，便于排障
+1. 服务端对 `/v1/ai/chat`、`/v1/ai/speech/*` 等上游代理请求，除了成功/失败结果外，还应在 `payload_json` 中保留请求元数据、实际上游请求体与上游回文，便于排障；桌面端 AI trace 生成的操作日志也必须在 `details.requestPayload/responsePayload` 中保留完整业务出入参。
 2. `speech_proxy` 日志的原始录音不得写入 `payload_json`；录音文件单独落盘，表中通过 `audio_file_path` 指向对应文件
 3. API Key、Bearer Token 等凭据不得入库；除此之外，业务请求正文与回文可按原文保留
 4. 管理端日志页应支持按 `ai_proxy`、`speech_proxy` 等代理日志类型筛选与查看详情

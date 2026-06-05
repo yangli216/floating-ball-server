@@ -176,7 +176,13 @@
     </div>
     </section>
 
-    <el-dialog v-if="payloadDialogVisible" title="日志详情" :visible.sync="payloadDialogVisible" width="760px">
+    <el-dialog
+      v-if="payloadDialogVisible"
+      title="日志详情"
+      :visible.sync="payloadDialogVisible"
+      width="88%"
+      custom-class="log-detail-dialog"
+    >
       <div v-if="payloadRecord" class="detail-grid">
         <div class="detail-card">
           <div class="detail-card__label">日志类型</div>
@@ -219,7 +225,19 @@
           <div class="detail-card__value">{{ formatDateTime(payloadRecord.operationTime) }}</div>
         </div>
       </div>
-      <pre class="code-block">{{ payloadDetailText }}</pre>
+      <div class="payload-section-list">
+        <section
+          v-for="section in payloadDetailSections"
+          :key="section.key"
+          class="payload-section"
+        >
+          <div class="payload-section__head">
+            <span class="payload-section__title">{{ section.title }}</span>
+            <span class="payload-section__status">{{ section.status }}</span>
+          </div>
+          <pre class="code-block">{{ section.content }}</pre>
+        </section>
+      </div>
       <span slot="footer">
         <el-button @click="payloadDialogVisible = false">关闭</el-button>
       </span>
@@ -359,6 +377,7 @@ export default {
       payloadDialogVisible: false,
       payloadRecord: null,
       payloadDetailText: '无原始数据',
+      payloadDetailSections: [],
       moduleOptions: MODULE_OPTIONS,
       logTypeOptions: [
         { value: 'operation', label: '操作日志', type: 'info' },
@@ -420,6 +439,7 @@ export default {
     openRawData(row) {
       this.payloadRecord = row
       this.payloadDetailText = this.formatRawDataDetail(row.payloadJson)
+      this.payloadDetailSections = this.buildPayloadDetailSections(row)
       this.payloadDialogVisible = true
     },
     normalizeText(value) {
@@ -495,8 +515,13 @@ export default {
         const title = this.primaryDisplay(row && row.displayTitle, payload.title)
         const action = this.primaryDisplay(row && row.displayAction, payload.action)
         const operationName = this.normalizeText(payload.operationName)
-        const responseText = this.normalizeText(payload.responseText)
-        const errorMessage = this.normalizeText(payload.errorMessage)
+        const details = payload && typeof payload === 'object' && payload.details && typeof payload.details === 'object'
+          ? payload.details
+          : {}
+        const requestPayload = this.pickFirstPayload(details.requestPayload, payload.requestPayload, payload.requestBody)
+        const responsePayload = this.pickFirstPayload(details.responsePayload, payload.responsePayload, payload.responseBody)
+        const responseText = this.normalizeText(payload.responseText || details.responseSummary || payload.responseSummary)
+        const errorMessage = this.normalizeText(payload.errorMessage || details.errorMessage)
         if (moduleName) {
           summaryParts.push(moduleName)
         }
@@ -513,6 +538,8 @@ export default {
         }
         if (errorMessage) {
           summaryParts.push(`失败: ${this.truncate(errorMessage, 40)}`)
+        } else if (this.hasPayloadContent(requestPayload) || this.hasPayloadContent(responsePayload)) {
+          summaryParts.push('出入参已记录')
         } else if (responseText) {
           summaryParts.push(`回文: ${this.truncate(responseText, 40)}`)
         }
@@ -522,6 +549,115 @@ export default {
         return this.truncate(JSON.stringify(payload), 100)
       } catch (error) {
         return this.truncate(text.replace(/\s+/g, ' '), 100)
+      }
+    },
+    buildPayloadDetailSections(row) {
+      const payload = this.parsePayloadJson(row && row.payloadJson)
+      const details = payload && typeof payload === 'object' && payload.details && typeof payload.details === 'object'
+        ? payload.details
+        : {}
+      const requestPayload = this.pickFirstPayload(
+        details.requestPayload,
+        payload && payload.requestPayload,
+        payload && payload.requestBody,
+        details.requestBody
+      )
+      const responsePayload = this.pickFirstPayload(
+        details.responsePayload,
+        payload && payload.responsePayload,
+        payload && payload.responseBody,
+        payload && payload.responseText,
+        payload && payload.upstreamBody,
+        details.responseBody,
+        details.responseText
+      )
+      const requestSummary = this.pickFirstPayload(details.requestSummary, payload && payload.requestSummary)
+      const responseSummary = this.pickFirstPayload(details.responseSummary, payload && payload.responseSummary)
+      const sections = [
+        {
+          key: 'request',
+          title: '完整入参',
+          value: requestPayload,
+          fallback: requestSummary,
+          emptyText: '未记录完整入参'
+        },
+        {
+          key: 'response',
+          title: '完整出参',
+          value: responsePayload,
+          fallback: responseSummary,
+          emptyText: '未记录完整出参'
+        },
+        {
+          key: 'payload',
+          title: '原始 Payload',
+          value: payload,
+          fallback: row && row.payloadJson,
+          emptyText: '无原始数据'
+        }
+      ]
+      return sections.map((section) => {
+        const hasFullValue = this.hasPayloadContent(section.value)
+        const hasFallback = this.hasPayloadContent(section.fallback)
+        const value = hasFullValue ? section.value : section.fallback
+        return {
+          key: section.key,
+          title: section.title,
+          status: hasFullValue ? '已完整记录' : hasFallback ? '仅有摘要/兼容字段' : section.emptyText,
+          content: this.formatPayloadValue(value, section.emptyText)
+        }
+      })
+    },
+    parsePayloadJson(value) {
+      const text = this.normalizeText(value)
+      if (!text) {
+        return null
+      }
+      try {
+        return JSON.parse(text)
+      } catch (error) {
+        return text
+      }
+    },
+    pickFirstPayload(...values) {
+      for (const value of values) {
+        if (this.hasPayloadContent(value)) {
+          return value
+        }
+      }
+      return undefined
+    },
+    hasPayloadContent(value) {
+      if (value === null || value === undefined) {
+        return false
+      }
+      if (typeof value === 'string') {
+        return !!this.normalizeText(value)
+      }
+      if (Array.isArray(value)) {
+        return value.length > 0
+      }
+      if (typeof value === 'object') {
+        return Object.keys(value).length > 0
+      }
+      return true
+    },
+    formatPayloadValue(value, emptyText) {
+      if (!this.hasPayloadContent(value)) {
+        return emptyText
+      }
+      if (typeof value === 'string') {
+        const text = this.normalizeText(value)
+        try {
+          return JSON.stringify(JSON.parse(text), null, 2)
+        } catch (error) {
+          return text
+        }
+      }
+      try {
+        return JSON.stringify(value, null, 2)
+      } catch (error) {
+        return String(value)
       }
     },
     formatRawDataDetail(value) {
@@ -633,12 +769,41 @@ export default {
   word-break: break-all;
 }
 
+.payload-section-list {
+  display: grid;
+  gap: 14px;
+}
+
+.payload-section {
+  min-width: 0;
+}
+
+.payload-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.payload-section__title {
+  color: #2C2C2A;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.payload-section__status {
+  color: #888780;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .code-block {
   margin: 0;
   padding: 14px;
-  max-height: 420px;
+  max-height: 320px;
   overflow: auto;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #F1EFE8;
   color: #444441;
   font-size: 12px;
