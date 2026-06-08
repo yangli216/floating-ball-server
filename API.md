@@ -519,12 +519,13 @@ Content-Type: application/json
 
 ### 3.5.1 POST `/v1/client/inpatient-emr/templates/resolve`
 
-用途：住院病历辅助书写前，按 HTML 模板内容解析出的 `templateHash` 复用服务端缓存，并返回管理端维护过的 AI 字段提示词。
+用途：住院病历辅助书写前，按 HIS 传入的病历模板主键 `templateId` 复用服务端缓存，并返回管理端维护过的 AI 字段提示词。
 
 请求：
 
 ```json
 {
+  "templateId": "emr_tpl_daily_course",
   "templateHash": "sha256-or-client-hash",
   "templateName": "日常病程记录",
   "htmlContent": "<div data-id=\"病程记录文本\"></div>",
@@ -554,6 +555,7 @@ Content-Type: application/json
 
 ```json
 {
+  "templateId": "emr_tpl_daily_course",
   "templateHash": "sha256-or-client-hash",
   "cacheHit": true,
   "templateName": "日常病程记录",
@@ -564,8 +566,8 @@ Content-Type: application/json
 
 说明：
 
-1. `templateHash` 相同且缓存启用时，服务端直接返回缓存字段，避免桌面端重复解析同一 HTML 模板；若请求携带的 `templateName` 与缓存记录不同，服务端会用本次传入名称更新缓存展示名。
-2. 未命中时，服务端保存请求中的 `templateName`、原生 `htmlContent` 与 `fields`，再返回保存后的字段。
+1. `templateId` 相同且缓存启用时，服务端直接返回缓存字段，避免桌面端重复解析同一病历模板；若请求携带的 `templateName` 或 `htmlContent` 与缓存记录不同，服务端会用本次传入值更新缓存展示名和原生模板内容。
+2. 未命中时，服务端保存请求中的 `templateId`、`templateName`、原生 `htmlContent`、内容 hash 与 `fields`，再返回保存后的字段。
 3. 管理端维护的字段提示词覆盖会写入 `fields[*].rule.prompt`，桌面端生成住院病历时优先使用该提示词。
 4. 本接口为区域化能力；桌面端非区域化模式可继续使用本地解析作为离线兜底。
 
@@ -1654,7 +1656,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 - `current`
 - `size`
-- `keyword`：匹配模板名称或模板 hash
+- `keyword`：匹配模板主键、模板名称或模板 hash
 - `sdStatus`：`1` 启用，`0` 停用
 
 ### 5.39.2 GET `/admin/api/inpatient-emr/templates/{idCache}`
@@ -1675,7 +1677,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 用途：启用模板缓存。
 
 ### 5.39.5 POST `/admin/api/inpatient-emr/templates/{idCache}/disable`
-用途：停用模板缓存；停用后客户端相同 `templateHash` 会按未命中处理并重新上传解析结果。
+用途：停用模板缓存；停用后客户端相同 `templateId` 会按未命中处理并重新上传解析结果。
 
 ### 5.39.6 DELETE `/admin/api/inpatient-emr/templates/{idCache}`
 用途：逻辑删除模板缓存。

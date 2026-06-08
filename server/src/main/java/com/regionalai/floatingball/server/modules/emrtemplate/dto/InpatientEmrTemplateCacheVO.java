@@ -13,6 +13,8 @@ public class InpatientEmrTemplateCacheVO {
 
     private String templateHash;
 
+    private String templateId;
+
     private String templateName;
 
     private String htmlContent;

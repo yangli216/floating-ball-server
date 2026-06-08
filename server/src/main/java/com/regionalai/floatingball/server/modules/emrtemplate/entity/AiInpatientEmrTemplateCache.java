@@ -16,6 +16,9 @@ public class AiInpatientEmrTemplateCache extends BaseEntity {
     @TableId(value = "id_cache", type = IdType.ASSIGN_UUID)
     private String idCache;
 
+    @TableField("template_id")
+    private String templateId;
+
     @TableField("template_hash")
     private String templateHash;
 

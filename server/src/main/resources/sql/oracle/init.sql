@@ -328,6 +328,7 @@ CREATE INDEX idx_c_ai_symptom_sort ON c_ai_symptom_template (sd_medical_mode, so
 
 CREATE TABLE c_ai_inpatient_emr_tpl_cache (
     id_cache             VARCHAR2(32) PRIMARY KEY,
+    template_id          VARCHAR2(128) NOT NULL,
     template_hash        VARCHAR2(128) NOT NULL,
     template_name        VARCHAR2(200),
     html_content         CLOB,
@@ -341,6 +342,7 @@ CREATE TABLE c_ai_inpatient_emr_tpl_cache (
 
 COMMENT ON TABLE c_ai_inpatient_emr_tpl_cache IS '住院病历HTML模板解析缓存表';
 COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.id_cache IS '模板缓存主键ID';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.template_id IS 'HIS病历模板主键';
 COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.template_hash IS 'HTML模板内容HASH';
 COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.template_name IS '模板名称';
 COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.html_content IS '模板HTML原文';
@@ -351,6 +353,7 @@ COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.fg_active IS '逻辑删除标记'
 COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.update_time IS '更新时间';
 
+CREATE INDEX idx_c_ai_inemr_tpl_id ON c_ai_inpatient_emr_tpl_cache (template_id, fg_active, sd_status);
 CREATE INDEX idx_c_ai_inemr_tpl_hash ON c_ai_inpatient_emr_tpl_cache (template_hash, fg_active, sd_status);
 CREATE INDEX idx_c_ai_inemr_tpl_status ON c_ai_inpatient_emr_tpl_cache (fg_active, sd_status, update_time);
 

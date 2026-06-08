@@ -61,7 +61,9 @@ public class InpatientEmrTemplateCacheService {
             .eq(AiInpatientEmrTemplateCache::getFgActive, ACTIVE_ENABLED)
             .orderByDesc(AiInpatientEmrTemplateCache::getUpdateTime);
         if (StringUtils.hasText(keyword)) {
-            wrapper.and(q -> q.like(AiInpatientEmrTemplateCache::getTemplateHash, keyword.trim())
+            wrapper.and(q -> q.like(AiInpatientEmrTemplateCache::getTemplateId, keyword.trim())
+                .or()
+                .like(AiInpatientEmrTemplateCache::getTemplateHash, keyword.trim())
                 .or()
                 .like(AiInpatientEmrTemplateCache::getTemplateName, keyword.trim()));
         }
@@ -90,10 +92,11 @@ public class InpatientEmrTemplateCacheService {
         if (request == null) {
             throw new BusinessException("请求体不能为空");
         }
+        String templateId = resolveTemplateId(request);
         String templateHash = resolveTemplateHash(request);
-        AiInpatientEmrTemplateCache cached = findEnabledByHash(templateHash);
+        AiInpatientEmrTemplateCache cached = findEnabledByTemplateId(templateId);
         if (cached != null) {
-            updateCachedTemplateName(cached, request);
+            updateCachedTemplateMetadata(cached, request, templateHash);
             return toView(cached, true);
         }
 
@@ -105,6 +108,7 @@ public class InpatientEmrTemplateCacheService {
         }
 
         AiInpatientEmrTemplateCache entity = new AiInpatientEmrTemplateCache();
+        entity.setTemplateId(templateId);
         entity.setTemplateHash(templateHash);
         entity.setTemplateName(trimToNull(request.getTemplateName()));
         entity.setHtmlContent(request.getHtmlContent());
@@ -113,18 +117,30 @@ public class InpatientEmrTemplateCacheService {
         entity.setSdStatus(STATUS_ENABLED);
         entity.setFgActive(ACTIVE_ENABLED);
         cacheMapper.insert(entity);
-        log.info("inpatient emr template cache saved. idCache={}, templateHash={}", entity.getIdCache(), templateHash);
+        log.info("inpatient emr template cache saved. idCache={}, templateId={}", entity.getIdCache(), templateId);
         return toView(cacheMapper.selectById(entity.getIdCache()), false);
     }
 
-    private void updateCachedTemplateName(AiInpatientEmrTemplateCache cached,
-                                          InpatientEmrTemplateResolveRequest request) {
+    private void updateCachedTemplateMetadata(AiInpatientEmrTemplateCache cached,
+                                              InpatientEmrTemplateResolveRequest request,
+                                              String templateHash) {
+        boolean changed = false;
         String templateName = trimToNull(request.getTemplateName());
-        if (templateName == null || templateName.equals(cached.getTemplateName())) {
-            return;
+        if (templateName != null && !templateName.equals(cached.getTemplateName())) {
+            cached.setTemplateName(templateName);
+            changed = true;
         }
-        cached.setTemplateName(templateName);
-        cacheMapper.updateById(cached);
+        if (StringUtils.hasText(templateHash) && !templateHash.equals(cached.getTemplateHash())) {
+            cached.setTemplateHash(templateHash);
+            changed = true;
+        }
+        if (StringUtils.hasText(request.getHtmlContent()) && !request.getHtmlContent().equals(cached.getHtmlContent())) {
+            cached.setHtmlContent(request.getHtmlContent());
+            changed = true;
+        }
+        if (changed) {
+            cacheMapper.updateById(cached);
+        }
     }
 
     @Transactional
@@ -186,10 +202,10 @@ public class InpatientEmrTemplateCacheService {
         log.info("inpatient emr template cache invalidated. idCache={}", idCache);
     }
 
-    private AiInpatientEmrTemplateCache findEnabledByHash(String templateHash) {
+    private AiInpatientEmrTemplateCache findEnabledByTemplateId(String templateId) {
         List<AiInpatientEmrTemplateCache> records = cacheMapper.selectList(
             new LambdaQueryWrapper<AiInpatientEmrTemplateCache>()
-                .eq(AiInpatientEmrTemplateCache::getTemplateHash, templateHash)
+                .eq(AiInpatientEmrTemplateCache::getTemplateId, templateId)
                 .eq(AiInpatientEmrTemplateCache::getFgActive, ACTIVE_ENABLED)
                 .eq(AiInpatientEmrTemplateCache::getSdStatus, STATUS_ENABLED)
                 .orderByDesc(AiInpatientEmrTemplateCache::getUpdateTime)
@@ -211,6 +227,7 @@ public class InpatientEmrTemplateCacheService {
     private InpatientEmrTemplateCacheVO toView(AiInpatientEmrTemplateCache entity, boolean cacheHit) {
         InpatientEmrTemplateCacheVO vo = new InpatientEmrTemplateCacheVO();
         vo.setId(entity.getIdCache());
+        vo.setTemplateId(entity.getTemplateId());
         vo.setTemplateHash(entity.getTemplateHash());
         vo.setTemplateName(entity.getTemplateName());
         vo.setHtmlContent(entity.getHtmlContent());
@@ -221,6 +238,13 @@ public class InpatientEmrTemplateCacheService {
         vo.setCreatedAt(toMillis(entity.getInsertTime()));
         vo.setUpdatedAt(toMillis(entity.getUpdateTime()));
         return vo;
+    }
+
+    private String resolveTemplateId(InpatientEmrTemplateResolveRequest request) {
+        if (!StringUtils.hasText(request.getTemplateId())) {
+            throw new BusinessException("templateId 不能为空");
+        }
+        return request.getTemplateId().trim();
     }
 
     private String resolveTemplateHash(InpatientEmrTemplateResolveRequest request) {
