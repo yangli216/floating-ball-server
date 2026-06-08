@@ -326,6 +326,35 @@ CREATE INDEX idx_c_ai_symptom_code ON c_ai_symptom_template (cd_symptom, sd_medi
 CREATE INDEX idx_c_ai_symptom_sort ON c_ai_symptom_template (sd_medical_mode, sort_order, fg_active);
 
 
+CREATE TABLE c_ai_inpatient_emr_tpl_cache (
+    id_cache             VARCHAR2(32) PRIMARY KEY,
+    template_hash        VARCHAR2(128) NOT NULL,
+    template_name        VARCHAR2(200),
+    html_content         CLOB,
+    fields_json          CLOB,
+    field_count          NUMBER(10) DEFAULT 0,
+    sd_status            VARCHAR2(2) DEFAULT '1' NOT NULL,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_inpatient_emr_tpl_cache IS '住院病历HTML模板解析缓存表';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.id_cache IS '模板缓存主键ID';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.template_hash IS 'HTML模板内容HASH';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.template_name IS '模板名称';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.html_content IS '模板HTML原文';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.fields_json IS 'data-id字段解析结果JSON';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.field_count IS '字段数量';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.sd_status IS '状态（1启用 0停用）';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.update_time IS '更新时间';
+
+CREATE INDEX idx_c_ai_inemr_tpl_hash ON c_ai_inpatient_emr_tpl_cache (template_hash, fg_active, sd_status);
+CREATE INDEX idx_c_ai_inemr_tpl_status ON c_ai_inpatient_emr_tpl_cache (fg_active, sd_status, update_time);
+
+
 CREATE TABLE c_ai_symptom_template_change_log (
     id_log                  VARCHAR2(32) PRIMARY KEY,
     id_template             VARCHAR2(32),

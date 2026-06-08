@@ -517,6 +517,58 @@ Content-Type: application/json
 }
 ```
 
+### 3.5.1 POST `/v1/client/inpatient-emr/templates/resolve`
+
+用途：住院病历辅助书写前，按 HTML 模板内容解析出的 `templateHash` 复用服务端缓存，并返回管理端维护过的 AI 字段提示词。
+
+请求：
+
+```json
+{
+  "templateHash": "sha256-or-client-hash",
+  "templateName": "日常病程记录",
+  "htmlContent": "<div data-id=\"病程记录文本\"></div>",
+  "fields": [
+    {
+      "id": "病程记录文本",
+      "name": "病程记录文本",
+      "meaning": "病程记录正文",
+      "article": "",
+      "type": "text",
+      "readonly": false,
+      "key": false,
+      "defaultValue": "",
+      "aiSuitable": true,
+      "rule": {
+        "source": "ai",
+        "dependencies": ["registration", "orders", "temperatureChart"],
+        "promptIntent": "inpatientRecordSection",
+        "constraints": ["仅依据已提供 HIS 数据生成"]
+      }
+    }
+  ]
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "templateHash": "sha256-or-client-hash",
+  "cacheHit": true,
+  "templateName": "日常病程记录",
+  "fields": [],
+  "updatedAt": 1770000000000
+}
+```
+
+说明：
+
+1. `templateHash` 相同且缓存启用时，服务端直接返回缓存字段，避免桌面端重复解析同一 HTML 模板；若请求携带的 `templateName` 与缓存记录不同，服务端会用本次传入名称更新缓存展示名。
+2. 未命中时，服务端保存请求中的 `templateName`、原生 `htmlContent` 与 `fields`，再返回保存后的字段。
+3. 管理端维护的字段提示词覆盖会写入 `fields[*].rule.prompt`，桌面端生成住院病历时优先使用该提示词。
+4. 本接口为区域化能力；桌面端非区域化模式可继续使用本地解析作为离线兜底。
+
 ### 3.6 GET `/v1/client/mappings/delta`
 
 请求参数：`version`
@@ -1561,7 +1613,134 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ### 5.33 DELETE `/admin/api/configs/{idConfig}`
 用途：逻辑停用配置。
 
-### 5.34 GET `/admin/api/symptom-templates`
+### 5.34 GET `/admin/api/prompts`
+用途：分页查询 Prompt 列表。
+
+### 5.35 POST `/admin/api/prompts`
+用途：新增 Prompt。
+
+请求：
+
+```json
+{
+  "cdPrompt": "medicalRecordGeneration",
+  "naPrompt": "病历生成",
+  "sysPrompt": "你是一名全科辅助诊疗助手",
+  "userTemplate": "请根据{{chiefComplaint}}生成病历",
+  "versionNum": "2026.04.20.1",
+  "sdPromptType": "consultation",
+  "sdStatus": "0",
+  "idOrg": "ORG001",
+  "idRegion": "REGION001"
+}
+```
+
+### 5.36 PUT `/admin/api/prompts/{idPrompt}`
+用途：修改 Prompt 内容与可见范围。
+
+### 5.37 POST `/admin/api/prompts/{idPrompt}/publish`
+用途：发布 Prompt；同场景下其他已发布版本自动转归归档态。
+
+### 5.38 POST `/admin/api/prompts/{idPrompt}/archive`
+用途：归档 Prompt。
+
+### 5.39 DELETE `/admin/api/prompts/{idPrompt}`
+用途：逻辑删除 Prompt。
+
+### 5.39.1 GET `/admin/api/inpatient-emr/templates`
+用途：分页查询住院病历 HTML 模板解析缓存。
+
+请求参数：
+
+- `current`
+- `size`
+- `keyword`：匹配模板名称或模板 hash
+- `sdStatus`：`1` 启用，`0` 停用
+
+### 5.39.2 GET `/admin/api/inpatient-emr/templates/{idCache}`
+用途：查看单个模板缓存及字段解析结果；响应包含原生 `htmlContent`，管理端基于该字段提供源码查看和 HTML 预览。
+
+### 5.39.3 PUT `/admin/api/inpatient-emr/templates/{idCache}/fields/{fieldId}/prompt`
+用途：维护指定 `data-id` 字段的 AI 辅助生成提示词。
+
+请求：
+
+```json
+{
+  "prompt": "请结合住院登记诊断、当日医嘱和体温单生命体征生成日常病程记录正文，避免编造未提供的检查结果。"
+}
+```
+
+### 5.39.4 POST `/admin/api/inpatient-emr/templates/{idCache}/enable`
+用途：启用模板缓存。
+
+### 5.39.5 POST `/admin/api/inpatient-emr/templates/{idCache}/disable`
+用途：停用模板缓存；停用后客户端相同 `templateHash` 会按未命中处理并重新上传解析结果。
+
+### 5.39.6 DELETE `/admin/api/inpatient-emr/templates/{idCache}`
+用途：逻辑删除模板缓存。
+
+### 5.40 GET `/admin/api/data-packages`
+用途：分页查询数据包列表。
+
+请求参数：
+
+- `current`
+- `size`
+- `keyword`
+- `sdPackageType`
+- `sdStatus`
+- `idRegion`
+- `idOrg`
+
+### 5.41 POST `/admin/api/data-packages`
+用途：新增数据包。
+
+请求：
+
+```json
+{
+  "cdPackage": "mapping-default",
+  "naPackage": "默认映射包",
+  "sdPackageType": "mapping",
+  "versionNum": "2026.04.20.1",
+  "contentJson": "{\"diagnoses\":\"id,code,name\\n1,J00,感冒\"}",
+  "sdStatus": "0",
+  "idOrg": "ORG001",
+  "idRegion": "REGION001"
+}
+```
+
+### 5.42 PUT `/admin/api/data-packages/{idPackage}`
+用途：修改数据包内容、版本和可见范围。
+
+### 5.43 POST `/admin/api/data-packages/{idPackage}/publish`
+用途：发布数据包。
+
+约束：
+
+- 同类型、同作用域的其他已发布版本需自动转归归档态
+
+### 5.44 POST `/admin/api/data-packages/{idPackage}/archive`
+用途：归档数据包。
+
+### 5.45 DELETE `/admin/api/data-packages/{idPackage}`
+用途：逻辑删除数据包。
+
+### 5.46 GET `/admin/api/data-packages/template-default`
+用途：获取服务端内置症状模板基线，供 legacy `template` 数据包编辑或症状模板初始化导入时参考。
+
+响应 `data`：
+
+```json
+{
+  "version": "builtin-1a2b3c4d",
+  "western": [],
+  "tcm": []
+}
+```
+
+### 5.47 GET `/admin/api/symptom-templates`
 用途：分页查询症状模板列表，返回完整模板结构，供后台 disease editor 直接编辑。
 
 请求参数：
