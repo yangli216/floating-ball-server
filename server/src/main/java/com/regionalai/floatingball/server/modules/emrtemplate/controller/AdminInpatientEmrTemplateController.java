@@ -4,6 +4,9 @@ import com.regionalai.floatingball.server.common.api.ApiResponse;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.util.RequestIdUtils;
 import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplateCacheVO;
+import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplateFieldGenerationRequest;
+import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplatePromptGenerateRequest;
+import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplatePromptGenerateVO;
 import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplatePromptRequest;
 import com.regionalai.floatingball.server.modules.emrtemplate.service.InpatientEmrTemplateCacheService;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,6 +49,17 @@ public class AdminInpatientEmrTemplateController {
         return ApiResponse.success(templateCacheService.get(idCache), RequestIdUtils.resolve(request));
     }
 
+    @PutMapping("/{idCache}/fields/{fieldId}/generation")
+    public ApiResponse<InpatientEmrTemplateCacheVO> updateFieldGeneration(@PathVariable String idCache,
+                                                                          @PathVariable String fieldId,
+                                                                          @RequestBody InpatientEmrTemplateFieldGenerationRequest request,
+                                                                          HttpServletRequest httpServletRequest) {
+        return ApiResponse.success(
+            templateCacheService.updateFieldGeneration(idCache, fieldId, request),
+            RequestIdUtils.resolve(httpServletRequest)
+        );
+    }
+
     @PutMapping("/{idCache}/fields/{fieldId}/prompt")
     public ApiResponse<InpatientEmrTemplateCacheVO> updateFieldPrompt(@PathVariable String idCache,
                                                                       @PathVariable String fieldId,
@@ -53,6 +67,17 @@ public class AdminInpatientEmrTemplateController {
                                                                       HttpServletRequest httpServletRequest) {
         return ApiResponse.success(
             templateCacheService.updateFieldPrompt(idCache, fieldId, request),
+            RequestIdUtils.resolve(httpServletRequest)
+        );
+    }
+
+    @PostMapping("/{idCache}/fields/{fieldId}/prompt/generate")
+    public ApiResponse<InpatientEmrTemplatePromptGenerateVO> generateFieldPrompt(@PathVariable String idCache,
+                                                                                @PathVariable String fieldId,
+                                                                                @RequestBody InpatientEmrTemplatePromptGenerateRequest request,
+                                                                                HttpServletRequest httpServletRequest) {
+        return ApiResponse.success(
+            templateCacheService.generateFieldPrompt(idCache, fieldId, request),
             RequestIdUtils.resolve(httpServletRequest)
         );
     }

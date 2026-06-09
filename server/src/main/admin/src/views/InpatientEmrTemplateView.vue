@@ -5,7 +5,7 @@
         <el-input
           v-model.trim="keyword"
           clearable
-          placeholder="输入模板名称或 hash"
+          placeholder="输入模板名称、主键或 hash"
           class="search-input"
           @keyup.enter.native="loadData"
         />
@@ -23,15 +23,20 @@
         <el-table-column prop="templateName" label="模板名称" min-width="180">
           <template slot-scope="{ row }">{{ row.templateName || '未命名模板' }}</template>
         </el-table-column>
+        <el-table-column prop="templateId" label="模板主键" min-width="180">
+          <template slot-scope="{ row }">
+            <code-tag :value="row.templateId" />
+          </template>
+        </el-table-column>
         <el-table-column prop="templateHash" label="模板 hash" min-width="220">
-          <template slot-scope="{ row }"><code>{{ row.templateHash }}</code></template>
+          <template slot-scope="{ row }">
+            <code-tag :value="row.templateHash" />
+          </template>
         </el-table-column>
         <el-table-column prop="fieldCount" label="字段数" width="90" />
         <el-table-column label="状态" width="90">
           <template slot-scope="{ row }">
-            <span :class="['status-pill', row.sdStatus === '1' ? 'status-pill--success' : 'status-pill--muted']">
-              <i class="dot"></i>{{ row.sdStatus === '1' ? '启用' : '停用' }}
-            </span>
+            <status-pill :tone="row.sdStatus === '1' ? 'success' : 'muted'" :label="row.sdStatus === '1' ? '启用' : '停用'" />
           </template>
         </el-table-column>
         <el-table-column label="更新时间" width="180">
@@ -40,11 +45,11 @@
         <el-table-column label="操作" width="330" fixed="right">
           <template slot-scope="{ row }">
             <div class="table-actions">
-              <a class="table-action" @click="openTemplateViewer(row)">查看模板</a>
-              <a class="table-action" @click="openDetail(row)">字段维护</a>
-              <a class="table-action" v-if="row.sdStatus !== '1'" @click="enableRecord(row)">启用</a>
-              <a class="table-action" v-else @click="disableRecord(row)">停用</a>
-              <a class="table-action table-action--danger" @click="removeRecord(row)">删除</a>
+              <table-action label="查看模板" @click="openTemplateViewer(row)" />
+              <table-action label="字段维护" @click="openDetail(row)" />
+              <table-action v-if="row.sdStatus !== '1'" label="启用" @click="enableRecord(row)" />
+              <table-action v-else label="停用" @click="disableRecord(row)" />
+              <table-action label="删除" danger @click="removeRecord(row)" />
             </div>
           </template>
         </el-table-column>
@@ -66,27 +71,62 @@
       v-if="detailVisible"
       :title="detailTitle"
       :visible.sync="detailVisible"
-      width="980px"
+      width="96vw"
+      top="4vh"
+      custom-class="inpatient-field-dialog"
       @closed="resetDetail"
     >
-      <el-table :data="detailFields" max-height="520">
-        <el-table-column prop="id" label="data-id" min-width="180" />
-        <el-table-column prop="meaning" label="字段含义" min-width="220" />
-        <el-table-column label="AI生成" width="90">
+      <div class="field-filter-bar">
+        <el-input
+          v-model.trim="fieldKeyword"
+          clearable
+          placeholder="搜索 data-id、字段含义或提示词…"
+          class="field-filter-bar__search"
+        />
+        <el-select v-model="fieldGenerationFilter" placeholder="生成类型" class="field-filter-bar__select">
+          <el-option label="全部类型" value="all" />
+          <el-option label="AI生成" value="ai" />
+          <el-option label="人工/HIS" value="manual" />
+        </el-select>
+        <el-select v-model="fieldPromptFilter" placeholder="提示词状态" class="field-filter-bar__select">
+          <el-option label="全部提示词" value="all" />
+          <el-option label="已维护" value="custom" />
+          <el-option label="默认" value="default" />
+          <el-option label="非AI" value="not_ai" />
+        </el-select>
+        <div class="field-filter-bar__quick">
+          <span>常用过滤</span>
+          <el-button size="mini" @click="applyFieldQuickFilter('all')">全部</el-button>
+          <el-button size="mini" @click="applyFieldQuickFilter('ai')">AI生成</el-button>
+          <el-button size="mini" @click="applyFieldQuickFilter('manual')">人工/HIS</el-button>
+          <el-button size="mini" @click="applyFieldQuickFilter('custom')">已维护</el-button>
+          <el-button size="mini" @click="applyFieldQuickFilter('pending')">待维护</el-button>
+        </div>
+      </div>
+
+      <el-table :data="detailFields" max-height="calc(100vh - 270px)" class="field-table">
+        <el-table-column prop="id" label="data-id" width="160" show-overflow-tooltip>
           <template slot-scope="{ row }">
-            <el-tag size="mini" :type="row.aiSuitable ? 'success' : 'info'">{{ row.aiSuitable ? '是' : '否' }}</el-tag>
+            <code-tag class="field-code-tag" :value="row.id" />
           </template>
         </el-table-column>
-        <el-table-column label="提示词" min-width="260">
-          <template slot-scope="{ row }">{{ truncate(resolvePrompt(row), 80) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column prop="meaning" label="字段含义" min-width="220" show-overflow-tooltip />
+        <el-table-column label="AI生成" width="82">
           <template slot-scope="{ row }">
-            <a
-              class="table-action"
-              :class="{ 'is-disabled': !row.aiSuitable }"
-              @click="row.aiSuitable && openPrompt(row)"
-            >维护</a>
+            <status-pill :tone="row.aiSuitable ? 'success' : 'muted'" :label="row.aiSuitable ? 'AI' : '人工'" />
+          </template>
+        </el-table-column>
+        <el-table-column label="提示词" min-width="300" show-overflow-tooltip>
+          <template slot-scope="{ row }">
+            <div class="prompt-cell">
+              <span class="prompt-cell__text">{{ promptSummary(row) }}</span>
+              <el-tag size="mini" :type="promptSourceType(row)">{{ promptSourceLabel(row) }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="76">
+          <template slot-scope="{ row }">
+            <table-action label="维护" @click="openPrompt(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -102,8 +142,20 @@
         <el-form-item label="字段">
           <el-input :value="activeField && activeField.id" disabled />
         </el-form-item>
-        <el-form-item label="AI辅助生成提示词">
-          <el-input v-model="promptText" type="textarea" :rows="10" />
+        <el-form-item label="生成类型">
+          <segmented-switch v-model="activeFieldAiSuitable" :options="generationOptions" />
+        </el-form-item>
+        <el-form-item label="当前生效提示词">
+          <el-input :value="resolvePrompt(activeField)" type="textarea" :rows="6" readonly />
+        </el-form-item>
+        <el-form-item label="生成指令">
+          <el-input v-model="promptGeneratorInstruction" type="textarea" :rows="5" :disabled="!activeFieldAiSuitable" />
+          <div class="prompt-generator-actions">
+            <el-button icon="el-icon-magic-stick" :disabled="!activeFieldAiSuitable" :loading="generatingPrompt" @click="generatePrompt">自动生成</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="已维护提示词">
+          <el-input v-model="promptText" type="textarea" :rows="8" :disabled="!activeFieldAiSuitable" placeholder="为空时使用字段规则生成的默认提示词…" />
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -146,8 +198,15 @@
 <script>
 import http from '../api/http'
 import { truncate } from '../utils/admin'
+import { CodeTag, SegmentedSwitch, StatusPill, TableAction } from '../components/ui'
 
 export default {
+  components: {
+    CodeTag,
+    SegmentedSwitch,
+    StatusPill,
+    TableAction
+  },
   data() {
     return {
       loading: false,
@@ -164,16 +223,44 @@ export default {
       templateViewMode: 'preview',
       promptDialogVisible: false,
       activeField: null,
+      activeFieldAiSuitable: false,
       promptText: '',
-      savingPrompt: false
+      promptGeneratorInstruction: '',
+      fieldKeyword: '',
+      fieldGenerationFilter: 'all',
+      fieldPromptFilter: 'all',
+      savingPrompt: false,
+      generatingPrompt: false,
+      generationOptions: [
+        { label: 'AI', value: true },
+        { label: '人工', value: false }
+      ]
     }
   },
   computed: {
     detailTitle() {
       return this.selectedRecord ? `${this.selectedRecord.templateName || '未命名模板'} - 字段维护` : '字段维护'
     },
-    detailFields() {
+    allDetailFields() {
       return this.selectedRecord && Array.isArray(this.selectedRecord.fields) ? this.selectedRecord.fields : []
+    },
+    detailFields() {
+      const keyword = (this.fieldKeyword || '').toLowerCase()
+      return this.allDetailFields.filter((field) => {
+        if (this.fieldGenerationFilter === 'ai' && !field.aiSuitable) return false
+        if (this.fieldGenerationFilter === 'manual' && field.aiSuitable) return false
+        const promptSource = field && field.rule && field.rule.promptSource ? field.rule.promptSource : (field.aiSuitable ? 'default' : 'not_ai')
+        if (this.fieldPromptFilter !== 'all' && promptSource !== this.fieldPromptFilter) return false
+        if (!keyword) return true
+        const haystack = [
+          field.id,
+          field.name,
+          field.meaning,
+          this.resolvePrompt(field),
+          promptSource
+        ].filter(Boolean).join(' ').toLowerCase()
+        return haystack.indexOf(keyword) > -1
+      })
     },
     templateViewerTitle() {
       return this.templateViewerRecord ? `${this.templateViewerRecord.templateName || '未命名模板'} - 模板查看` : '模板查看'
@@ -232,30 +319,114 @@ export default {
     resetDetail() {
       this.selectedRecord = null
       this.activeField = null
+      this.activeFieldAiSuitable = false
       this.promptText = ''
+      this.promptGeneratorInstruction = ''
+      this.fieldKeyword = ''
+      this.fieldGenerationFilter = 'all'
+      this.fieldPromptFilter = 'all'
     },
     resetTemplateViewer() {
       this.templateViewerRecord = null
       this.templateViewMode = 'preview'
     },
     openPrompt(field) {
+      if (!field) return
       this.activeField = field
-      this.promptText = this.resolvePrompt(field)
+      this.activeFieldAiSuitable = Boolean(field.aiSuitable)
+      this.promptText = this.customPrompt(field)
+      this.promptGeneratorInstruction = this.generatorInstruction(field)
       this.promptDialogVisible = true
     },
     resolvePrompt(field) {
+      if (!field || !field.rule) return ''
+      if (field.rule.promptSource === 'not_ai') return ''
+      return field.rule.prompt || field.rule.resolvedPrompt || ''
+    },
+    customPrompt(field) {
       return field && field.rule && field.rule.prompt ? field.rule.prompt : ''
+    },
+    generatorInstruction(field) {
+      return field && field.rule && field.rule.promptGeneratorInstruction ? field.rule.promptGeneratorInstruction : ''
+    },
+    promptSourceLabel(field) {
+      if (field && field.rule && field.rule.promptSource === 'not_ai') return '非AI'
+      return field && field.rule && field.rule.promptSource === 'custom' ? '已维护' : '默认'
+    },
+    promptSourceType(field) {
+      if (field && field.rule && field.rule.promptSource === 'not_ai') return 'info'
+      return field && field.rule && field.rule.promptSource === 'custom' ? 'success' : 'info'
+    },
+    promptSummary(field) {
+      return this.truncate(this.resolvePrompt(field), 96) || '-'
+    },
+    applyFieldQuickFilter(type) {
+      this.fieldKeyword = ''
+      if (type === 'ai') {
+        this.fieldGenerationFilter = 'ai'
+        this.fieldPromptFilter = 'all'
+      } else if (type === 'manual') {
+        this.fieldGenerationFilter = 'manual'
+        this.fieldPromptFilter = 'all'
+      } else if (type === 'custom') {
+        this.fieldGenerationFilter = 'ai'
+        this.fieldPromptFilter = 'custom'
+      } else if (type === 'pending') {
+        this.fieldGenerationFilter = 'ai'
+        this.fieldPromptFilter = 'default'
+      } else {
+        this.fieldGenerationFilter = 'all'
+        this.fieldPromptFilter = 'all'
+      }
+    },
+    findDetailField(fieldId) {
+      return this.allDetailFields.find(field => field.id === fieldId) || null
+    },
+    async saveActiveFieldGeneration() {
+      if (!this.selectedRecord || !this.activeField) return
+      const nextValue = Boolean(this.activeFieldAiSuitable)
+      if (nextValue === Boolean(this.activeField.aiSuitable)) return
+      this.selectedRecord = await http.put(
+        `/admin/api/inpatient-emr/templates/${this.selectedRecord.id}/fields/${encodeURIComponent(this.activeField.id)}/generation`,
+        { aiSuitable: nextValue }
+      )
+      this.activeField = this.findDetailField(this.activeField.id)
+    },
+    async generatePrompt() {
+      if (!this.selectedRecord || !this.activeField) return
+      if (!this.activeFieldAiSuitable) {
+        this.$message.warning('请先将生成类型设为 AI')
+        return
+      }
+      this.generatingPrompt = true
+      try {
+        await this.saveActiveFieldGeneration()
+        const data = await http.post(
+          `/admin/api/inpatient-emr/templates/${this.selectedRecord.id}/fields/${encodeURIComponent(this.activeField.id)}/prompt/generate`,
+          { generatorInstruction: this.promptGeneratorInstruction }
+        )
+        this.promptText = data.prompt || ''
+        this.promptGeneratorInstruction = data.generatorInstruction || this.promptGeneratorInstruction
+        this.$message.success('提示词草稿已生成')
+      } catch (error) {
+        this.$message.error(error.message || '自动生成失败')
+      } finally {
+        this.generatingPrompt = false
+      }
     },
     async savePrompt() {
       if (!this.selectedRecord || !this.activeField) return
       this.savingPrompt = true
       try {
-        this.selectedRecord = await http.put(
-          `/admin/api/inpatient-emr/templates/${this.selectedRecord.id}/fields/${encodeURIComponent(this.activeField.id)}/prompt`,
-          { prompt: this.promptText }
-        )
+        await this.saveActiveFieldGeneration()
+        if (this.activeFieldAiSuitable) {
+          this.selectedRecord = await http.put(
+            `/admin/api/inpatient-emr/templates/${this.selectedRecord.id}/fields/${encodeURIComponent(this.activeField.id)}/prompt`,
+            { prompt: this.promptText, generatorInstruction: this.promptGeneratorInstruction }
+          )
+        }
         this.promptDialogVisible = false
-        this.$message.success('提示词已保存')
+        this.$message.success('字段维护已保存')
         await this.loadData()
       } catch (error) {
         this.$message.error(error.message || '保存失败')
@@ -308,5 +479,85 @@ export default {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.55;
+}
+
+:deep(.inpatient-field-dialog) {
+  max-width: 1360px;
+}
+
+:deep(.inpatient-field-dialog .el-dialog__body) {
+  padding: 12px 16px 16px;
+}
+
+.field-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.field-filter-bar__search {
+  width: 280px;
+  flex: 0 0 280px;
+}
+
+.field-filter-bar__select {
+  width: 128px;
+  flex: 0 0 128px;
+}
+
+.field-filter-bar__quick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.field-table :deep(.cell) {
+  white-space: nowrap;
+}
+
+.field-code-tag {
+  max-width: 134px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.prompt-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.prompt-cell__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.prompt-generator-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+@media (max-width: 1180px) {
+  .field-filter-bar {
+    flex-wrap: wrap;
+  }
+
+  .field-filter-bar__quick {
+    flex-basis: 100%;
+  }
 }
 </style>
