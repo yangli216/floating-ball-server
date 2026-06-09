@@ -14,7 +14,6 @@ const DeviceView = () => import('../views/DeviceView.vue')
 const ConfigView = () => import('../views/ConfigView.vue')
 const SymptomTemplateView = () => import('../views/SymptomTemplateView.vue')
 const InpatientEmrTemplateView = () => import('../views/InpatientEmrTemplateView.vue')
-const DataPackageView = () => import('../views/DataPackageView.vue')
 const ReleaseView = () => import('../views/ReleaseView.vue')
 const LogView = () => import('../views/LogView.vue')
 const UserLogView = () => import('../views/UserLogView.vue')
@@ -43,7 +42,6 @@ const router = new Router({
     { path: '/configs', component: ConfigView, meta: { title: '模型配置' } },
     { path: '/symptom-templates', component: SymptomTemplateView, meta: { title: '症状模板' } },
     { path: '/inpatient-emr-templates', component: InpatientEmrTemplateView, meta: { title: '病历模板缓存' } },
-    { path: '/data-packages', component: DataPackageView, meta: { title: '数据包管理' } },
     { path: '/releases', component: ReleaseView, meta: { title: '版本发布' } },
     { path: '/logs', component: LogView, meta: { title: '操作日志' } },
     { path: '/user-logs', component: UserLogView, meta: { title: '用户日志' } },
