@@ -569,7 +569,7 @@ Content-Type: application/json
 1. `templateId` 相同且缓存启用时，服务端直接返回缓存字段，避免桌面端重复解析同一病历模板；若请求携带的 `templateName` 或 `htmlContent` 与缓存记录不同，服务端会用本次传入值更新缓存展示名和原生模板内容。
 2. 未命中时，服务端保存请求中的 `templateId`、`templateName`、原生 `htmlContent`、内容 hash 与完整 `fields`；`fieldCount` 表示缓存字段总数。
 3. 响应给桌面端时，若请求携带了字段列表，服务端以本次字段列表为基线合并已缓存字段的 AI 生成类型、提示词和生成规则，避免丢失页眉、姓名、床号等 HIS/系统字段；若请求未携带字段列表，则返回缓存中的完整字段。
-4. 管理端维护的字段提示词覆盖会写入 `fields[*].rule.prompt`，桌面端生成住院病历时优先使用该提示词；管理端手动调整的 AI 生成类型会写入 `fields[*].aiSuitable` 与 `fields[*].rule.source`。
+4. 管理端维护的字段提示词覆盖会写入 `fields[*].rule.prompt`，桌面端生成住院病历时优先使用该提示词；未维护自定义提示词时，服务端返回的默认提示词会包含模板名称、记录类型、字段名称、所属段落和字段含义。管理端手动调整的 AI 生成类型会写入 `fields[*].aiSuitable` 与 `fields[*].rule.source`。
 4. 本接口为区域化能力；桌面端非区域化模式可继续使用本地解析作为离线兜底。
 
 ### 3.6 GET `/v1/client/mappings/delta`
@@ -1661,7 +1661,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `sdStatus`：`1` 启用，`0` 停用
 
 ### 5.39.2 GET `/admin/api/inpatient-emr/templates/{idCache}`
-用途：查看单个模板缓存及字段解析结果；响应包含原生 `htmlContent`，管理端基于该字段提供源码查看和 HTML 预览。`fields` 包含完整模板字段，字段规则中会附带 `rule.resolvedPrompt` 和 `rule.promptSource`，分别表示当前展示提示词和来源（`custom` 已维护、`default` 按字段规则生成、`not_ai` 非 AI 生成字段）。
+用途：查看单个模板缓存及字段解析结果；响应包含原生 `htmlContent`，管理端基于该字段提供源码查看和 HTML 预览。`fields` 包含完整模板字段，字段规则中会附带 `rule.resolvedPrompt` 和 `rule.promptSource`，分别表示当前展示提示词和来源（`custom` 已维护、`default` 按字段规则生成、`not_ai` 非 AI 生成字段）。默认提示词会结合模板名称、记录类型、字段名称、所属段落、字段含义和住院数据依赖生成。
 
 ### 5.39.2.1 PUT `/admin/api/inpatient-emr/templates/{idCache}/fields/{fieldId}/generation`
 用途：手动调整指定字段是否由 AI 辅助生成。
@@ -1687,7 +1687,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ```
 
 ### 5.39.3.1 POST `/admin/api/inpatient-emr/templates/{idCache}/fields/{fieldId}/prompt/generate`
-用途：根据字段信息和可编辑的生成指令生成 AI 字段提示词草稿；生成结果不自动保存，管理员确认后再调用提示词保存接口。
+用途：根据字段信息和可编辑的生成指令生成 AI 字段提示词草稿；生成结果不自动保存，管理员确认后再调用提示词保存接口。生成草稿会带入当前模板名称、记录类型、字段名称、所属段落和字段含义，便于区分每日病程录、医生查床录等不同文书语境。
 
 请求：
 

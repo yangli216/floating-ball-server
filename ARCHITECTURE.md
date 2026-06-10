@@ -116,7 +116,7 @@ floating-ball-server/
 - 封装“机构级 > 区域级 > 全局级”的配置查找优先级
 - `modules/config` 中的 AI 配置除主模型地址/密钥外，还负责托管 `chatFast` 独立模型、`enableThinking` 开关、独立审查 AI、`check_examination` 审查开关与 PMPHAI 的服务端密钥；`bootstrap` 只下发非密钥视图
 - `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并、客户端 `templates/delta` 聚合与症状模板修改日志，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
-- `modules/emrtemplate` 负责住院病历 HTML 模板解析结果缓存，客户端按 HIS 传入的 `templateId` 复用已解析字段；缓存记录保存客户端传入的模板主键、模板名称、原生 `htmlContent`、内容 hash 和完整字段列表。管理端支持查询缓存、源码/HTML 预览模板、停用/删除缓存、手动调整字段是否由 AI 生成、维护字段 AI 生成提示词，并展示字段规则生成的默认提示词。字段提示词覆盖和 AI 生成类型会在客户端解析缓存命中或上传模板解析结果时与本次客户端字段合并后返回，供桌面端生成住院病历预览。
+- `modules/emrtemplate` 负责住院病历 HTML 模板解析结果缓存，客户端按 HIS 传入的 `templateId` 复用已解析字段；缓存记录保存客户端传入的模板主键、模板名称、原生 `htmlContent`、内容 hash 和完整字段列表。管理端支持查询缓存、源码/HTML 预览模板、停用/删除缓存、手动调整字段是否由 AI 生成、维护字段 AI 生成提示词，并展示字段规则生成的默认提示词；默认提示词会包含模板名称、记录类型、字段名称、所属段落和字段含义。字段提示词覆盖和 AI 生成类型会在客户端解析缓存命中或上传模板解析结果时与本次客户端字段合并后返回，供桌面端生成住院病历预览。
 - `modules/prompt` 只保留桌面端 Prompt delta 读取链路，管理端不再提供 Prompt 维护入口
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源，管理端不再提供数据包维护入口
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新

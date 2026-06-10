@@ -233,7 +233,7 @@ public class InpatientEmrTemplateCacheService {
             if (!fieldId.equals(stringValue(field.get("id")))) {
                 continue;
             }
-            applyFieldGeneration(field, Boolean.TRUE.equals(request.getAiSuitable()));
+            applyFieldGeneration(field, Boolean.TRUE.equals(request.getAiSuitable()), cache.getTemplateName());
             updated = true;
             break;
         }
@@ -265,11 +265,11 @@ public class InpatientEmrTemplateCacheService {
         Map<String, Object> rule = ensureRule(field);
         String generatorInstruction = trimToNull(request == null ? null : request.getGeneratorInstruction());
         if (generatorInstruction == null) {
-            generatorInstruction = defaultPromptGeneratorInstruction(field, rule);
+            generatorInstruction = defaultPromptGeneratorInstruction(field, rule, cache.getTemplateName());
         }
         InpatientEmrTemplatePromptGenerateVO vo = new InpatientEmrTemplatePromptGenerateVO();
         vo.setGeneratorInstruction(generatorInstruction);
-        vo.setPrompt(buildGeneratedPrompt(field, rule, generatorInstruction));
+        vo.setPrompt(buildGeneratedPrompt(field, rule, generatorInstruction, cache.getTemplateName()));
         return vo;
     }
 
@@ -320,7 +320,7 @@ public class InpatientEmrTemplateCacheService {
     }
 
     private InpatientEmrTemplateCacheVO toAdminView(AiInpatientEmrTemplateCache entity, boolean cacheHit) {
-        List<Map<String, Object>> fields = enrichPromptInfo(parseFields(entity.getFieldsJson()));
+        List<Map<String, Object>> fields = enrichPromptInfo(parseFields(entity.getFieldsJson()), entity.getTemplateName());
         return toView(entity, cacheHit, fields, Integer.valueOf(fields.size()));
     }
 
@@ -329,8 +329,8 @@ public class InpatientEmrTemplateCacheService {
                                                      boolean cacheHit) {
         List<Map<String, Object>> cachedFields = parseFields(entity.getFieldsJson());
         List<Map<String, Object>> responseFields = request == null || request.getFields() == null || request.getFields().isEmpty()
-            ? enrichPromptInfo(cachedFields)
-            : enrichPromptInfo(mergeCachedFields(request.getFields(), cachedFields));
+            ? enrichPromptInfo(cachedFields, entity.getTemplateName())
+            : enrichPromptInfo(mergeCachedFields(request.getFields(), cachedFields), entity.getTemplateName());
         return toView(entity, cacheHit, responseFields, Integer.valueOf(responseFields.size()));
     }
 
@@ -459,7 +459,7 @@ public class InpatientEmrTemplateCacheService {
         return false;
     }
 
-    private List<Map<String, Object>> enrichPromptInfo(List<Map<String, Object>> fields) {
+    private List<Map<String, Object>> enrichPromptInfo(List<Map<String, Object>> fields, String templateName) {
         if (fields == null || fields.isEmpty()) {
             return Collections.emptyList();
         }
@@ -474,7 +474,7 @@ public class InpatientEmrTemplateCacheService {
                 continue;
             }
             if (!StringUtils.hasText(stringValue(rule.get("promptGeneratorInstruction")))) {
-                rule.put("promptGeneratorInstruction", defaultPromptGeneratorInstruction(copy, rule));
+                rule.put("promptGeneratorInstruction", defaultPromptGeneratorInstruction(copy, rule, templateName));
             }
             String customPrompt = trimToNull(stringValue(rule.get("prompt")));
             if (customPrompt != null) {
@@ -482,7 +482,7 @@ public class InpatientEmrTemplateCacheService {
                 rule.put("resolvedPrompt", customPrompt);
                 rule.put("promptSource", PROMPT_SOURCE_CUSTOM);
             } else {
-                rule.put("resolvedPrompt", buildDefaultPrompt(copy, rule));
+                rule.put("resolvedPrompt", buildDefaultPrompt(copy, rule, templateName));
                 rule.put("promptSource", PROMPT_SOURCE_DEFAULT);
             }
             result.add(copy);
@@ -502,7 +502,7 @@ public class InpatientEmrTemplateCacheService {
         return null;
     }
 
-    private void applyFieldGeneration(Map<String, Object> field, boolean aiSuitable) {
+    private void applyFieldGeneration(Map<String, Object> field, boolean aiSuitable, String templateName) {
         field.put("aiSuitable", Boolean.valueOf(aiSuitable));
         Map<String, Object> rule = ensureRule(field);
         if (aiSuitable) {
@@ -517,7 +517,7 @@ public class InpatientEmrTemplateCacheService {
                 rule.put("constraints", defaultConstraints());
             }
             if (!StringUtils.hasText(stringValue(rule.get("promptGeneratorInstruction")))) {
-                rule.put("promptGeneratorInstruction", defaultPromptGeneratorInstruction(field, rule));
+                rule.put("promptGeneratorInstruction", defaultPromptGeneratorInstruction(field, rule, templateName));
             }
             return;
         }
@@ -555,22 +555,30 @@ public class InpatientEmrTemplateCacheService {
         return constraints;
     }
 
-    private String defaultPromptGeneratorInstruction(Map<String, Object> field, Map<String, Object> rule) {
+    private String defaultPromptGeneratorInstruction(Map<String, Object> field, Map<String, Object> rule, String templateName) {
         return DEFAULT_PROMPT_GENERATOR_INSTRUCTION + "\n"
+            + "模板名称：" + templateDisplayName(templateName) + "\n"
+            + "记录类型：" + templateDisplayName(templateName) + "\n"
             + "字段 data-id：" + defaultString(field.get("id"), "未命名字段") + "\n"
+            + "字段名称：" + defaultString(field.get("name"), defaultString(field.get("id"), "未命名字段")) + "\n"
+            + "字段所属段落：" + defaultString(field.get("article"), "未标注段落") + "\n"
             + "字段含义：" + defaultString(field.get("meaning"), "模板字段") + "\n"
             + "生成意图：" + defaultString(rule.get("promptIntent"), defaultPromptIntent(field));
     }
 
     private String buildGeneratedPrompt(Map<String, Object> field,
                                         Map<String, Object> rule,
-                                        String generatorInstruction) {
+                                        String generatorInstruction,
+                                        String templateName) {
         List<String> lines = new ArrayList<String>();
         lines.add(generatorInstruction.trim());
         lines.add("");
         lines.add("请为以下住院病历模板字段生成可直接回填的正文：");
+        lines.add("模板名称：" + templateDisplayName(templateName));
+        lines.add("记录类型：" + templateDisplayName(templateName));
         lines.add("字段 data-id：" + defaultString(field.get("id"), "未命名字段"));
         lines.add("字段名称：" + defaultString(field.get("name"), defaultString(field.get("id"), "未命名字段")));
+        lines.add("字段所属段落：" + defaultString(field.get("article"), "未标注段落"));
         lines.add("字段含义：" + defaultString(field.get("meaning"), "模板字段，需结合模板上下文和 HIS 字段映射确认含义"));
         lines.add("生成意图：" + defaultString(rule.get("promptIntent"), defaultPromptIntent(field)));
         lines.add("依赖数据：" + joinList(rule.get("dependencies"), "住院登记、诊断、医嘱、体温单"));
@@ -579,15 +587,24 @@ public class InpatientEmrTemplateCacheService {
         return String.join("\n", lines);
     }
 
-    private String buildDefaultPrompt(Map<String, Object> field, Map<String, Object> rule) {
+    private String buildDefaultPrompt(Map<String, Object> field, Map<String, Object> rule, String templateName) {
         List<String> lines = new ArrayList<String>();
+        lines.add("模板名称：" + templateDisplayName(templateName));
+        lines.add("记录类型：" + templateDisplayName(templateName));
         lines.add("字段 data-id：" + defaultString(field.get("id"), "未命名字段"));
+        lines.add("字段名称：" + defaultString(field.get("name"), defaultString(field.get("id"), "未命名字段")));
+        lines.add("字段所属段落：" + defaultString(field.get("article"), "未标注段落"));
         lines.add("字段含义：" + defaultString(field.get("meaning"), "模板字段，需结合模板上下文和 HIS 字段映射确认含义"));
         lines.add("生成意图：" + defaultString(rule.get("promptIntent"), "inpatientRecordSection"));
         lines.add("依赖数据：" + joinList(rule.get("dependencies"), "住院上下文"));
         lines.add("约束：" + joinList(rule.get("constraints"), "仅依据已提供 HIS 数据生成"));
         lines.add("输出要求：只生成该字段应回填的正文，不输出字段名、JSON、解释或免责声明。");
         return String.join("\n", lines);
+    }
+
+    private String templateDisplayName(String templateName) {
+        String text = trimToNull(templateName);
+        return text == null ? "住院病历模板" : text;
     }
 
     private String joinList(Object value, String fallback) {

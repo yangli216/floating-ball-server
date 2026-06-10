@@ -104,7 +104,7 @@
         </div>
       </div>
 
-      <el-table :data="detailFields" max-height="calc(100vh - 270px)" class="field-table">
+      <el-table :data="detailFields" :height="fieldTableHeight" class="field-table">
         <el-table-column prop="id" label="data-id" width="160" show-overflow-tooltip>
           <template slot-scope="{ row }">
             <code-tag class="field-code-tag" :value="row.id" />
@@ -231,6 +231,7 @@ export default {
       fieldPromptFilter: 'all',
       savingPrompt: false,
       generatingPrompt: false,
+      viewportHeight: window.innerHeight || 768,
       generationOptions: [
         { label: 'AI', value: true },
         { label: '人工', value: false }
@@ -262,6 +263,9 @@ export default {
         return haystack.indexOf(keyword) > -1
       })
     },
+    fieldTableHeight() {
+      return Math.max(320, Math.min(680, this.viewportHeight - 245))
+    },
     templateViewerTitle() {
       return this.templateViewerRecord ? `${this.templateViewerRecord.templateName || '未命名模板'} - 模板查看` : '模板查看'
     },
@@ -270,10 +274,18 @@ export default {
     }
   },
   mounted() {
+    this.updateViewportHeight()
+    window.addEventListener('resize', this.updateViewportHeight)
     this.loadData()
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.updateViewportHeight)
   },
   methods: {
     truncate,
+    updateViewportHeight() {
+      this.viewportHeight = window.innerHeight || 768
+    },
     async loadData() {
       this.loading = true
       try {
@@ -487,6 +499,10 @@ export default {
 
 :deep(.inpatient-field-dialog .el-dialog__body) {
   padding: 12px 16px 16px;
+  max-height: calc(92vh - 54px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .field-filter-bar {
@@ -518,6 +534,10 @@ export default {
 
 .field-table :deep(.cell) {
   white-space: nowrap;
+}
+
+.field-table :deep(.el-table__body-wrapper) {
+  overflow-y: auto;
 }
 
 .field-code-tag {
