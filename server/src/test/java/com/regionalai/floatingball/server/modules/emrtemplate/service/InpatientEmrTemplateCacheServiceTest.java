@@ -283,6 +283,24 @@ class InpatientEmrTemplateCacheServiceTest {
         assertFalse(((Map<?, ?>) result.getFields().get(0).get("rule")).containsKey("prompt"));
     }
 
+    @Test
+    void invalidateMarksCacheInactive() throws Exception {
+        AiInpatientEmrTemplateCache cache = new AiInpatientEmrTemplateCache();
+        cache.setIdCache("cache-delete");
+        cache.setTemplateId("emr_tpl_daily_course");
+        cache.setTemplateHash("tpl_hash");
+        cache.setFieldsJson(new ObjectMapper().writeValueAsString(sampleFields()));
+        cache.setFieldCount(Integer.valueOf(2));
+        cache.setFgActive("1");
+        cache.setSdStatus("1");
+        when(cacheMapper.selectById("cache-delete")).thenReturn(cache);
+
+        service.invalidate("cache-delete");
+
+        assertEquals("0", cache.getFgActive());
+        verify(cacheMapper).updateById(cache);
+    }
+
     private List<Map<String, Object>> sampleFields() {
         List<Map<String, Object>> fields = aiFieldsWithPrompt(null);
 
