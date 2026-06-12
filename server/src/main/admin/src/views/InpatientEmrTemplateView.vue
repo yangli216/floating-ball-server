@@ -461,14 +461,28 @@ export default {
         this.$message.error(error.message || '操作失败')
       }
     },
-    removeRecord(row) {
-      this.$confirm('删除后客户端会重新上传同模板解析结果，确认删除？', '删除模板缓存', { type: 'warning' })
-        .then(async () => {
-          await http.delete(`/admin/api/inpatient-emr/templates/${row.id}`)
-          this.$message.success('已删除')
-          this.loadData()
+    async removeRecord(row) {
+      try {
+        await this.$confirm('删除后客户端会重新上传同模板解析结果，确认删除？', '删除模板缓存', {
+          type: 'warning'
         })
-        .catch(() => {})
+      } catch (action) {
+        if (action !== 'cancel' && action !== 'close') {
+          this.$message.error(action && action.message ? action.message : '删除确认失败')
+        }
+        return
+      }
+
+      try {
+        await http.delete(`/admin/api/inpatient-emr/templates/${row.id}`)
+        this.$message.success('已删除')
+        if (this.records.length === 1 && this.current > 1) {
+          this.current -= 1
+        }
+        await this.loadData()
+      } catch (error) {
+        this.$message.error(error.message || '删除失败')
+      }
     },
     formatTime(value) {
       if (!value) return '-'
