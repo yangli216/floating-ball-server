@@ -19,7 +19,8 @@
 - Java 8
 - Spring Boot 2.7.x
 - MyBatis-Plus
-- Oracle 19c；运行包必须同时携带 `ojdbc8` 与 `orai18n`，以兼容 `ZHS16GBK` 等非 UTF 数据库字符集
+- 数据库支持 Oracle 19c 与华为高斯 GaussDB/openGauss PostgreSQL 兼容模式；新数据库适配优先保证 GaussDB
+- Oracle 运行包必须同时携带 `ojdbc8` 与 `orai18n`，以兼容 `ZHS16GBK` 等非 UTF 数据库字符集；GaussDB 使用 openGauss JDBC 驱动 `org.opengauss.Driver`
 - Maven
 - WebClient / RestTemplate 用于上游 AI 与语音代理
 
@@ -78,7 +79,9 @@ floating-ball-server/
                 ├── mapper/
                 ├── template-seeds/ # 症状模板内置基线 / 导入源
                 ├── static/admin/   # 管理端构建产物落点
-                └── sql/oracle/     # Oracle bootstrap/init scripts
+                └── sql/
+                    ├── oracle/      # Oracle bootstrap/init scripts
+                    └── gaussdb/     # GaussDB/openGauss PostgreSQL-compatible init script
 ```
 
 ### 3.1 运行配置安全模式
@@ -98,8 +101,9 @@ floating-ball-server/
 2. 签名必须绑定实际请求体：服务端用收到的 body 重算 SHA-256，并用该 hash 参与验签，不信任客户端单独声明的 body hash。
 3. 已绑定公钥的激活设备不允许通过匿名注册覆盖公钥或取回旧 token；本地 token/key 丢失时，桌面端重新生成兜底设备编码注册为新设备，以降低弱运维场景下的人工介入。
 4. 管理端停用设备令牌后，服务端把同机构同 `cdDevice` 的停用记录视为封禁记录；`/v1/client/register` 必须拒绝该设备编码重新领取 token，避免指定旧客户端在 401 后自动重注册绕过禁用。
-5. 实时语音 WebSocket 握手同样校验设备令牌、签名与客户端版本门禁；日志不得输出完整 token 或签名。
-6. 所有 `ApiResponse.timestamp` 均为服务端 epoch 毫秒时间，桌面端可用它维护签名时钟偏移；服务端仍按固定时钟窗口验签，不因客户端本地时区或系统时间漂移绕过签名校验。
+5. 管理端删除设备令牌仅用于异常设备重置，会移除旧令牌、公钥和状态记录并释放同机构同 `cdDevice`；删除后客户端可以重新注册领取新令牌。封禁旧客户端时必须使用停用，不使用删除。
+6. 实时语音 WebSocket 握手同样校验设备令牌、签名与客户端版本门禁；日志不得输出完整 token 或签名。
+7. 所有 `ApiResponse.timestamp` 均为服务端 epoch 毫秒时间，桌面端可用它维护签名时钟偏移；服务端仍按固定时钟窗口验签，不因客户端本地时区或系统时间漂移绕过签名校验。
 
 ## 4. 后端分层
 
@@ -140,7 +144,9 @@ floating-ball-server/
 
 ### 4.3 数据访问层
 
-- 使用 MyBatis-Plus `Mapper` 访问 Oracle 19c
+- 使用 MyBatis-Plus `Mapper` 访问 Oracle 19c 或 GaussDB/openGauss PostgreSQL 兼容库
+- `mybatis-plus.db-type` 决定分页方言，默认 `oracle`，`gaussdb` profile 默认 `opengauss`
+- 运行时数据库差异集中在 `common/db/DatabaseDialect`：分页尾句、日期分组、空值函数、JSON 数值读取等不得散落硬编码
 - 首期不引入复杂读写分离、缓存和消息队列
 
 ### 4.4 管理端托管约定
@@ -248,6 +254,7 @@ floating-ball-server/
 7. 服务端写入 `c_ai_op_log`
 8. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选；详情弹窗必须把完整入参、完整出参与原始 payload 分区展示，不能只展示摘要字段。
 9. `c_ai_op_log` 是审计事实源，只回答“发生过哪些技术/业务操作、链路如何排障”，不得直接作为辅诊功能调用次数统计源
+10. 服务端自身产生的成功代理日志必须可靠落库；若成功调用上游后审计日志写入失败，接口最终返回业务失败。失败代理调用的补充审计日志写入失败时必须 error 级别记录完整异常，保留原始业务失败语义。
 
 代理日志补充约束：
 
@@ -265,6 +272,7 @@ floating-ball-server/
 5. `traceId`、`consultationId`、`sessionId` 只用于把功能事件关联回 `c_ai_op_log` 或 `c_ai_user_consultation_log`，不参与统计去重。
 6. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。来自 HIS Bridge 的入口在桌面端接诊上下文校验通过并准备打开目标界面时即按成功调用入库；同一就诊再次显式触发入口按新调用计数，只有同一条已入队功能事件的离线重试或接口重试通过自身 `idempotencyKey` 去重。
 7. 管理端“辅诊功能”统计只读 `c_ai_feature_event`；`c_ai_op_log` 保留为排障与审计，不再承担统计推断。
+8. 功能事件只把重复幂等上报计入 `skipped`；不支持的 `featureCode`、缺失 `idempotencyKey`、不可序列化的 `payload` 必须计入 `rejected` 并返回拒绝明细，避免统计漏数被静默掩盖。
 
 ### 5.5 用户反馈链路
 
@@ -388,12 +396,13 @@ floating-ball-server/
 1. `c_ai_region`
    - `sd_status` 表示启用/停用，管理端启停只修改该字段；`fg_active` 仅表示逻辑删除/工程无效记录
 2. `c_ai_org`
-   - 激活机构通过 `uk_c_ai_org_code_active` 保证 `cd_org` 唯一
+   - `cd_org` 必填，是桌面端 `/v1/client/register` 使用的稳定机构编码；激活机构通过 `uk_c_ai_org_code_active` 保证 `cd_org` 唯一
    - `sd_status` 表示启用/停用，管理端启停只修改该字段；`fg_active` 仅表示逻辑删除/工程无效记录
 3. `c_ai_device`
    - 激活设备通过 `uk_c_ai_device_code_org_active` 保证同机构内 `cd_device` 唯一，通过 `uk_c_ai_device_token_active` 保证设备令牌唯一
    - `device_public_key` 保存桌面端注册时上传的 ECDSA P-256 SPKI 公钥，供后续 `/v1/*` 请求签名验签使用；已绑定公钥的激活设备不允许匿名重新注册覆盖
-   - `fg_active='0'` 的同机构同 `cd_device` 设备记录用于表达后台停用/封禁，注册接口必须拒绝其重新领取 token；若管理员需要恢复该设备，应先新增同 `cd_device` 的激活令牌占位，再由客户端注册补录公钥
+   - 管理端停用令牌会把原记录置为 `fg_active='0'` 且 `sd_status='0'`，该同机构同 `cd_device` 历史记录用于表达后台停用/封禁，注册接口必须拒绝其重新领取 token；若管理员需要恢复该设备，应先新增同 `cd_device` 的激活令牌占位，再由客户端注册补录公钥
+   - 管理端删除令牌是异常设备重置操作，会物理移除该设备记录并释放同机构同 `cd_device`；删除后客户端重新注册会生成新的 `id_device`、`device_token` 与公钥绑定
    - `register_ip` 记录注册请求来源 IP，`last_seen_ip` 随注册和心跳刷新；两者用于后台定位旧客户端、异常终端和网段，不参与设备身份认证或签名校验
 4. `c_ai_config`
 5. `c_ai_prompt`
@@ -439,15 +448,17 @@ floating-ball-server/
 
 ### 7.1 写入一致性与唯一性约束
 
-多步业务写入必须以 Spring 事务作为边界，并以 Oracle 唯一索引作为并发最终防线：
+多步业务写入必须以 Spring 事务作为边界，并以数据库唯一索引作为并发最终防线：
 
 1. 用户新增、修改、停用：`c_ai_user` 与 `c_ai_user_role` 同事务提交或回滚；账号唯一性不只依赖代码检查。
-2. 机构维护、角色停用、设备注册/维护：涉及主表和关联状态变化时同事务提交；机构编码、设备编码、设备令牌、角色编码由数据库唯一索引兜底。
+2. 机构维护、角色停用、设备注册/维护：涉及主表和关联状态变化时同事务提交；机构编码必填且激活记录唯一，机构编码、设备编码、设备令牌、角色编码由数据库唯一索引兜底。
 3. 反馈提交：上一版 `fg_latest` 降级、新版插入、首版 root 回填必须同事务完成；`uk_c_ai_feedback_latest_scope` 防止并发提交产生两个最新版。
 4. 问诊日志保存：按 `consultation_id + consultation_type + id_device` 做事务化 upsert；并发首次创建由唯一索引兜底，服务端在唯一冲突后重读并重试一次更新。
 5. 现场旧库一次性迁移添加唯一约束前必须先清理重复激活数据；迁移脚本应在发现重复时中止并提示具体对象。
 
-## 8. Oracle 初始化约定
+## 8. 数据库初始化约定
+
+本项目保留 Oracle 与 GaussDB/openGauss 两套初始化基线：
 
 Oracle 初始化拆成两步：
 
@@ -464,6 +475,17 @@ Oracle 初始化拆成两步：
 
 1. 本项目不在业务初始化脚本中执行 `CREATE DATABASE`。Oracle 一般复用现有实例/服务，应用侧只负责 schema 层初始化。
 2. 当前默认连接账号为 `SYSTEM`，因此 `bootstrap.sql` 会先建表空间、再跳过建用户步骤；`init.sql` 只保留建表语句，由执行前切换好的 schema/默认表空间决定对象落点。正式环境仍建议切回独立业务 schema。
+
+GaussDB/openGauss 初始化：
+
+1. `server/src/main/resources/sql/gaussdb/init.sql`
+   - 面向华为高斯 PostgreSQL 兼容模式与 openGauss
+   - 不提供 Oracle 风格 `bootstrap.sql`；目标 database / schema / user 由 DBA 按现场规范预先创建
+   - 由当前应用连接账号登录目标 schema 后执行
+   - 与 Oracle `init.sql` 对齐业务表、索引、注释和默认种子数据
+2. 推荐运行配置使用 `SPRING_PROFILES_ACTIVE=gaussdb`，默认 driver 为 `org.opengauss.Driver`，默认 `mybatis-plus.db-type=opengauss`
+3. `gaussdb` profile 默认日志目录为 `/opt/floating-ball-server/logs`，发布包与语音审计文件默认落在 `/opt/floating-ball-server/data/*`，可通过 `FB_LOG_PATH`、`FB_RELEASE_STORAGE_DIR`、`FB_AUDIT_SPEECH_FILE_DIR` 覆盖；服务器 `java -jar` 测试部署说明见 `server/src/main/resources/sql/gaussdb/DEPLOY.md`
+4. openGauss JDBC 驱动与 PostgreSQL JDBC 驱动同 JVM 混用存在类名空间冲突风险；当前交付优先携带 openGauss 驱动，普通 PostgreSQL 作为 PG 兼容 SQL 的次级适配方向
 
 ## 9. 单体部署约定
 

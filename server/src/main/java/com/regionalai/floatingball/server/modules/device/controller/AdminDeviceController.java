@@ -48,9 +48,15 @@ public class AdminDeviceController {
         return ApiResponse.success(deviceService.update(idDevice, body), RequestIdUtils.resolve(request));
     }
 
-    @DeleteMapping("/{idDevice}")
+    @PostMapping("/{idDevice}/disable")
     public ApiResponse<Void> invalidate(@PathVariable String idDevice, HttpServletRequest request) {
         deviceService.invalidate(idDevice);
+        return ApiResponse.success(null, RequestIdUtils.resolve(request));
+    }
+
+    @DeleteMapping("/{idDevice}")
+    public ApiResponse<Void> deleteForReset(@PathVariable String idDevice, HttpServletRequest request) {
+        deviceService.deleteForReset(idDevice);
         return ApiResponse.success(null, RequestIdUtils.resolve(request));
     }
 }

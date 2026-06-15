@@ -1,5 +1,7 @@
 # Oracle 初始化说明
 
+本目录仅用于 Oracle 19c。华为高斯 GaussDB/openGauss PostgreSQL 兼容模式使用 `../gaussdb/init.sql`，修改业务 schema 时需要同步维护两套初始化基线。
+
 Oracle 初始化分两层执行：
 
 1. `bootstrap.sql`
@@ -63,7 +65,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 3. 症状模板、住院病历模板字段缓存、模板变更日志、辅诊功能事件、安全拒绝日志等业务表
 4. 操作日志、问诊日志、反馈日志的结构化查询列、语音复盘字段、变更摘要字段和并发唯一索引
 5. 默认区域 `REGION001`
-6. 默认机构 `ORG001`
+6. 默认机构 `ORG001`；`c_ai_org.cd_org` 必填，并通过 `uk_c_ai_org_code_active` 保证激活机构编码唯一
 7. 默认管理员 `admin`
 8. 默认 AI 配置 `CFG001`
 9. 脚本末尾显式 `COMMIT`
@@ -84,7 +86,7 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 
 1. 能重建的开发/联调环境，先备份必要数据，再清理目标 schema 并执行 `init.sql`
 2. 不能重建的生产/准生产环境，由 DBA 基于当前 `init.sql` 与现场库结构生成一次性迁移脚本
-3. 一次性迁移脚本必须先清理重复激活数据，再添加唯一索引，例如设备编码、设备令牌、反馈最新版、问诊日志幂等键等约束
+3. 一次性迁移脚本必须先清理重复激活数据，再添加唯一索引，例如机构编码、设备编码、设备令牌、反馈最新版、问诊日志幂等键等约束
 4. 迁移完成后，需要确认 `c_ai_device.device_public_key`、`c_ai_device.register_ip`、`c_ai_device.last_seen_ip`、`c_ai_user_consultation_log.change_summary_json`、`c_ai_user_consultation_log.total_changes`、`c_security_rejection_log` 以及安全分析相关索引均已存在
 
 ## 如果暂时继续使用 `SYSTEM`

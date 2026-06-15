@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ public class UserActivityService {
 
     public UserActivitySummaryVO getSummary(UserActivityQueryDTO query) {
         normalizeDateRange(query);
+        fillDateBounds(query);
 
         UserActivitySummaryVO vo = new UserActivitySummaryVO();
 
@@ -86,24 +88,27 @@ public class UserActivityService {
 
     public List<RegionTreeNodeVO> getRegionTree(UserActivityQueryDTO query) {
         normalizeDateRange(query);
+        fillDateBounds(query);
 
         List<Map<String, Object>> allRegions = userActivityMapper.queryAllRegions();
         List<Map<String, Object>> regionCounts = userActivityMapper.countActiveUsersByRegion(query);
 
         Map<String, Long> countMap = new HashMap<>();
         for (Map<String, Object> row : regionCounts) {
-            String idRegion = String.valueOf(row.get("ID_REGION"));
-            Object cntObj = row.get("CNT");
+            String idRegion = String.valueOf(mapValue(row, "ID_REGION", "id_region"));
+            Object cntObj = mapValue(row, "CNT", "cnt");
             long cnt = cntObj instanceof Number ? ((Number) cntObj).longValue() : 0L;
             countMap.put(idRegion, cnt);
         }
 
         Map<String, RegionTreeNodeVO> nodeMap = new LinkedHashMap<>();
         for (Map<String, Object> row : allRegions) {
-            String id = String.valueOf(row.get("ID"));
-            String name = String.valueOf(row.get("NAME"));
-            String type = row.get("TYPE") != null ? String.valueOf(row.get("TYPE")) : "";
-            String parentId = row.get("PARENTID") != null ? String.valueOf(row.get("PARENTID")) : null;
+            String id = String.valueOf(mapValue(row, "ID", "id"));
+            String name = String.valueOf(mapValue(row, "NAME", "name"));
+            Object typeValue = mapValue(row, "TYPE", "type");
+            Object parentValue = mapValue(row, "PARENTID", "parentid");
+            String type = typeValue != null ? String.valueOf(typeValue) : "";
+            String parentId = parentValue != null ? String.valueOf(parentValue) : null;
 
             RegionTreeNodeVO node = new RegionTreeNodeVO();
             node.setId(id);
@@ -131,23 +136,25 @@ public class UserActivityService {
 
     public PageResponse<UserActivityItemVO> getUserList(UserActivityQueryDTO query, long current, long size) {
         normalizeDateRange(query);
+        fillDateBounds(query);
 
         List<Map<String, Object>> rows = userActivityMapper.queryUserActivityList(query);
 
         List<UserActivityItemVO> items = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             UserActivityItemVO item = new UserActivityItemVO();
-            item.setIdDevice(stringVal(row.get("IDDEVICE")));
-            item.setCdDevice(stringVal(row.get("CDDEVICE")));
-            item.setNaDevice(stringVal(row.get("NADEVICE")));
-            item.setIdOrg(stringVal(row.get("IDORG")));
-            item.setNaOrg(stringVal(row.get("NAORG")));
-            item.setIdRegion(stringVal(row.get("IDREGION")));
-            item.setNaRegion(stringVal(row.get("NAREGION")));
-            item.setNaDoctor(stringVal(row.get("NADOCTOR")));
-            item.setConsultationCount(longVal(row.get("CONSULTATIONCOUNT")));
-            item.setEffectiveConsultationCount(longVal(row.get("EFFECTIVECONSULTATIONCOUNT")));
-            item.setLastActiveTime(row.get("LASTACTIVETIME") != null ? String.valueOf(row.get("LASTACTIVETIME")) : null);
+            item.setIdDevice(stringVal(mapValue(row, "IDDEVICE", "iddevice")));
+            item.setCdDevice(stringVal(mapValue(row, "CDDEVICE", "cddevice")));
+            item.setNaDevice(stringVal(mapValue(row, "NADEVICE", "nadevice")));
+            item.setIdOrg(stringVal(mapValue(row, "IDORG", "idorg")));
+            item.setNaOrg(stringVal(mapValue(row, "NAORG", "naorg")));
+            item.setIdRegion(stringVal(mapValue(row, "IDREGION", "idregion")));
+            item.setNaRegion(stringVal(mapValue(row, "NAREGION", "naregion")));
+            item.setNaDoctor(stringVal(mapValue(row, "NADOCTOR", "nadoctor")));
+            item.setConsultationCount(longVal(mapValue(row, "CONSULTATIONCOUNT", "consultationcount")));
+            item.setEffectiveConsultationCount(longVal(mapValue(row, "EFFECTIVECONSULTATIONCOUNT", "effectiveconsultationcount")));
+            Object lastActiveTime = mapValue(row, "LASTACTIVETIME", "lastactivetime");
+            item.setLastActiveTime(lastActiveTime != null ? String.valueOf(lastActiveTime) : null);
             item.setActiveStatus(item.getConsultationCount() > 0 ? "active" : "inactive");
             items.add(item);
         }
@@ -287,13 +294,14 @@ public class UserActivityService {
         } catch (Exception ex) {
             log.debug("user activity previous period calculation failed. error={}", ex.getMessage());
         }
+        fillDateBounds(prev);
         return prev;
     }
 
     private String findParentId(List<Map<String, Object>> allRegions, String id) {
         for (Map<String, Object> row : allRegions) {
-            if (String.valueOf(row.get("ID")).equals(id)) {
-                Object parentId = row.get("PARENTID");
+            if (String.valueOf(mapValue(row, "ID", "id")).equals(id)) {
+                Object parentId = mapValue(row, "PARENTID", "parentid");
                 return parentId != null ? String.valueOf(parentId) : null;
             }
         }
@@ -344,6 +352,41 @@ public class UserActivityService {
             return ((Number) obj).longValue();
         }
         return 0L;
+    }
+
+    private void fillDateBounds(UserActivityQueryDTO query) {
+        if (query == null) {
+            return;
+        }
+        query.setDateFromTime(parseDateStart(query.getDateFrom()));
+        query.setDateToExclusiveTime(parseDateEndExclusive(query.getDateTo()));
+    }
+
+    private LocalDateTime parseDateStart(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private LocalDateTime parseDateEndExclusive(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE).plusDays(1).atStartOfDay();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Object mapValue(Map<String, Object> row, String upperKey, String lowerKey) {
+        Object value = row.get(upperKey);
+        return value != null ? value : row.get(lowerKey);
     }
 
     private static CellStyle createHeaderStyle(XSSFWorkbook workbook) {

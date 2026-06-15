@@ -1,5 +1,6 @@
 package com.regionalai.floatingball.server.modules.role.service;
 
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.role.dto.AdminRoleSaveRequest;
 import com.regionalai.floatingball.server.modules.role.entity.AiRole;
@@ -35,7 +36,7 @@ class RoleServiceTest {
 
     @BeforeEach
     void setUp() {
-        roleService = new RoleService(aiRoleMapper, aiUserRoleMapper);
+        roleService = new RoleService(aiRoleMapper, aiUserRoleMapper, new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
     }
 
     @Test

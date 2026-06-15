@@ -4,7 +4,7 @@
 
 本项目是 `floating-ball` 的配套后台，当前采用：
 
-1. `server/`：Spring Boot 2.7 + Java 8 + Oracle 19c + MyBatis-Plus
+1. `server/`：Spring Boot 2.7 + Java 8 + MyBatis-Plus；数据库支持 Oracle 19c 与华为高斯 GaussDB/openGauss PostgreSQL 兼容模式，新增数据库适配优先保证 GaussDB
 2. `server/src/main/admin/`：Vue 2 + Element UI 管理端源码，由 `server/` 统一托管
 3. `API.md`：远端 `/v1/*` 契约文档
 
@@ -37,12 +37,13 @@
 5. 未经明确要求，不引入 Redis、RocketMQ、微服务拆分等额外依赖。
 6. **请求签名校验禁止绕过**：`DeviceAuthFilter` 和 `RealtimeSpeechHandshakeInterceptor` 必须校验 ECDSA P-256 签名；新增 `/v1/*` 接口必须经过 `DeviceAuthFilter`，不得私自添加绕过路径。
 
-## Oracle SQL 交付规则
+## 数据库 SQL 交付规则
 
-1. `server/src/main/resources/sql/oracle/init.sql` 是业务 schema 的唯一初始化基线，新增表、字段、索引、注释和默认种子数据必须直接折叠进该文件。
-2. 工程交付默认只保留 `bootstrap.sql` 与 `init.sql`；不得在仓库中长期保留 `upgrade_*.sql` 补丁脚本。
-3. 现场旧库无法重建时，由 DBA 基于当前 `init.sql` 和现场库结构生成一次性迁移脚本；该脚本不作为常驻工程资产提交，除非用户明确要求纳入版本交付。
-4. 修改 `init.sql` 后必须同步更新 `server/src/main/resources/sql/oracle/README.md`，并维护 schema 测试，防止补丁文件回流。
+1. `server/src/main/resources/sql/oracle/init.sql` 与 `server/src/main/resources/sql/gaussdb/init.sql` 是对应数据库的业务 schema 初始化基线，新增表、字段、索引、注释和默认种子数据必须同步折叠进对应基线。
+2. Oracle 目录默认只保留 `bootstrap.sql` 与 `init.sql`；GaussDB 目录默认只保留 `init.sql`。不得在仓库中长期保留 `upgrade_*.sql` 补丁脚本。
+3. 现场旧库无法重建时，由 DBA 基于当前对应数据库 `init.sql` 和现场库结构生成一次性迁移脚本；该脚本不作为常驻工程资产提交，除非用户明确要求纳入版本交付。
+4. 修改任一数据库 `init.sql` 后必须同步更新对应目录 `README.md`，并维护 schema 测试，防止补丁文件回流。
+5. 运行时 SQL 新增数据库相关函数、分页尾句、日期分组、JSON 读取时，必须通过数据库方言封装或明确提供 Oracle/GaussDB 双实现，不得只写 Oracle 专属 SQL。
 
 ## 当前阶段目标
 

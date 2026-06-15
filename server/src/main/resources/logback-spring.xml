@@ -64,6 +64,14 @@
         <logger name="com.regionalai.floatingball.server" level="INFO"/>
     </springProfile>
 
+    <springProfile name="gaussdb">
+        <root level="${FB_LOG_ROOT_LEVEL:-INFO}">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+        <logger name="com.regionalai.floatingball.server" level="${FB_APP_LOG_LEVEL:-INFO}"/>
+    </springProfile>
+
     <springProfile name="product">
         <root level="WARN">
             <appender-ref ref="FILE"/>

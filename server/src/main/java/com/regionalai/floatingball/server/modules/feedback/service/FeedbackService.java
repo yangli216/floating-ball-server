@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
@@ -51,14 +52,17 @@ public class FeedbackService {
     private final AiFeedbackMapper aiFeedbackMapper;
     private final AiOpLogMapper aiOpLogMapper;
     private final ObjectMapper objectMapper;
+    private final DatabaseDialect databaseDialect;
     private final AuditLogDisplayCatalog displayCatalog = new AuditLogDisplayCatalog();
 
     public FeedbackService(AiFeedbackMapper aiFeedbackMapper,
                            AiOpLogMapper aiOpLogMapper,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           DatabaseDialect databaseDialect) {
         this.aiFeedbackMapper = aiFeedbackMapper;
         this.aiOpLogMapper = aiOpLogMapper;
         this.objectMapper = objectMapper;
+        this.databaseDialect = databaseDialect;
     }
 
     @Transactional
@@ -236,7 +240,7 @@ public class FeedbackService {
         AiFeedback feedback = aiFeedbackMapper.selectOne(new QueryWrapper<AiFeedback>()
             .eq("id_feedback", feedbackId)
             .eq("fg_active", "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
         if (feedback == null) {
             throw new BusinessException("反馈记录不存在");
         }
@@ -420,7 +424,7 @@ public class FeedbackService {
             .eq("feedback_scope_key", scopeKey)
             .orderByDesc("revision_no")
             .orderByDesc("feedback_time")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
     }
 
     private FeedbackVersionInfo resolveVersionInfo(AiFeedback latestFeedback, String requestedPreviousFeedbackId) {

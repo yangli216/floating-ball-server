@@ -146,19 +146,30 @@ class AdminDeviceControllerTest {
     }
 
     @Test
-    void invalidateShouldDelegateToService() throws Exception {
+    void disableShouldDelegateToService() throws Exception {
+        mockMvc.perform(post("/admin/api/devices/DEV001/disable")
+                .header("X-Request-Id", "RID-device-disable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("0"))
+            .andExpect(jsonPath("$.requestId").value("RID-device-disable"));
+
+        verify(deviceService).invalidate("DEV001");
+    }
+
+    @Test
+    void deleteForResetShouldDelegateToService() throws Exception {
         mockMvc.perform(delete("/admin/api/devices/DEV001")
                 .header("X-Request-Id", "RID-device-delete"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("0"))
             .andExpect(jsonPath("$.requestId").value("RID-device-delete"));
 
-        verify(deviceService).invalidate("DEV001");
+        verify(deviceService).deleteForReset("DEV001");
     }
 
     @Test
     void businessExceptionShouldUseGlobalErrorEnvelope() throws Exception {
-        doThrow(new BusinessException("设备不存在")).when(deviceService).invalidate("MISSING");
+        doThrow(new BusinessException("设备不存在")).when(deviceService).deleteForReset("MISSING");
 
         mockMvc.perform(delete("/admin/api/devices/MISSING")
                 .header("X-Request-Id", "RID-device-error"))
@@ -171,7 +182,7 @@ class AdminDeviceControllerTest {
     @Test
     void businessExceptionShouldHideTechnicalDetails() throws Exception {
         doThrow(new BusinessException("导出Excel失败：java.sql.SQLException: ORA-00942 table or view does not exist"))
-            .when(deviceService).invalidate("EXPORT-BROKEN");
+            .when(deviceService).deleteForReset("EXPORT-BROKEN");
 
         mockMvc.perform(delete("/admin/api/devices/EXPORT-BROKEN")
                 .header("X-Request-Id", "RID-business-tech-error"))
@@ -186,7 +197,7 @@ class AdminDeviceControllerTest {
     @Test
     void unexpectedExceptionShouldReturnFriendlyMessage() throws Exception {
         doThrow(new RuntimeException("java.sql.SQLException: ORA-00942 table or view does not exist"))
-            .when(deviceService).invalidate("BROKEN");
+            .when(deviceService).deleteForReset("BROKEN");
 
         mockMvc.perform(delete("/admin/api/devices/BROKEN")
                 .header("X-Request-Id", "RID-device-sys-error"))

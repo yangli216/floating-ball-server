@@ -67,6 +67,7 @@ BODY_SHA256
 5. 签名失败返回 `SIG-401`；令牌缺失或无效返回 `AUTH-401`；客户端版本过低返回 `UPDATE-REQUIRED`。
 6. 客户端收到 `SIG-401` 且响应带 `timestamp` 时，应先用该服务端时间刷新本地签名偏移并重签重试一次；仍失败时再按设备令牌或密钥异常处理。
 7. 管理端停用设备令牌后，服务端必须同时阻止同机构同 `cdDevice` 通过 `/v1/client/register` 匿名重新注册，避免旧客户端在令牌失效后自动领取新令牌继续使用。
+8. 管理端删除设备令牌只用于异常设备重置：删除会移除该令牌记录并释放同机构同 `cdDevice`，允许客户端重新注册并领取新令牌；若目标是封禁旧客户端，必须使用停用而不是删除。
 
 ### 2.2 管理端接口
 
@@ -373,11 +374,13 @@ Content-Type: application/json
 
 1. 当前桌面端优先使用设备 MAC 地址作为 `cdDevice`；仅在当前环境无法读取 MAC 时才回退到本地兜底编码。
 2. `publicKey` 为 ECDSA P-256 公钥，SPKI DER 后 base64 编码。
-3. 已存在且已绑定公钥的激活设备不允许匿名重新注册接管；若本地 token/key 丢失，客户端应生成新的兜底 `cdDevice` 注册为新设备，避免弱运维场景下阻断医生使用。
-4. 已存在但未绑定公钥的激活历史设备允许在注册时补录公钥，用于兼容旧数据或管理员重新发放令牌后的客户端接管。
-5. 服务端在注册时从请求来源记录 `registerIp`，并把同一地址写入 `lastSeenIp`；后续心跳会刷新 `lastSeenIp`，用于管理端排查旧版本客户端是否从固定终端或网段继续尝试连接。
-6. 管理端停用令牌后，同机构同 `cdDevice` 视为被服务端封禁；该客户端即使清理本地 token 或旧版本触发自动重注册，也会被拒绝。若确需恢复，管理员应重新新增同 `cdDevice` 的激活令牌占位，再由客户端注册补录公钥。
-7. 同一机构下激活设备的 `cdDevice` 必须唯一；服务端用数据库唯一索引兜底并发注册，重复注册会返回业务错误。
+3. `cdOrg` 必须对应唯一的激活机构编码；管理端机构维护会校验 `cdOrg` 必填且激活记录内唯一，存量库若存在重复激活机构编码，注册接口会返回业务错误并提示先清理机构数据。
+4. 已存在且已绑定公钥的激活设备不允许匿名重新注册接管；若本地 token/key 丢失，客户端应生成新的兜底 `cdDevice` 注册为新设备，避免弱运维场景下阻断医生使用。
+5. 已存在但未绑定公钥的激活历史设备允许在注册时补录公钥，用于兼容旧数据或管理员重新发放令牌后的客户端接管。
+6. 服务端在注册时从请求来源记录 `registerIp`，并把同一地址写入 `lastSeenIp`；后续心跳会刷新 `lastSeenIp`，用于管理端排查旧版本客户端是否从固定终端或网段继续尝试连接。
+7. 管理端停用令牌后，同机构同 `cdDevice` 视为被服务端封禁；该客户端即使清理本地 token 或旧版本触发自动重注册，也会被拒绝。若确需恢复，管理员应重新新增同 `cdDevice` 的激活令牌占位，再由客户端注册补录公钥。
+8. 管理端删除令牌用于特殊排障重置，会移除旧令牌、公钥和状态记录；删除后同机构同 `cdDevice` 可重新执行注册，服务端生成新的 `idDevice` 与 `deviceToken`。
+9. 同一机构下激活设备的 `cdDevice` 必须唯一；服务端用数据库唯一索引兜底并发注册，重复注册会返回业务错误。
 
 响应 `data`：
 
@@ -648,6 +651,8 @@ Content-Type: application/json
 - `traceId` / `consultationId` 优先从顶层字段提取，缺失时回退 `details.traceId / details.consultationId`
 - `payloadJson` 保留完整原始 payload，供管理端详情查看和兼容后续扩展
 
+审计可靠性约束：服务端自身产生的 AI / 语音代理审计日志属于核心证据链。成功代理调用若无法写入 `c_ai_op_log`，接口必须返回业务失败，不得继续向客户端报告成功；失败代理调用的补充审计日志若写入失败，必须以 error 级别记录完整异常和上下文，避免掩盖原始业务失败。
+
 AI 调用类 `operation` 事件补充约束：
 
 1. `details.requestSummary` / `details.responseSummary` 只作为列表与详情摘要，不得替代完整排障数据。
@@ -693,17 +698,20 @@ AI 调用类 `operation` 事件补充约束：
 ```json
 {
   "accepted": 1,
-  "skipped": 0
+  "skipped": 0,
+  "rejected": 0,
+  "rejections": []
 }
 ```
 
 约束：
 
-1. 服务端以 `idDevice + idempotencyKey` 幂等，重复上报只跳过不重复计数。
+1. `idempotencyKey` 必填；服务端以 `idDevice + idempotencyKey` 幂等，重复上报只计入 `skipped`，不重复计数。
 2. `featureCode` 当前固定支持：`voice_consultation`、`smart_consultation`、`report_interpretation`、`chat`、`diagnosis_checklist`、`diagnosis_recommendation`、`medication_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`treatment_plan_recommendation`、`knowledge_usage`。
 3. 后台展示名称由服务端按 `featureCode` 统一映射为：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用。
 4. `traceId`、`consultationId`、`sessionId` 只用于关联审计链路，不参与调用次数累加。
 5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；同一就诊再次显式触发入口按新调用计数，后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
+6. 不支持的 `featureCode`、缺失 `idempotencyKey`、不可序列化的 `payload` 计入 `rejected`，并在 `rejections[]` 返回 `index/eventId/featureCode/reason`；服务端不得把这类数据静默计入 `skipped`。
 
 ### 3.9 POST `/v1/client/user-logs/consultations`
 
@@ -1482,6 +1490,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 }
 ```
 
+说明：`cdOrg` 为客户端注册使用的机构编码，必填，激活机构内必须唯一；重复时返回“机构编码已存在”。
+
 ### 5.24 PUT `/admin/api/orgs/{idOrg}`
 用途：修改机构信息。
 
@@ -1544,8 +1554,11 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ### 5.28 PUT `/admin/api/devices/{idDevice}`
 用途：修改令牌对应终端名称、机构、状态和客户端信息。
 
-### 5.29 DELETE `/admin/api/devices/{idDevice}`
-用途：逻辑停用令牌。
+### 5.29 POST `/admin/api/devices/{idDevice}/disable`
+用途：停用令牌并作为同机构同 `cdDevice` 的封禁记录保留。停用后旧令牌不可继续访问，客户端也不能通过匿名重新注册绕过封禁。
+
+### 5.29.1 DELETE `/admin/api/devices/{idDevice}`
+用途：删除令牌，用于异常设备重置。删除会移除该令牌记录并释放同机构同 `cdDevice`，客户端可重新注册领取新令牌；不应用作日常封禁手段。
 
 ### 5.30 GET `/admin/api/configs`
 用途：分页查询 AI 配置列表。

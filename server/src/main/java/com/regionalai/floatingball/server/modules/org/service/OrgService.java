@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.org.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
@@ -15,9 +16,12 @@ import org.springframework.util.StringUtils;
 public class OrgService {
 
     private final AiOrgMapper aiOrgMapper;
+    private final DatabaseDialect databaseDialect;
 
-    public OrgService(AiOrgMapper aiOrgMapper) {
+    public OrgService(AiOrgMapper aiOrgMapper,
+                      DatabaseDialect databaseDialect) {
         this.aiOrgMapper = aiOrgMapper;
+        this.databaseDialect = databaseDialect;
     }
 
     public PageResponse<AiOrg> list(long current, long size, String keyword, String idRegion, String sdStatus) {
@@ -41,9 +45,10 @@ public class OrgService {
 
     @Transactional
     public AiOrg save(AiOrg org) {
-        if (!StringUtils.hasText(org.getNaOrg())) {
-            throw new BusinessException("机构名称不能为空");
-        }
+        validateOrg(org);
+        String cdOrg = org.getCdOrg().trim();
+        ensureUniqueCode(cdOrg, null);
+        org.setCdOrg(cdOrg);
         if (!StringUtils.hasText(org.getFgActive())) {
             org.setFgActive("1");
         }
@@ -60,7 +65,14 @@ public class OrgService {
 
     @Transactional
     public AiOrg update(String idOrg, AiOrg org) {
+        if (org == null) {
+            throw new BusinessException("请求体不能为空");
+        }
         org.setIdOrg(idOrg);
+        validateOrg(org);
+        String cdOrg = org.getCdOrg().trim();
+        ensureUniqueCode(cdOrg, idOrg);
+        org.setCdOrg(cdOrg);
         try {
             aiOrgMapper.updateById(org);
         } catch (DuplicateKeyException ex) {
@@ -86,5 +98,30 @@ public class OrgService {
         }
         org.setSdStatus(sdStatus);
         aiOrgMapper.updateById(org);
+    }
+
+    private void validateOrg(AiOrg org) {
+        if (org == null) {
+            throw new BusinessException("请求体不能为空");
+        }
+        if (!StringUtils.hasText(org.getCdOrg())) {
+            throw new BusinessException("机构编码不能为空");
+        }
+        if (!StringUtils.hasText(org.getNaOrg())) {
+            throw new BusinessException("机构名称不能为空");
+        }
+    }
+
+    private void ensureUniqueCode(String cdOrg, String excludeIdOrg) {
+        LambdaQueryWrapper<AiOrg> wrapper = new LambdaQueryWrapper<AiOrg>()
+            .eq(AiOrg::getCdOrg, cdOrg)
+            .eq(AiOrg::getFgActive, "1");
+        if (StringUtils.hasText(excludeIdOrg)) {
+            wrapper.ne(AiOrg::getIdOrg, excludeIdOrg);
+        }
+        AiOrg existing = aiOrgMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
+        if (existing != null) {
+            throw new BusinessException("机构编码已存在");
+        }
     }
 }

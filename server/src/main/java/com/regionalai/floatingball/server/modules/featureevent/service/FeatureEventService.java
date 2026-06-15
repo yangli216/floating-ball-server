@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.featureevent.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.featureevent.dto.FeatureEventBatchRequest;
 import com.regionalai.floatingball.server.modules.featureevent.dto.FeatureEventBatchResponse;
@@ -39,38 +40,51 @@ public class FeatureEventService {
             return new FeatureEventBatchResponse(0, 0);
         }
 
-        int accepted = 0;
-        int skipped = 0;
+        FeatureEventBatchResponse response = new FeatureEventBatchResponse(0, 0);
+        int index = 0;
         for (FeatureEventBatchRequest.FeatureEventRequest event : request.getEvents()) {
             SaveResult result = saveOne(device, event);
-            if (result == SaveResult.ACCEPTED) {
-                accepted++;
-            } else if (result == SaveResult.SKIPPED) {
-                skipped++;
+            if (result.state == State.ACCEPTED) {
+                response.setAccepted(response.getAccepted() + 1);
+            } else if (result.state == State.SKIPPED) {
+                response.setSkipped(response.getSkipped() + 1);
+            } else if (result.state == State.REJECTED) {
+                response.addRejection(index, resolveRequestEventId(event), resolveRequestFeatureCode(event), result.reason);
             }
+            index++;
         }
-        log.info("feature event batch saved. deviceId={}, accepted={}, skipped={}",
-            device == null ? null : device.getIdDevice(), accepted, skipped);
-        return new FeatureEventBatchResponse(accepted, skipped);
+        log.info("feature event batch saved. deviceId={}, accepted={}, skipped={}, rejected={}",
+            device == null ? null : device.getIdDevice(), response.getAccepted(), response.getSkipped(), response.getRejected());
+        return response;
     }
 
     private SaveResult saveOne(AiDevice device, FeatureEventBatchRequest.FeatureEventRequest request) {
         if (request == null) {
-            return SaveResult.SKIPPED;
+            return SaveResult.rejected("事件不能为空");
         }
         String featureCode = trimToNull(request.getFeatureCode());
+        if (featureCode == null) {
+            return SaveResult.rejected("featureCode 不能为空");
+        }
         String featureName = FeatureEventCatalog.resolveName(featureCode);
         if (featureName == null) {
-            return SaveResult.SKIPPED;
+            return SaveResult.rejected("featureCode 不支持");
         }
 
         String idDevice = device == null ? null : trimToNull(device.getIdDevice());
         String idempotencyKey = trimToNull(request.getIdempotencyKey());
         if (idempotencyKey == null) {
-            idempotencyKey = buildFallbackIdempotencyKey(request, featureCode);
+            return SaveResult.rejected("idempotencyKey 不能为空");
         }
         if (idDevice != null && exists(idDevice, idempotencyKey)) {
-            return SaveResult.SKIPPED;
+            return SaveResult.skipped();
+        }
+
+        String payloadJson;
+        try {
+            payloadJson = writePayload(request);
+        } catch (BusinessException ex) {
+            return SaveResult.rejected(ex.getMessage());
         }
 
         AiFeatureEvent entity = new AiFeatureEvent();
@@ -92,15 +106,15 @@ public class FeatureEventService {
         entity.setIdDept(trimToNull(request.getDeptId()));
         entity.setNaDept(trimToNull(request.getDeptName()));
         entity.setEventStatus(resolveStatus(request.getStatus()));
-        entity.setPayloadJson(writePayload(request));
+        entity.setPayloadJson(payloadJson);
         entity.setEventTime(resolveEventTime(request.getTimestamp()));
         entity.setFgActive("1");
 
         try {
             featureEventMapper.insert(entity);
-            return SaveResult.ACCEPTED;
+            return SaveResult.accepted();
         } catch (DuplicateKeyException ex) {
-            return SaveResult.SKIPPED;
+            return SaveResult.skipped();
         }
     }
 
@@ -123,14 +137,6 @@ public class FeatureEventService {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
-    private String buildFallbackIdempotencyKey(FeatureEventBatchRequest.FeatureEventRequest request, String featureCode) {
-        String candidate = firstNonBlank(request.getEventId(), request.getTraceId(), request.getConsultationId(), request.getSessionId());
-        if (candidate == null) {
-            candidate = UUID.randomUUID().toString();
-        }
-        return featureCode + ":" + candidate;
-    }
-
     private String resolveStatus(String status) {
         String text = trimToNull(status);
         return text == null ? "success" : text;
@@ -148,21 +154,10 @@ public class FeatureEventService {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException ex) {
-            return "{}";
+            throw new BusinessException("payload 序列化失败");
+        } catch (StackOverflowError | RuntimeException ex) {
+            throw new BusinessException("payload 序列化失败");
         }
-    }
-
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            String text = trimToNull(value);
-            if (text != null) {
-                return text;
-            }
-        }
-        return null;
     }
 
     private String trimToNull(String value) {
@@ -172,8 +167,42 @@ public class FeatureEventService {
         return value.trim();
     }
 
-    private enum SaveResult {
+    private String resolveRequestEventId(FeatureEventBatchRequest.FeatureEventRequest request) {
+        return request == null ? null : trimToNull(request.getEventId());
+    }
+
+    private String resolveRequestFeatureCode(FeatureEventBatchRequest.FeatureEventRequest request) {
+        return request == null ? null : trimToNull(request.getFeatureCode());
+    }
+
+    private static final class SaveResult {
+        private static final SaveResult ACCEPTED = new SaveResult(State.ACCEPTED, null);
+        private static final SaveResult SKIPPED = new SaveResult(State.SKIPPED, null);
+
+        private final State state;
+        private final String reason;
+
+        private SaveResult(State state, String reason) {
+            this.state = state;
+            this.reason = reason;
+        }
+
+        private static SaveResult accepted() {
+            return ACCEPTED;
+        }
+
+        private static SaveResult skipped() {
+            return SKIPPED;
+        }
+
+        private static SaveResult rejected(String reason) {
+            return new SaveResult(State.REJECTED, reason);
+        }
+    }
+
+    private enum State {
         ACCEPTED,
-        SKIPPED
+        SKIPPED,
+        REJECTED
     }
 }

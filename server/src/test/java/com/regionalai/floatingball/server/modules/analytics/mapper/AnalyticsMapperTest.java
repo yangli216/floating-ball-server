@@ -1,68 +1,101 @@
 package com.regionalai.floatingball.server.modules.analytics.mapper;
 
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
+import com.regionalai.floatingball.server.common.db.DatabaseDialectHolder;
 import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsQueryDTO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQueryDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.SelectProvider;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnalyticsMapperTest {
 
+    @AfterEach
+    void tearDown() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+    }
+
     @Test
-    void mapperShouldKeepMyBatisAnnotations() throws Exception {
+    void mapperShouldKeepMyBatisProviderAnnotations() throws Exception {
         assertTrue(AnalyticsMapper.class.isAnnotationPresent(Mapper.class));
 
         Method countAiService = AnalyticsMapper.class.getMethod("countAiService", AnalyticsQueryDTO.class);
         assertHasQueryParam(countAiService);
-        assertSelectContains(countAiService, "c_ai_feature_event", "event_status", "id_region");
+        assertProvider(countAiService, "countAiService");
 
         Method functionRanking = AnalyticsMapper.class.getMethod("queryFunctionUsageRanking", FunctionUsageQueryDTO.class);
         assertHasQueryParam(functionRanking);
-        assertSelectContains(functionRanking, "CASE", "treatment_plan_recommendation", "ORDER BY callCount DESC");
+        assertProvider(functionRanking, "queryFunctionUsageRanking");
 
         Method functionTrend = AnalyticsMapper.class.getMethod("queryFunctionUsageTrend", FunctionUsageQueryDTO.class);
         assertHasQueryParam(functionTrend);
-        assertSelectContains(functionTrend, "TO_CHAR(TRUNC(e.event_time)", "AS moduleName", "dayStr");
+        assertProvider(functionTrend, "queryFunctionUsageTrend");
     }
 
     @Test
-    void distinctModuleSqlShouldExposeCanonicalFeatureCatalog() throws Exception {
-        Method method = AnalyticsMapper.class.getMethod("queryDistinctModules");
-        String sql = joinedSql(method);
+    void oracleProviderShouldKeepOracleSpecificExpressions() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+        AnalyticsSqlProvider provider = new AnalyticsSqlProvider();
 
-        assertTrue(sql.contains("语音问诊"));
-        assertTrue(sql.contains("智能问诊"));
-        assertTrue(sql.contains("AI推荐处置"));
-        assertTrue(sql.contains("AI推荐治疗方案"));
-        assertTrue(sql.contains("知识库使用"));
+        String trend = provider.queryFunctionUsageTrend();
+        assertTrue(trend.contains("TO_CHAR(TRUNC(e.event_time)"));
+        assertTrue(trend.contains("AS moduleName"));
+        assertTrue(trend.contains("dayStr"));
+
+        String distinctModules = provider.queryDistinctModules();
+        assertTrue(distinctModules.contains("FROM dual"));
+        assertTrue(distinctModules.contains("AI推荐治疗方案"));
+
+        String diagnosis = provider.countDiagnosisMatchedConsultations();
+        assertTrue(diagnosis.contains("JSON_VALUE"));
+        assertTrue(diagnosis.contains("$.diagnosisChanges"));
+
+        String ranking = provider.queryFunctionUsageRanking();
+        assertTrue(ranking.contains("NVL(TRIM(e.id_doctor), e.id_device)"));
+        assertFalse(ranking.contains("NULLIF(TRIM(e.id_doctor)"));
     }
 
     @Test
-    void diagnosisMatchedSqlShouldUseChangeSummary() throws Exception {
-        Method method = AnalyticsMapper.class.getMethod("countDiagnosisMatchedConsultations", AnalyticsQueryDTO.class);
-        String sql = joinedSql(method);
+    void gaussdbProviderShouldGeneratePgCompatibleSql() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.OPENGAUSS));
+        AnalyticsSqlProvider provider = new AnalyticsSqlProvider();
 
-        assertTrue(sql.contains("c_ai_user_consultation_log"));
-        assertTrue(sql.contains("change_summary_json"));
-        assertTrue(sql.contains("$.diagnosisChanges"));
+        String trend = provider.queryFunctionUsageTrend();
+        assertTrue(trend.contains("TO_CHAR(e.event_time::date"));
+        assertTrue(trend.contains("AS moduleName"));
+        assertFalse(trend.contains("TRUNC("));
+        assertFalse(trend.contains("TO_DATE("));
+
+        String distinctModules = provider.queryDistinctModules();
+        assertTrue(distinctModules.contains("VALUES"));
+        assertFalse(distinctModules.contains("FROM dual"));
+
+        String diagnosis = provider.countDiagnosisMatchedConsultations();
+        assertTrue(diagnosis.contains("ucl.change_summary_json::jsonb ->> 'diagnosisChanges'"));
+        assertFalse(diagnosis.contains("JSON_VALUE"));
+
+        String ranking = provider.queryFunctionUsageRanking();
+        assertTrue(ranking.contains("COALESCE(NULLIF(TRIM(e.id_doctor), ''), e.id_device)"));
+        assertFalse(ranking.contains("COALESCE(TRIM(e.id_doctor), e.id_device)"));
     }
 
     @Test
-    void analyticsSqlShouldJoinEnabledRegionAndOrgForScopeFilters() throws Exception {
-        Method summary = AnalyticsMapper.class.getMethod("countAiService", AnalyticsQueryDTO.class);
-        Method consultation = AnalyticsMapper.class.getMethod("countConsultation", AnalyticsQueryDTO.class);
-        Method functionUsage = AnalyticsMapper.class.getMethod("queryFunctionUsageRanking", FunctionUsageQueryDTO.class);
+    void analyticsSqlShouldJoinEnabledRegionAndOrgForScopeFilters() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+        AnalyticsSqlProvider provider = new AnalyticsSqlProvider();
 
-        assertEnabledScopeJoin(summary);
-        assertEnabledScopeJoin(consultation);
-        assertEnabledScopeJoin(functionUsage);
+        assertEnabledScopeJoin(provider.countAiService());
+        assertEnabledScopeJoin(provider.countConsultation());
+        assertEnabledScopeJoin(provider.queryFunctionUsageRanking());
     }
 
     private void assertHasQueryParam(Method method) {
@@ -71,24 +104,17 @@ class AnalyticsMapperTest {
         assertEquals("query", annotation.value());
     }
 
-    private void assertSelectContains(Method method, String first, String second, String third) {
-        String sql = joinedSql(method);
-        assertTrue(sql.contains(first));
-        assertTrue(sql.contains(second));
-        assertTrue(sql.contains(third));
+    private void assertProvider(Method method, String providerMethod) {
+        SelectProvider provider = method.getAnnotation(SelectProvider.class);
+        assertEquals(AnalyticsSqlProvider.class, provider.type());
+        assertEquals(providerMethod, provider.method());
     }
 
-    private void assertEnabledScopeJoin(Method method) {
-        String sql = joinedSql(method);
+    private void assertEnabledScopeJoin(String sql) {
         assertTrue(sql.contains("JOIN c_ai_org"));
         assertTrue(sql.contains("JOIN c_ai_region"));
         assertTrue(sql.contains("o.sd_status = '1'"));
         assertTrue(sql.contains("r.sd_status = '1'"));
         assertTrue(sql.contains("o.id_region = #{query.idRegion}"));
-    }
-
-    private String joinedSql(Method method) {
-        Select select = method.getAnnotation(Select.class);
-        return String.join("\n", select.value());
     }
 }

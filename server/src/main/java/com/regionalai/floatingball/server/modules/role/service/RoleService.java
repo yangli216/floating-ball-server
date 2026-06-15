@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.role.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.role.dto.AdminRoleSaveRequest;
 import com.regionalai.floatingball.server.modules.role.entity.AiRole;
@@ -21,10 +22,14 @@ public class RoleService {
 
     private final AiRoleMapper aiRoleMapper;
     private final AiUserRoleMapper aiUserRoleMapper;
+    private final DatabaseDialect databaseDialect;
 
-    public RoleService(AiRoleMapper aiRoleMapper, AiUserRoleMapper aiUserRoleMapper) {
+    public RoleService(AiRoleMapper aiRoleMapper,
+                       AiUserRoleMapper aiUserRoleMapper,
+                       DatabaseDialect databaseDialect) {
         this.aiRoleMapper = aiRoleMapper;
         this.aiUserRoleMapper = aiUserRoleMapper;
+        this.databaseDialect = databaseDialect;
     }
 
     public PageResponse<AiRole> list(long current, long size, String keyword) {
@@ -107,7 +112,7 @@ public class RoleService {
         if (StringUtils.hasText(excludeIdRole)) {
             wrapper.ne(AiRole::getIdRole, excludeIdRole);
         }
-        AiRole existing = aiRoleMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        AiRole existing = aiRoleMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
         if (existing != null) {
             throw new BusinessException("角色编码已存在");
         }

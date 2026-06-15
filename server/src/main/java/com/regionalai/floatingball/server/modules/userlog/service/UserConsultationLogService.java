@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
@@ -53,16 +54,19 @@ public class UserConsultationLogService {
     private final AiOpLogMapper aiOpLogMapper;
     private final ObjectMapper objectMapper;
     private final AudioLogStorageService audioLogStorageService;
+    private final DatabaseDialect databaseDialect;
     private final AuditLogDisplayCatalog displayCatalog = new AuditLogDisplayCatalog();
 
     public UserConsultationLogService(AiUserConsultationLogMapper userConsultationLogMapper,
                                       AiOpLogMapper aiOpLogMapper,
                                       ObjectMapper objectMapper,
-                                      AudioLogStorageService audioLogStorageService) {
+                                      AudioLogStorageService audioLogStorageService,
+                                      DatabaseDialect databaseDialect) {
         this.userConsultationLogMapper = userConsultationLogMapper;
         this.aiOpLogMapper = aiOpLogMapper;
         this.objectMapper = objectMapper;
         this.audioLogStorageService = audioLogStorageService;
+        this.databaseDialect = databaseDialect;
     }
 
     @Transactional
@@ -179,7 +183,7 @@ public class UserConsultationLogService {
                               String dateFrom,
                               String dateTo) {
         LambdaQueryWrapper<AiUserConsultationLog> wrapper = buildListWrapper(keyword, consultationType, status, minChanges, maxChanges, dateFrom, dateTo);
-        wrapper.last("FETCH FIRST " + EXPORT_MAX_ROWS + " ROWS ONLY");
+        wrapper.last(databaseDialect.firstRows(EXPORT_MAX_ROWS));
         List<AiUserConsultationLog> records = userConsultationLogMapper.selectList(wrapper);
 
         try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
@@ -366,7 +370,7 @@ public class UserConsultationLogService {
         if (device != null && StringUtils.hasText(device.getIdDevice())) {
             wrapper.eq(AiUserConsultationLog::getIdDevice, device.getIdDevice());
         }
-        return userConsultationLogMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        return userConsultationLogMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
     }
 
     private void fillCommonFields(AiUserConsultationLog entity, AiDevice device, UserConsultationLogRequest request) {

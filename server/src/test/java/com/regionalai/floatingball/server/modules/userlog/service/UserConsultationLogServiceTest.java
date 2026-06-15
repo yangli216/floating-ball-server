@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.userlog.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
@@ -49,7 +50,7 @@ class UserConsultationLogServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserConsultationLogService(mapper, opLogMapper, new ObjectMapper(), audioLogStorageService);
+        service = new UserConsultationLogService(mapper, opLogMapper, new ObjectMapper(), audioLogStorageService, new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
     }
 
     @Test

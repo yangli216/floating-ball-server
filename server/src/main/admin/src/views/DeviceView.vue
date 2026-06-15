@@ -54,7 +54,8 @@
           <template slot-scope="{ row }">
             <div class="table-actions">
               <table-action @click="openEdit(row)">编辑</table-action>
-              <table-action danger @click="removeRecord(row)">停用</table-action>
+              <table-action danger @click="disableRecord(row)">停用</table-action>
+              <table-action danger @click="deleteRecord(row)">删除</table-action>
             </div>
           </template>
         </el-table-column>
@@ -261,16 +262,31 @@ export default {
         }
       })
     },
-    removeRecord(row) {
+    disableRecord(row) {
       this.$confirm(`确认停用令牌「${row.naDevice || row.cdDevice}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {
-          await http.delete(`/admin/api/devices/${row.idDevice}`)
+          await http.post(`/admin/api/devices/${row.idDevice}/disable`)
           this.$message.success('停用成功')
           this.loadData()
         } catch (error) {
           this.$message.error(error.message || '停用失败')
+        }
+      }).catch(() => {})
+    },
+    deleteRecord(row) {
+      const label = row.naDevice || row.cdDevice
+      this.$confirm(`删除令牌「${label}」后，该终端可重新注册并领取新令牌。确认删除？`, '删除令牌', {
+        type: 'warning',
+        confirmButtonText: '删除'
+      }).then(async () => {
+        try {
+          await http.delete(`/admin/api/devices/${row.idDevice}`)
+          this.$message.success('删除成功')
+          this.loadData()
+        } catch (error) {
+          this.$message.error(error.message || '删除失败')
         }
       }).catch(() => {})
     }

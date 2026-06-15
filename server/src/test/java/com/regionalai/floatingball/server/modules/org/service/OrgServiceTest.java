@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
@@ -42,7 +43,7 @@ class OrgServiceTest {
         MapperBuilderAssistant assistant = new MapperBuilderAssistant(configuration, "");
         assistant.setCurrentNamespace("test");
         TableInfoHelper.initTableInfo(assistant, AiOrg.class);
-        orgService = new OrgService(aiOrgMapper);
+        orgService = new OrgService(aiOrgMapper, new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
     }
 
     @Test
@@ -76,6 +77,7 @@ class OrgServiceTest {
     @Test
     void saveShouldRejectBlankOrgName() {
         AiOrg org = new AiOrg();
+        org.setCdOrg("ORG-CODE");
         org.setNaOrg(" ");
 
         BusinessException ex = assertThrows(BusinessException.class, () -> orgService.save(org));
@@ -85,16 +87,45 @@ class OrgServiceTest {
     }
 
     @Test
+    void saveShouldRejectBlankOrgCode() {
+        AiOrg org = new AiOrg();
+        org.setCdOrg(" ");
+        org.setNaOrg("区域总院");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> orgService.save(org));
+
+        assertEquals("机构编码不能为空", ex.getMessage());
+        verify(aiOrgMapper, never()).insert(any(AiOrg.class));
+    }
+
+    @Test
     void saveShouldPopulateDefaultFlagsWhenMissing() {
         AiOrg org = new AiOrg();
+        org.setCdOrg(" ORG-CODE ");
         org.setNaOrg("区域总院");
 
         AiOrg saved = orgService.save(org);
 
         assertSame(org, saved);
+        assertEquals("ORG-CODE", org.getCdOrg());
         assertEquals("1", org.getFgActive());
         assertEquals("1", org.getSdStatus());
         verify(aiOrgMapper).insert(org);
+    }
+
+    @Test
+    void saveShouldRejectDuplicateOrgCodeBeforeInsert() {
+        AiOrg existing = buildOrg("ORG001", "ORG-CODE", "已存在机构");
+        when(aiOrgMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existing);
+
+        AiOrg org = new AiOrg();
+        org.setCdOrg("ORG-CODE");
+        org.setNaOrg("区域总院");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> orgService.save(org));
+
+        assertEquals("机构编码已存在", ex.getMessage());
+        verify(aiOrgMapper, never()).insert(any(AiOrg.class));
     }
 
     @Test
@@ -112,6 +143,7 @@ class OrgServiceTest {
     @Test
     void updateShouldSetIdAndReturnSelectedOrg() {
         AiOrg request = new AiOrg();
+        request.setCdOrg(" ORG-CODE ");
         request.setNaOrg("更新后机构");
 
         AiOrg persisted = buildOrg("ORG001", "ORG-CODE", "更新后机构");
@@ -120,9 +152,23 @@ class OrgServiceTest {
         AiOrg result = orgService.update("ORG001", request);
 
         assertEquals("ORG001", request.getIdOrg());
+        assertEquals("ORG-CODE", request.getCdOrg());
         assertSame(persisted, result);
         verify(aiOrgMapper).updateById(request);
         verify(aiOrgMapper).selectById("ORG001");
+    }
+
+    @Test
+    void updateShouldRejectDuplicateOrgCode() {
+        AiOrg request = new AiOrg();
+        request.setCdOrg("ORG-CODE");
+        request.setNaOrg("更新后机构");
+        when(aiOrgMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(buildOrg("ORG002", "ORG-CODE", "重复机构"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> orgService.update("ORG001", request));
+
+        assertEquals("机构编码已存在", ex.getMessage());
+        verify(aiOrgMapper, never()).updateById(any(AiOrg.class));
     }
 
     @Test

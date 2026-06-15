@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.device.service;
 
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.exception.UpdateRequiredException;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.util.MaskingUtils;
 import com.regionalai.floatingball.server.modules.device.dto.AiDeviceSaveRequest;
 import com.regionalai.floatingball.server.modules.device.dto.RegisterDeviceRequest;
@@ -14,6 +15,7 @@ import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
+import org.apache.ibatis.exceptions.TooManyResultsException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -52,7 +54,11 @@ class DeviceServiceTest {
 
     @BeforeEach
     void setUp() {
-        deviceService = new DeviceService(aiDeviceMapper, aiOrgMapper, aiRegionMapper, releaseService);
+        deviceService = new DeviceService(aiDeviceMapper, aiOrgMapper, aiRegionMapper, releaseService, oracleDialect());
+    }
+
+    private DatabaseDialect oracleDialect() {
+        return new DatabaseDialect(DatabaseDialect.Kind.ORACLE);
     }
 
     @Test
@@ -149,6 +155,44 @@ class DeviceServiceTest {
     }
 
     @Test
+    void registerShouldCreateNewDeviceWhenResetDeleteRemovedPreviousRecord() {
+        AiOrg org = buildOrg("ORG001", "REG001");
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiDeviceMapper.selectOne(any())).thenReturn(null, null);
+        when(aiDeviceMapper.insert(any(AiDevice.class))).thenAnswer(invocation -> {
+            AiDevice inserted = invocation.getArgument(0);
+            inserted.setIdDevice("DEV-NEW");
+            return 1;
+        });
+
+        RegisterDeviceRequest request = new RegisterDeviceRequest();
+        request.setCdOrg("ORG-CODE");
+        request.setCdDevice("DEV-CODE");
+        request.setNaDevice("重置后终端");
+        request.setClientVersion("1.2.13");
+        request.setOsInfo("Windows 11");
+        request.setPublicKey("new-public-key");
+
+        RegisterDeviceResponse response = deviceService.register(request, "172.16.0.10");
+
+        ArgumentCaptor<AiDevice> captor = ArgumentCaptor.forClass(AiDevice.class);
+        verify(aiDeviceMapper).insert(captor.capture());
+        AiDevice saved = captor.getValue();
+        assertEquals("DEV-CODE", saved.getCdDevice());
+        assertEquals("ORG001", saved.getIdOrg());
+        assertEquals("REG001", saved.getIdRegion());
+        assertEquals("0", saved.getSdStatus());
+        assertEquals("1", saved.getFgActive());
+        assertEquals("new-public-key", saved.getDevicePublicKey());
+        assertEquals("172.16.0.10", saved.getRegisterIp());
+        assertEquals("172.16.0.10", saved.getLastSeenIp());
+        assertEquals("DEV-NEW", response.getIdDevice());
+        assertEquals(saved.getDeviceToken(), response.getDeviceToken());
+        assertTrue(response.getHasPublicKey());
+        verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
+    }
+
+    @Test
     void registerShouldAllowAdminIssuedActivePlaceholderWhenDisabledHistoryExists() {
         AiOrg org = buildOrg("ORG001", "REG001");
         AiDevice activePlaceholder = new AiDevice();
@@ -200,6 +244,23 @@ class DeviceServiceTest {
         UpdateRequiredException ex = assertThrows(UpdateRequiredException.class, () -> deviceService.register(request));
 
         assertEquals("1.2.13", ex.getMinSupportedVersion());
+        verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
+        verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
+    }
+
+    @Test
+    void registerShouldTranslateDuplicateOrgCodeToBusinessError() {
+        when(aiOrgMapper.selectOne(any())).thenThrow(new TooManyResultsException("found: 2"));
+
+        RegisterDeviceRequest request = new RegisterDeviceRequest();
+        request.setCdOrg("ORG-CODE");
+        request.setCdDevice("DEV-CODE");
+        request.setClientVersion("1.2.13");
+        request.setPublicKey("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtest-public-key");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> deviceService.register(request));
+
+        assertEquals("机构编码重复，请先在管理端清理重复机构: ORG-CODE", ex.getMessage());
         verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
         verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
     }
@@ -342,6 +403,30 @@ class DeviceServiceTest {
         assertEquals("0", device.getFgActive());
         assertEquals("0", device.getSdStatus());
         verify(aiDeviceMapper).updateById(device);
+    }
+
+    @Test
+    void deleteForResetShouldPhysicallyRemoveDeviceRecord() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setFgActive("1");
+        device.setSdStatus("1");
+        when(aiDeviceMapper.selectById("DEV001")).thenReturn(device);
+
+        deviceService.deleteForReset("DEV001");
+
+        verify(aiDeviceMapper).deleteById("DEV001");
+        verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
+    }
+
+    @Test
+    void deleteForResetShouldRejectMissingDevice() {
+        when(aiDeviceMapper.selectById("MISSING")).thenReturn(null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> deviceService.deleteForReset("MISSING"));
+
+        assertEquals("设备不存在", ex.getMessage());
+        verify(aiDeviceMapper, never()).deleteById(any(String.class));
     }
 
     private AiOrg buildOrg(String idOrg, String idRegion) {

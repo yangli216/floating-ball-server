@@ -10,6 +10,7 @@ logging:
 
 spring:
   datasource:
+    driver-class-name: ${FB_DB_DRIVER:oracle.jdbc.OracleDriver}
     url: ${FB_DB_URL:jdbc:oracle:thin:@10.17.66.45:1521:phis}
     username: ${FB_DB_USERNAME:RBMH_AI}
     password: ${FB_DB_PASSWORD:RBMH_AI}

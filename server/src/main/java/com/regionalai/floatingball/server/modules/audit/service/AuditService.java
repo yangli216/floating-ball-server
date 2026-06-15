@@ -360,8 +360,13 @@ public class AuditService {
             aiOpLogMapper.insert(opLog);
         } catch (Exception ex) {
             audioLogStorageService.deleteQuietly(storedAudioPath);
-            log.warn("audit system log save failed, swallowing to avoid breaking main flow. logType={}, module={}, action={}, error={}",
-                logType, module, action, ex.getMessage());
+            if (success) {
+                log.error("audit system log save failed for successful operation. logType={}, module={}, action={}, deviceId={}",
+                    logType, module, action, device == null ? null : device.getIdDevice(), ex);
+                throw new BusinessException("AUDIT-PERSIST-FAILED", "审计日志写入失败，请稍后重试；如持续出现，请联系管理员查看日志");
+            }
+            log.error("audit system log save failed for failed operation. logType={}, module={}, action={}, deviceId={}",
+                logType, module, action, device == null ? null : device.getIdDevice(), ex);
         }
     }
 

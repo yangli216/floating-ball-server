@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.security.dto.SecurityDistributionVO;
 import com.regionalai.floatingball.server.modules.security.dto.SecurityDistributionVO.DistributionItem;
@@ -35,9 +36,12 @@ public class SecurityRejectionLogService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final SecurityRejectionLogMapper rejectionLogMapper;
+    private final DatabaseDialect databaseDialect;
 
-    public SecurityRejectionLogService(SecurityRejectionLogMapper rejectionLogMapper) {
+    public SecurityRejectionLogService(SecurityRejectionLogMapper rejectionLogMapper,
+                                       DatabaseDialect databaseDialect) {
         this.rejectionLogMapper = rejectionLogMapper;
+        this.databaseDialect = databaseDialect;
     }
 
     @Async
@@ -62,7 +66,12 @@ public class SecurityRejectionLogService {
             entity.setFgActive("1");
             rejectionLogMapper.insert(entity);
         } catch (Exception e) {
-            log.warn("failed to persist security rejection log: {}", e.getMessage());
+            log.error("failed to persist security rejection log. type={}, path={}, deviceId={}, requestId={}",
+                record == null ? null : record.rejectionType,
+                record == null ? null : record.requestPath,
+                record == null ? null : record.idDevice,
+                record == null ? null : record.requestId,
+                e);
         }
     }
 
@@ -233,12 +242,13 @@ public class SecurityRejectionLogService {
     }
 
     private List<Map<String, Object>> groupByDailyWithType(LocalDateTime from, LocalDateTime to, String typePrefix) {
+        String dayExpr = databaseDialect.dayText("insert_time");
         QueryWrapper<SecurityRejectionLog> qw = new QueryWrapper<SecurityRejectionLog>()
-            .select("TO_CHAR(insert_time, 'YYYY-MM-DD') as day_label", "count(*) as cnt")
+            .select(dayExpr + " as day_label", "count(*) as cnt")
             .eq("fg_active", "1")
             .likeRight("rejection_type", typePrefix)
-            .groupBy("TO_CHAR(insert_time, 'YYYY-MM-DD')")
-            .orderByAsc("TO_CHAR(insert_time, 'YYYY-MM-DD')");
+            .groupBy(dayExpr)
+            .orderByAsc(dayExpr);
         if (from != null) qw.ge("insert_time", from);
         if (to != null) qw.le("insert_time", to);
 
@@ -307,7 +317,7 @@ public class SecurityRejectionLogService {
             .orderByDesc("count(*)");
         if (from != null) qw.ge("insert_time", from);
         if (to != null) qw.le("insert_time", to);
-        if (limit > 0) qw.last("FETCH FIRST " + limit + " ROWS ONLY");
+        if (limit > 0) qw.last(databaseDialect.firstRows(limit));
 
         List<Map<String, Object>> maps = rejectionLogMapper.selectMaps(qw);
         if (maps == null) return Collections.emptyList();
@@ -327,11 +337,12 @@ public class SecurityRejectionLogService {
     }
 
     private List<Map<String, Object>> groupByDaily(LocalDateTime from, LocalDateTime to) {
+        String dayExpr = databaseDialect.dayText("insert_time");
         QueryWrapper<SecurityRejectionLog> qw = new QueryWrapper<SecurityRejectionLog>()
-            .select("TO_CHAR(insert_time, 'YYYY-MM-DD') as day_label", "count(*) as cnt")
+            .select(dayExpr + " as day_label", "count(*) as cnt")
             .eq("fg_active", "1")
-            .groupBy("TO_CHAR(insert_time, 'YYYY-MM-DD')")
-            .orderByAsc("TO_CHAR(insert_time, 'YYYY-MM-DD')");
+            .groupBy(dayExpr)
+            .orderByAsc(dayExpr);
         if (from != null) qw.ge("insert_time", from);
         if (to != null) qw.le("insert_time", to);
 

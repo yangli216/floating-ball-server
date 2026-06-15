@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OracleSchemaScriptTest {
 
     private static final Path ORACLE_SQL_DIR = Paths.get("src/main/resources/sql/oracle");
+    private static final Path GAUSSDB_SQL_DIR = Paths.get("src/main/resources/sql/gaussdb");
 
     @Test
     void oracleDeliveryShouldOnlyKeepBootstrapAndInitScripts() throws IOException {
@@ -43,6 +44,7 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "device_public_key    VARCHAR2(1000)");
         assertContains(initSql, "register_ip          VARCHAR2(64)");
         assertContains(initSql, "last_seen_ip         VARCHAR2(64)");
+        assertContains(initSql, "cd_org               VARCHAR2(64) NOT NULL");
         assertContains(initSql, "COMMENT ON COLUMN c_ai_device.device_public_key");
         assertContains(initSql, "COMMENT ON COLUMN c_ai_device.register_ip");
         assertContains(initSql, "COMMENT ON COLUMN c_ai_device.last_seen_ip");
@@ -57,6 +59,7 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE TABLE c_ai_symptom_template_change_log");
         assertContains(initSql, "CREATE TABLE c_ai_feature_event");
         assertContains(initSql, "CREATE TABLE c_security_rejection_log");
+        assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
 
         assertContains(initSql, "op_action            VARCHAR2(256)");
         assertContains(initSql, "op_title             VARCHAR2(500)");
@@ -75,7 +78,11 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "severity              VARCHAR2(16) DEFAULT 'medium'");
         assertContains(initSql, "revision_no           NUMBER(10) DEFAULT 1");
         assertContains(initSql, "fg_latest             CHAR(1) DEFAULT '1' NOT NULL");
+        assertContains(initSql, "template_id          VARCHAR2(128) NOT NULL");
+        assertContains(initSql, "template_hash        VARCHAR2(128) NOT NULL");
+        assertContains(initSql, "COMMENT ON COLUMN c_ai_inpatient_emr_tpl_cache.template_id");
 
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_org_code_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_device_code_org_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_device_token_active");
         assertContains(initSql, "CREATE INDEX idx_c_ai_device_register_ip");
@@ -92,6 +99,49 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE INDEX idx_c_security_rej_ip");
         assertContains(initSql, "CREATE INDEX idx_c_security_rej_device");
         assertContains(initSql, "CREATE INDEX idx_c_security_rej_path");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_inemr_tpl_id");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_inemr_tpl_hash");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_inemr_tpl_status");
+    }
+
+    @Test
+    void gaussdbDeliveryShouldOnlyKeepInitScript() throws IOException {
+        Set<String> actualSqlFiles = new HashSet<String>();
+        try (DirectoryStream<Path> sqlScripts = Files.newDirectoryStream(GAUSSDB_SQL_DIR, "*.sql")) {
+            for (Path sqlScript : sqlScripts) {
+                actualSqlFiles.add(sqlScript.getFileName().toString());
+            }
+        }
+
+        Set<String> expectedSqlFiles = new HashSet<String>(Arrays.asList("init.sql"));
+        assertTrue(actualSqlFiles.equals(expectedSqlFiles), "gaussdb delivery sql files should only keep init.sql");
+
+        try (DirectoryStream<Path> upgradeScripts = Files.newDirectoryStream(GAUSSDB_SQL_DIR, "upgrade_*.sql")) {
+            assertFalse(upgradeScripts.iterator().hasNext(), "gaussdb upgrade scripts should be folded into init.sql");
+        }
+    }
+
+    @Test
+    void gaussdbInitSqlShouldMirrorBusinessSchemaWithoutOracleTypes() throws IOException {
+        String initSql = readSql(GAUSSDB_SQL_DIR.resolve("init.sql"));
+
+        assertContains(initSql, "cd_org               VARCHAR(64) NOT NULL");
+        assertContains(initSql, "features_json            TEXT");
+        assertContains(initSql, "total_changes        NUMERIC(5)");
+        assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_org_code_active");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_device_code_org_active");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope");
+        assertContains(initSql, "COALESCE(id_device, '-')");
+        assertContains(initSql, "INSERT INTO c_ai_org (id_org, cd_org, na_org, id_region, sd_org_type, sd_status, fg_active)");
+        assertContains(initSql, "COMMIT");
+
+        assertNotContains(initSql, "VARCHAR2");
+        assertNotContains(initSql, "NUMBER(");
+        assertNotContains(initSql, "CLOB");
+        assertNotContains(initSql, "NVL(");
+        assertNotContains(initSql, "DBMS_");
+        assertNotContains(initSql, "dba_");
     }
 
     private String readSql(Path path) throws IOException {
@@ -100,5 +150,9 @@ class OracleSchemaScriptTest {
 
     private void assertContains(String sql, String expected) {
         assertTrue(sql.contains(expected), "init.sql should contain: " + expected);
+    }
+
+    private void assertNotContains(String sql, String unexpected) {
+        assertFalse(sql.contains(unexpected), "init.sql should not contain: " + unexpected);
     }
 }

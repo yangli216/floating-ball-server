@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.device.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.exception.UpdateRequiredException;
 import com.regionalai.floatingball.server.common.util.MaskingUtils;
@@ -18,9 +19,10 @@ import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
-import org.springframework.dao.DuplicateKeyException;
+import org.apache.ibatis.exceptions.TooManyResultsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -47,15 +49,18 @@ public class DeviceService {
     private final AiOrgMapper aiOrgMapper;
     private final AiRegionMapper aiRegionMapper;
     private final ReleaseService releaseService;
+    private final DatabaseDialect databaseDialect;
 
     public DeviceService(AiDeviceMapper aiDeviceMapper,
                          AiOrgMapper aiOrgMapper,
                          AiRegionMapper aiRegionMapper,
-                         ReleaseService releaseService) {
+                         ReleaseService releaseService,
+                         DatabaseDialect databaseDialect) {
         this.aiDeviceMapper = aiDeviceMapper;
         this.aiOrgMapper = aiOrgMapper;
         this.aiRegionMapper = aiRegionMapper;
         this.releaseService = releaseService;
+        this.databaseDialect = databaseDialect;
     }
 
     @Transactional
@@ -66,9 +71,7 @@ public class DeviceService {
     @Transactional
     public RegisterDeviceResponse register(RegisterDeviceRequest request, String clientIp) {
         String normalizedClientIp = normalizeIp(clientIp);
-        AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
-            .eq(AiOrg::getCdOrg, request.getCdOrg())
-            .eq(AiOrg::getFgActive, "1"));
+        AiOrg org = findUniqueActiveOrgByCode(request.getCdOrg());
         if (org == null) {
             throw new BusinessException("机构编码不存在: " + request.getCdOrg());
         }
@@ -141,7 +144,7 @@ public class DeviceService {
         return aiDeviceMapper.selectOne(new LambdaQueryWrapper<AiDevice>()
             .eq(AiDevice::getDeviceToken, token)
             .eq(AiDevice::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
     }
 
     @Transactional
@@ -235,6 +238,15 @@ public class DeviceService {
         aiDeviceMapper.updateById(device);
     }
 
+    @Transactional
+    public void deleteForReset(String idDevice) {
+        AiDevice device = aiDeviceMapper.selectById(idDevice);
+        if (device == null) {
+            throw new BusinessException("设备不存在");
+        }
+        aiDeviceMapper.deleteById(idDevice);
+    }
+
     private void validateSaveRequest(AiDeviceSaveRequest request) {
         if (request == null) {
             throw new BusinessException("请求体不能为空");
@@ -251,11 +263,22 @@ public class DeviceService {
         AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getIdOrg, idOrg)
             .eq(AiOrg::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
         if (org == null) {
             throw new BusinessException("机构不存在");
         }
         return org;
+    }
+
+    private AiOrg findUniqueActiveOrgByCode(String cdOrg) {
+        try {
+            return aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
+                .eq(AiOrg::getCdOrg, cdOrg)
+                .eq(AiOrg::getFgActive, "1"));
+        } catch (TooManyResultsException ex) {
+            log.warn("duplicate active org code found during device register. cdOrg={}", cdOrg);
+            throw new BusinessException("机构编码重复，请先在管理端清理重复机构: " + cdOrg);
+        }
     }
 
     private void ensureUniqueCode(String cdDevice, String idOrg, String excludeIdDevice) {
@@ -266,7 +289,7 @@ public class DeviceService {
         if (StringUtils.hasText(excludeIdDevice)) {
             wrapper.ne(AiDevice::getIdDevice, excludeIdDevice);
         }
-        AiDevice existing = aiDeviceMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        AiDevice existing = aiDeviceMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
         if (existing != null) {
             throw new BusinessException("设备编码已存在");
         }
@@ -277,7 +300,7 @@ public class DeviceService {
             .eq(AiDevice::getCdDevice, cdDevice)
             .eq(AiDevice::getIdOrg, idOrg)
             .eq(AiDevice::getFgActive, activeFlag)
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
     }
 
     private List<AiDeviceView> toViews(List<AiDevice> records) {

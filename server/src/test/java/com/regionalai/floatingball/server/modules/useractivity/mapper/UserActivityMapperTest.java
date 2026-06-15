@@ -1,33 +1,64 @@
 package com.regionalai.floatingball.server.modules.useractivity.mapper;
 
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
+import com.regionalai.floatingball.server.common.db.DatabaseDialectHolder;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityQueryDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.SelectProvider;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UserActivityMapperTest {
 
+    @AfterEach
+    void tearDown() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+    }
+
     @Test
-    void mapperShouldKeepMyBatisAnnotations() throws Exception {
+    void mapperShouldKeepMyBatisProviderAnnotations() throws Exception {
         assertTrue(UserActivityMapper.class.isAnnotationPresent(Mapper.class));
 
         Method countActiveUsers = UserActivityMapper.class.getMethod("countActiveUsers", UserActivityQueryDTO.class);
         assertHasQueryParam(countActiveUsers);
-        assertEnabledScopeJoin(countActiveUsers);
+        assertProvider(countActiveUsers, "countActiveUsers");
 
         Method queryUserActivityList = UserActivityMapper.class.getMethod("queryUserActivityList", UserActivityQueryDTO.class);
         assertHasQueryParam(queryUserActivityList);
-        assertEnabledScopeJoin(queryUserActivityList);
-        String sql = joinedSql(queryUserActivityList);
+        assertProvider(queryUserActivityList, "queryUserActivityList");
+    }
+
+    @Test
+    void oracleProviderShouldUseOracleTopOneSyntax() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+        String sql = new UserActivitySqlProvider().queryUserActivityList();
+
+        assertEnabledScopeJoin(sql);
         assertTrue(sql.contains("o.id_region AS idRegion"));
         assertTrue(sql.contains("r.na_region AS naRegion"));
+        assertTrue(sql.contains("ROWNUM = 1"));
+        assertFalse(sql.contains("LIMIT 1"));
+    }
+
+    @Test
+    void gaussdbProviderShouldUseLimitSyntaxAndBoundTimes() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.OPENGAUSS));
+        String sql = new UserActivitySqlProvider().queryUserActivityList();
+
+        assertEnabledScopeJoin(sql);
+        assertTrue(sql.contains("LIMIT 1"));
+        assertTrue(sql.contains("query.dateFromTime"));
+        assertTrue(sql.contains("query.dateToExclusiveTime"));
+        assertFalse(sql.contains("ROWNUM"));
+        assertFalse(sql.contains("TO_DATE"));
     }
 
     private void assertHasQueryParam(Method method) {
@@ -36,17 +67,17 @@ class UserActivityMapperTest {
         assertEquals("query", annotation.value());
     }
 
-    private void assertEnabledScopeJoin(Method method) {
-        String sql = joinedSql(method);
+    private void assertProvider(Method method, String providerMethod) {
+        SelectProvider provider = method.getAnnotation(SelectProvider.class);
+        assertEquals(UserActivitySqlProvider.class, provider.type());
+        assertEquals(providerMethod, provider.method());
+    }
+
+    private void assertEnabledScopeJoin(String sql) {
         assertTrue(sql.contains("JOIN c_ai_org"));
         assertTrue(sql.contains("JOIN c_ai_region"));
         assertTrue(sql.contains("o.sd_status = '1'"));
         assertTrue(sql.contains("r.sd_status = '1'"));
         assertTrue(sql.contains("o.id_region = #{query.idRegion}"));
-    }
-
-    private String joinedSql(Method method) {
-        Select select = method.getAnnotation(Select.class);
-        return String.join("\n", select.value());
     }
 }

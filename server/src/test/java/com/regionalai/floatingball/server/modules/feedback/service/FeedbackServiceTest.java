@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.feedback.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
 import com.regionalai.floatingball.server.modules.audit.mapper.AiOpLogMapper;
@@ -51,7 +52,7 @@ class FeedbackServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        feedbackService = new FeedbackService(aiFeedbackMapper, aiOpLogMapper, objectMapper);
+        feedbackService = new FeedbackService(aiFeedbackMapper, aiOpLogMapper, objectMapper, new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
     }
 
     @Test

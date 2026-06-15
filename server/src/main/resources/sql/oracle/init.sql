@@ -48,7 +48,7 @@ CREATE INDEX idx_c_ai_region_active ON c_ai_region (fg_active, sd_status);
 
 CREATE TABLE c_ai_org (
     id_org               VARCHAR2(32) PRIMARY KEY,
-    cd_org               VARCHAR2(64),
+    cd_org               VARCHAR2(64) NOT NULL,
     na_org               VARCHAR2(128) NOT NULL,
     id_parent            VARCHAR2(32),
     id_region            VARCHAR2(32),
@@ -63,7 +63,7 @@ CREATE TABLE c_ai_org (
 
 COMMENT ON TABLE c_ai_org IS '机构表';
 COMMENT ON COLUMN c_ai_org.id_org IS '机构主键ID';
-COMMENT ON COLUMN c_ai_org.cd_org IS '机构编码';
+COMMENT ON COLUMN c_ai_org.cd_org IS '机构编码，客户端注册使用，激活记录内唯一';
 COMMENT ON COLUMN c_ai_org.na_org IS '机构名称';
 COMMENT ON COLUMN c_ai_org.id_parent IS '上级机构ID';
 COMMENT ON COLUMN c_ai_org.id_region IS '所属区域ID';

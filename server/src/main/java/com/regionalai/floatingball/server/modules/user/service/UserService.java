@@ -3,6 +3,7 @@ package com.regionalai.floatingball.server.modules.user.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.PasswordUtils;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
@@ -34,15 +35,18 @@ public class UserService {
     private final AiUserRoleMapper aiUserRoleMapper;
     private final AiRoleMapper aiRoleMapper;
     private final AiOrgMapper aiOrgMapper;
+    private final DatabaseDialect databaseDialect;
 
     public UserService(AiUserMapper aiUserMapper,
                        AiUserRoleMapper aiUserRoleMapper,
                        AiRoleMapper aiRoleMapper,
-                       AiOrgMapper aiOrgMapper) {
+                       AiOrgMapper aiOrgMapper,
+                       DatabaseDialect databaseDialect) {
         this.aiUserMapper = aiUserMapper;
         this.aiUserRoleMapper = aiUserRoleMapper;
         this.aiRoleMapper = aiRoleMapper;
         this.aiOrgMapper = aiOrgMapper;
+        this.databaseDialect = databaseDialect;
     }
 
     public PageResponse<AdminUserView> list(long current,
@@ -257,7 +261,7 @@ public class UserService {
         AiOrg org = aiOrgMapper.selectOne(new LambdaQueryWrapper<AiOrg>()
             .eq(AiOrg::getIdOrg, idOrg)
             .eq(AiOrg::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
         if (org == null) {
             throw new BusinessException("所属机构不存在");
         }
@@ -270,7 +274,7 @@ public class UserService {
         if (StringUtils.hasText(excludeIdUser)) {
             wrapper.ne(AiUser::getIdUser, excludeIdUser);
         }
-        AiUser existing = aiUserMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        AiUser existing = aiUserMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
         if (existing != null) {
             throw new BusinessException("登录账号已存在");
         }

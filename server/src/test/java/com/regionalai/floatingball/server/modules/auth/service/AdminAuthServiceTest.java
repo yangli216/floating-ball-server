@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.auth.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.AesUtils;
 import com.regionalai.floatingball.server.common.util.PasswordUtils;
@@ -49,7 +50,7 @@ class AdminAuthServiceTest {
     @BeforeEach
     void setUp() {
         adminTokenService = new AdminTokenService(new AesUtils("1234567890abcdef"), new ObjectMapper());
-        adminAuthService = new AdminAuthService(aiUserMapper, aiUserRoleMapper, aiRoleMapper, adminTokenService);
+        adminAuthService = new AdminAuthService(aiUserMapper, aiUserRoleMapper, aiRoleMapper, adminTokenService, new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
     }
 
     @Test

@@ -71,8 +71,8 @@
     <el-dialog v-if="dialogVisible" :title="dialogTitle" :visible.sync="dialogVisible" width="820px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
-          <el-form-item label="机构编码">
-            <el-input v-model.trim="form.cdOrg" maxlength="64" />
+          <el-form-item label="机构编码" prop="cdOrg">
+            <el-input v-model.trim="form.cdOrg" maxlength="64" placeholder="例如 ORG001" />
           </el-form-item>
           <el-form-item label="机构名称" prop="naOrg">
             <el-input v-model.trim="form.naOrg" maxlength="128" />
@@ -160,6 +160,10 @@ export default {
       statusOptions: configStatusOptions,
       form: createDefaultForm(),
       rules: {
+        cdOrg: [
+          { required: true, message: '请输入机构编码', trigger: 'blur' },
+          { validator: this.validateOrgCode, trigger: 'blur' }
+        ],
         naOrg: [{ required: true, message: '请输入机构名称', trigger: 'blur' }]
       }
     }
@@ -198,6 +202,30 @@ export default {
     },
     resolveParentName(idParent) {
       return idParent ? this.orgMap[idParent] || idParent : '--'
+    },
+    validateOrgCode(rule, value, callback) {
+      const code = String(value || '').trim()
+      if (!code) {
+        callback(new Error('请输入机构编码'))
+        return
+      }
+      if (this.hasDuplicateOrgCode(code)) {
+        callback(new Error('机构编码已存在，请更换后再保存'))
+        return
+      }
+      callback()
+    },
+    hasDuplicateOrgCode(cdOrg) {
+      const code = String(cdOrg || '').trim()
+      if (!code) {
+        return false
+      }
+      return this.orgOptions.some(item => {
+        if (!item || item.idOrg === this.form.idOrg) {
+          return false
+        }
+        return String(item.cdOrg || '').trim() === code
+      })
     },
     async loadReferences() {
       try {
@@ -275,6 +303,10 @@ export default {
     submitForm() {
       this.$refs.formRef.validate(async valid => {
         if (!valid) {
+          return
+        }
+        if (this.hasDuplicateOrgCode(this.form.cdOrg)) {
+          this.$message.error('机构编码已存在，请更换后再保存')
           return
         }
         this.saving = true

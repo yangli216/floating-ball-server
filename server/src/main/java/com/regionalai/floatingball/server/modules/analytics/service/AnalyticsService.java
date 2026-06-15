@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
@@ -67,6 +68,7 @@ public class AnalyticsService {
     }
 
     public AnalyticsSummaryVO getSummary(AnalyticsQueryDTO query) {
+        fillDateBounds(query);
         AnalyticsSummaryVO vo = new AnalyticsSummaryVO();
 
         long aiServiceTotal = analyticsMapper.countAiService(query);
@@ -119,6 +121,7 @@ public class AnalyticsService {
     }
 
     public TrendDataVO getTrend(AnalyticsQueryDTO query) {
+        fillDateBounds(query);
         TrendDataVO vo = new TrendDataVO();
         List<Map<String, Object>> aiRows = analyticsMapper.queryAiServiceTrend(query);
         List<Map<String, Object>> consRows = analyticsMapper.queryConsultationTrend(query);
@@ -158,6 +161,7 @@ public class AnalyticsService {
     }
 
     public DistributionDataVO getDistribution(AnalyticsQueryDTO query) {
+        fillDateBounds(query);
         DistributionDataVO vo = new DistributionDataVO();
 
         List<DistributionItemVO> orgDist = analyticsMapper.queryOrgDistribution(query);
@@ -313,6 +317,7 @@ public class AnalyticsService {
         } catch (Exception ex) {
             log.debug("analytics previous period calculation failed. error={}", ex.getMessage());
         }
+        fillDateBounds(prev);
         return prev;
     }
 
@@ -322,8 +327,8 @@ public class AnalyticsService {
             return map;
         }
         for (Map<String, Object> row : rows) {
-            String day = String.valueOf(row.get("DAY_STR"));
-            Object cntObj = row.get("CNT");
+            String day = String.valueOf(mapValue(row, "DAY_STR", "day_str"));
+            Object cntObj = mapValue(row, "CNT", "cnt");
             long cnt = 0;
             if (cntObj instanceof Number) {
                 cnt = ((Number) cntObj).longValue();
@@ -404,9 +409,9 @@ public class AnalyticsService {
         List<Map<String, Object>> trendRows = analyticsMapper.queryFunctionUsageTrend(normalizedQuery);
         Map<String, Map<String, Long>> trendMap = new LinkedHashMap<>();
         for (Map<String, Object> row : trendRows) {
-            String module = String.valueOf(row.get("MODULENAME"));
-            String day = String.valueOf(row.get("DAYSTR"));
-            Object cntObj = row.get("CNT");
+            String module = String.valueOf(mapValue(row, "MODULENAME", "modulename"));
+            String day = String.valueOf(mapValue(row, "DAYSTR", "daystr"));
+            Object cntObj = mapValue(row, "CNT", "cnt");
             long cnt = cntObj instanceof Number ? ((Number) cntObj).longValue() : 0L;
             trendMap.computeIfAbsent(module, k -> new LinkedHashMap<>()).put(day, cnt);
         }
@@ -535,6 +540,7 @@ public class AnalyticsService {
         } catch (Exception ex) {
             log.debug("analytics function usage previous period calculation failed. error={}", ex.getMessage());
         }
+        fillDateBounds(prev);
         return prev;
     }
 
@@ -568,6 +574,7 @@ public class AnalyticsService {
         normalized.setCurrent(query.getCurrent());
         normalized.setSize(query.getSize());
         normalized.setFunctionModules(resolveFunctionModules(query.getFunctionModules()));
+        fillDateBounds(normalized);
         return normalized;
     }
 
@@ -740,6 +747,49 @@ public class AnalyticsService {
 
     private static long safeLong(Long value) {
         return value != null ? value : 0L;
+    }
+
+    private void fillDateBounds(AnalyticsQueryDTO query) {
+        if (query == null) {
+            return;
+        }
+        query.setDateFromTime(parseDateStart(query.getDateFrom()));
+        query.setDateToExclusiveTime(parseDateEndExclusive(query.getDateTo()));
+    }
+
+    private void fillDateBounds(FunctionUsageQueryDTO query) {
+        if (query == null) {
+            return;
+        }
+        query.setDateFromTime(parseDateStart(query.getDateFrom()));
+        query.setDateToExclusiveTime(parseDateEndExclusive(query.getDateTo()));
+    }
+
+    private LocalDateTime parseDateStart(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private LocalDateTime parseDateEndExclusive(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE).plusDays(1).atStartOfDay();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Object mapValue(Map<String, Object> row, String upperKey, String lowerKey) {
+        Object value = row.get(upperKey);
+        return value != null ? value : row.get(lowerKey);
     }
 
     private static byte[] writeWorkbook(XSSFWorkbook workbook) throws IOException {

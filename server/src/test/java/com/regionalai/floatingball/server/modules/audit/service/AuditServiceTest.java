@@ -26,8 +26,10 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AuditServiceTest {
@@ -186,5 +188,36 @@ class AuditServiceTest {
             OBJECT_MAPPER.readTree("{\"scene\":\"chat-input\",\"requestBody\":{\"fileName\":\"speech.wav\"}}"),
             OBJECT_MAPPER.readTree(log.getPayloadJson())
         );
+    }
+
+    @Test
+    void saveSystemLogWithAudioFileShouldFailWhenSuccessfulOperationAuditCannotPersist() throws Exception {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV004");
+        device.setIdOrg("ORG004");
+        when(aiOpLogMapper.insert(any(AiOpLog.class))).thenThrow(new RuntimeException("database unavailable"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> auditService.saveSystemLogWithAudioFile(
+            device,
+            "speech_proxy",
+            "speech",
+            "transcribe",
+            Collections.singletonMap("scene", "chat-input"),
+            true,
+            "hello-audio".getBytes(StandardCharsets.UTF_8),
+            "speech.wav"
+        ));
+
+        assertEquals("AUDIT-PERSIST-FAILED", ex.getCode());
+        assertEquals(0L, countRegularFiles(tempDir.resolve("speech-audit")));
+    }
+
+    private long countRegularFiles(Path root) throws Exception {
+        if (!Files.exists(root)) {
+            return 0L;
+        }
+        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
+            return stream.filter(Files::isRegularFile).count();
+        }
     }
 }

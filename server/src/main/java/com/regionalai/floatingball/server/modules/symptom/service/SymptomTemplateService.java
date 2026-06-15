@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
 import com.regionalai.floatingball.server.modules.datapackage.service.BuiltinTemplateSeedService;
@@ -69,17 +70,20 @@ public class SymptomTemplateService {
     private final BuiltinTemplateSeedService builtinTemplateSeedService;
     private final DataPackageService dataPackageService;
     private final SymptomTemplateChangeLogService changeLogService;
+    private final DatabaseDialect databaseDialect;
 
     public SymptomTemplateService(AiSymptomTemplateMapper aiSymptomTemplateMapper,
                                   ObjectMapper objectMapper,
                                   BuiltinTemplateSeedService builtinTemplateSeedService,
                                   DataPackageService dataPackageService,
-                                  SymptomTemplateChangeLogService changeLogService) {
+                                  SymptomTemplateChangeLogService changeLogService,
+                                  DatabaseDialect databaseDialect) {
         this.aiSymptomTemplateMapper = aiSymptomTemplateMapper;
         this.objectMapper = objectMapper;
         this.builtinTemplateSeedService = builtinTemplateSeedService;
         this.dataPackageService = dataPackageService;
         this.changeLogService = changeLogService;
+        this.databaseDialect = databaseDialect;
     }
 
     public PageResponse<SymptomTemplateVO> list(long current,
@@ -436,7 +440,7 @@ public class SymptomTemplateService {
         if (StringUtils.hasText(excludeId)) {
             wrapper.ne(AiSymptomTemplate::getIdTemplate, excludeId);
         }
-        return aiSymptomTemplateMapper.selectOne(wrapper.last("FETCH FIRST 1 ROWS ONLY"));
+        return aiSymptomTemplateMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
     }
 
     private void validateConfig(Map<String, Object> config) {

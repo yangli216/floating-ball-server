@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.auth.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.PasswordUtils;
 import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
@@ -32,15 +33,18 @@ public class AdminAuthService {
     private final AiUserRoleMapper aiUserRoleMapper;
     private final AiRoleMapper aiRoleMapper;
     private final AdminTokenService adminTokenService;
+    private final DatabaseDialect databaseDialect;
 
     public AdminAuthService(AiUserMapper aiUserMapper,
                             AiUserRoleMapper aiUserRoleMapper,
                             AiRoleMapper aiRoleMapper,
-                            AdminTokenService adminTokenService) {
+                            AdminTokenService adminTokenService,
+                            DatabaseDialect databaseDialect) {
         this.aiUserMapper = aiUserMapper;
         this.aiUserRoleMapper = aiUserRoleMapper;
         this.aiRoleMapper = aiRoleMapper;
         this.adminTokenService = adminTokenService;
+        this.databaseDialect = databaseDialect;
     }
 
     public AdminLoginResponse login(AdminLoginRequest request) {
@@ -50,7 +54,7 @@ public class AdminAuthService {
         AiUser user = aiUserMapper.selectOne(new LambdaQueryWrapper<AiUser>()
             .eq(AiUser::getCdUser, request.getUsername().trim())
             .eq(AiUser::getFgActive, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
         if (user == null || !"1".equals(user.getSdStatus()) || !PasswordUtils.matches(request.getPassword(), user.getPasswordHash())) {
             log.warn("admin login failed: invalid credentials. username={}", request.getUsername().trim());
             throw new BusinessException("账号或密码错误");
@@ -133,7 +137,7 @@ public class AdminAuthService {
             .eq(AiUser::getCdUser, username)
             .eq(AiUser::getFgActive, "1")
             .eq(AiUser::getSdStatus, "1")
-            .last("FETCH FIRST 1 ROWS ONLY"));
+            .last(databaseDialect.firstRows(1)));
         if (user == null) {
             throw new BusinessException(errorMessage);
         }

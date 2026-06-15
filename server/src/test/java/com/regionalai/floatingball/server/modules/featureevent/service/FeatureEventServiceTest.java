@@ -21,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -75,6 +76,8 @@ class FeatureEventServiceTest {
 
         assertEquals(1, response.getAccepted());
         assertEquals(0, response.getSkipped());
+        assertEquals(0, response.getRejected());
+        assertTrue(response.getRejections().isEmpty());
 
         ArgumentCaptor<AiFeatureEvent> captor = ArgumentCaptor.forClass(AiFeatureEvent.class);
         verify(featureEventMapper).insert(captor.capture());
@@ -119,13 +122,17 @@ class FeatureEventServiceTest {
 
         assertEquals(0, response.getAccepted());
         assertEquals(1, response.getSkipped());
+        assertEquals(0, response.getRejected());
+        assertTrue(response.getRejections().isEmpty());
         verify(featureEventMapper, never()).insert(any(AiFeatureEvent.class));
     }
 
     @Test
-    void saveBatchShouldSkipUnsupportedFeatureCode() {
+    void saveBatchShouldRejectUnsupportedFeatureCode() {
         FeatureEventBatchRequest.FeatureEventRequest event = new FeatureEventBatchRequest.FeatureEventRequest();
+        event.setEventId("EVENT-RAW-001");
         event.setFeatureCode("raw_ai_operation");
+        event.setIdempotencyKey("raw_ai_operation:EVENT-RAW-001");
 
         FeatureEventBatchRequest request = new FeatureEventBatchRequest();
         request.setEvents(Collections.singletonList(event));
@@ -133,7 +140,52 @@ class FeatureEventServiceTest {
         FeatureEventBatchResponse response = service.saveBatch(null, request);
 
         assertEquals(0, response.getAccepted());
-        assertEquals(1, response.getSkipped());
+        assertEquals(0, response.getSkipped());
+        assertEquals(1, response.getRejected());
+        assertEquals(0, response.getRejections().get(0).getIndex());
+        assertEquals("EVENT-RAW-001", response.getRejections().get(0).getEventId());
+        assertEquals("raw_ai_operation", response.getRejections().get(0).getFeatureCode());
+        assertEquals("featureCode 不支持", response.getRejections().get(0).getReason());
+        verify(featureEventMapper, never()).insert(any(AiFeatureEvent.class));
+    }
+
+    @Test
+    void saveBatchShouldRejectMissingIdempotencyKey() {
+        FeatureEventBatchRequest.FeatureEventRequest event = new FeatureEventBatchRequest.FeatureEventRequest();
+        event.setEventId("EVENT-CHAT-001");
+        event.setFeatureCode(FeatureEventCatalog.CHAT);
+
+        FeatureEventBatchRequest request = new FeatureEventBatchRequest();
+        request.setEvents(Collections.singletonList(event));
+
+        FeatureEventBatchResponse response = service.saveBatch(null, request);
+
+        assertEquals(0, response.getAccepted());
+        assertEquals(0, response.getSkipped());
+        assertEquals(1, response.getRejected());
+        assertEquals("idempotencyKey 不能为空", response.getRejections().get(0).getReason());
+        verify(featureEventMapper, never()).insert(any(AiFeatureEvent.class));
+    }
+
+    @Test
+    void saveBatchShouldRejectUnserializablePayload() {
+        FeatureEventBatchRequest.FeatureEventRequest event = new FeatureEventBatchRequest.FeatureEventRequest();
+        event.setEventId("EVENT-CHAT-002");
+        event.setFeatureCode(FeatureEventCatalog.CHAT);
+        event.setIdempotencyKey("chat:EVENT-CHAT-002");
+        Map<String, Object> payload = new HashMap<String, Object>();
+        payload.put("self", payload);
+        event.setPayload(payload);
+
+        FeatureEventBatchRequest request = new FeatureEventBatchRequest();
+        request.setEvents(Collections.singletonList(event));
+
+        FeatureEventBatchResponse response = service.saveBatch(null, request);
+
+        assertEquals(0, response.getAccepted());
+        assertEquals(0, response.getSkipped());
+        assertEquals(1, response.getRejected());
+        assertEquals("payload 序列化失败", response.getRejections().get(0).getReason());
         verify(featureEventMapper, never()).insert(any(AiFeatureEvent.class));
     }
 
@@ -157,6 +209,7 @@ class FeatureEventServiceTest {
 
         assertEquals(1, response.getAccepted());
         assertEquals(0, response.getSkipped());
+        assertEquals(0, response.getRejected());
 
         ArgumentCaptor<AiFeatureEvent> captor = ArgumentCaptor.forClass(AiFeatureEvent.class);
         verify(featureEventMapper).insert(captor.capture());
@@ -184,5 +237,6 @@ class FeatureEventServiceTest {
 
         assertEquals(0, response.getAccepted());
         assertEquals(1, response.getSkipped());
+        assertEquals(0, response.getRejected());
     }
 }

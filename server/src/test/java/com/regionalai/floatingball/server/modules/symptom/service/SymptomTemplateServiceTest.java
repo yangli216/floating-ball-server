@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.symptom.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
 import com.regionalai.floatingball.server.modules.datapackage.service.BuiltinTemplateSeedService;
@@ -56,7 +57,8 @@ class SymptomTemplateServiceTest {
             objectMapper,
             new BuiltinTemplateSeedService(objectMapper),
             dataPackageService,
-            changeLogService
+            changeLogService,
+            new DatabaseDialect(DatabaseDialect.Kind.ORACLE)
         );
     }
 

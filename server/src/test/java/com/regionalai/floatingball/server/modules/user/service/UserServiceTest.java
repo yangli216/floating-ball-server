@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.user.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
+import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.util.PasswordUtils;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
@@ -52,7 +53,7 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(aiUserMapper, aiUserRoleMapper, aiRoleMapper, aiOrgMapper);
+        userService = new UserService(aiUserMapper, aiUserRoleMapper, aiRoleMapper, aiOrgMapper, new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
     }
 
     @Test
