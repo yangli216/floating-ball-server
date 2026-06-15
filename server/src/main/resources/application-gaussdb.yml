@@ -1,0 +1,36 @@
+server:
+  port: ${FB_SERVER_PORT:8080}
+
+logging:
+  level:
+    root: ${FB_LOG_ROOT_LEVEL:INFO}
+    com.regionalai.floatingball.server: ${FB_APP_LOG_LEVEL:INFO}
+    org.apache.coyote.http11.Http11Processor: WARN
+  file:
+    path: ${FB_LOG_PATH:/opt/floating-ball-server/logs}
+
+spring:
+  datasource:
+    driver-class-name: ${FB_DB_DRIVER:org.opengauss.Driver}
+    url: ${FB_DB_URL:jdbc:opengauss://10.17.73.49:8000/phis?currentSchema=phis}
+    username: ${FB_DB_USERNAME:phis}
+    password: ${FB_DB_PASSWORD:Bsoft@123}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+mybatis-plus:
+  db-type: ${FB_DB_TYPE:opengauss}
+
+floating-ball:
+  audit:
+    speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:/opt/floating-ball-server/data/speech-audit}
+  release:
+    storage-dir: ${FB_RELEASE_STORAGE_DIR:/opt/floating-ball-server/data/releases}
+    public-base-url: ${FB_RELEASE_PUBLIC_BASE_URL:}
+  cors:
+    allowed-origins:
+      - ${FB_ADMIN_ORIGIN:http://127.0.0.1:8080}
