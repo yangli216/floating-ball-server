@@ -59,7 +59,9 @@ public class ClientController {
     @PostMapping("/register")
     public ApiResponse<RegisterDeviceResponse> register(@Validated @RequestBody RegisterDeviceRequest request,
                                                         HttpServletRequest httpServletRequest) {
-        return ApiResponse.success(deviceService.register(request, ClientIpUtils.resolve(httpServletRequest)), RequestIdUtils.resolve(httpServletRequest));
+        return ApiResponse.success(
+            deviceService.register(request, ClientIpUtils.resolve(httpServletRequest), resolveBearerToken(httpServletRequest)),
+            RequestIdUtils.resolve(httpServletRequest));
     }
 
     @PostMapping("/heartbeat")
@@ -103,5 +105,14 @@ public class ClientController {
         AiDevice device = DeviceContextHolder.get();
         int accepted = auditService.saveBatch(device, request);
         return ApiResponse.success(new AuditBatchResponse(accepted), RequestIdUtils.resolve(httpServletRequest));
+    }
+
+    private String resolveBearerToken(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authHeader.substring("Bearer ".length()).trim();
+        return token.isEmpty() ? null : token;
     }
 }

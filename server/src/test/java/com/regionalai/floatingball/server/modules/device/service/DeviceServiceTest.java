@@ -97,7 +97,45 @@ class DeviceServiceTest {
     }
 
     @Test
-    void registerShouldRejectAnonymousTakeoverWhenExistingDeviceHasPublicKey() {
+    void registerShouldRefreshPublicKeyForExistingActiveDevice() {
+        AiOrg org = buildOrg("ORG001", "REG001");
+        AiDevice existing = new AiDevice();
+        existing.setIdDevice("DEV001");
+        existing.setFgActive("1");
+        existing.setDeviceToken("existing-token");
+        existing.setDevicePublicKey("existing-public-key");
+        existing.setRegisterIp("10.0.0.1");
+
+        when(aiOrgMapper.selectOne(any())).thenReturn(org);
+        when(aiDeviceMapper.selectOne(any())).thenReturn(existing);
+
+        RegisterDeviceRequest request = new RegisterDeviceRequest();
+        request.setCdOrg("ORG-CODE");
+        request.setCdDevice("DEV-CODE");
+        request.setNaDevice("升级后终端");
+        request.setClientVersion("1.0.1");
+        request.setOsInfo("Windows 11");
+        request.setPublicKey("refreshed-public-key");
+
+        RegisterDeviceResponse response = deviceService.register(request, "10.0.0.2", "existing-token");
+
+        assertEquals("DEV001", response.getIdDevice());
+        assertEquals("existing-token", response.getDeviceToken());
+        assertEquals(30, response.getHeartbeatInterval().intValue());
+        assertTrue(response.getHasPublicKey());
+        assertEquals("existing-token", existing.getDeviceToken());
+        assertEquals("refreshed-public-key", existing.getDevicePublicKey());
+        assertEquals("升级后终端", existing.getNaDevice());
+        assertEquals("1.0.1", existing.getClientVersion());
+        assertEquals("Windows 11", existing.getOsInfo());
+        assertEquals("10.0.0.1", existing.getRegisterIp());
+        assertEquals("10.0.0.2", existing.getLastSeenIp());
+        verify(aiDeviceMapper).updateById(existing);
+        verify(aiDeviceMapper, never()).insert(any(AiDevice.class));
+    }
+
+    @Test
+    void registerShouldRejectPublicKeyRefreshWithoutExistingTokenProof() {
         AiOrg org = buildOrg("ORG001", "REG001");
         AiDevice existing = new AiDevice();
         existing.setIdDevice("DEV001");
@@ -111,15 +149,15 @@ class DeviceServiceTest {
         RegisterDeviceRequest request = new RegisterDeviceRequest();
         request.setCdOrg("ORG-CODE");
         request.setCdDevice("DEV-CODE");
-        request.setNaDevice("攻击者设备");
+        request.setNaDevice("未知终端");
         request.setClientVersion("1.0.1");
         request.setOsInfo("Windows 11");
-        request.setPublicKey("attacker-public-key");
+        request.setPublicKey("refreshed-public-key");
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> deviceService.register(request));
+        BusinessException ex = assertThrows(BusinessException.class, () -> deviceService.register(request, "10.0.0.2"));
 
-        assertEquals("设备已注册，请使用现有设备令牌；如本机密钥丢失请重新生成设备编码后注册", ex.getMessage());
-        assertEquals("existing-token", existing.getDeviceToken());
+        assertEquals("DEVICE-KEY-ROTATION-UNAUTHORIZED", ex.getCode());
+        assertEquals("设备已注册，请先使用原设备令牌完成密钥轮换；如本机令牌丢失，请联系管理员重置设备", ex.getMessage());
         assertEquals("existing-public-key", existing.getDevicePublicKey());
         verify(aiDeviceMapper, never()).updateById(any(AiDevice.class));
         verify(aiDeviceMapper, never()).insert(any(AiDevice.class));

@@ -88,13 +88,14 @@ class ClientControllerTest {
         request.setClientVersion("1.2.3");
         request.setPublicKey("public-key");
 
-        when(deviceService.register(any(RegisterDeviceRequest.class), eq("10.0.0.10")))
+        when(deviceService.register(any(RegisterDeviceRequest.class), eq("10.0.0.10"), eq("token-proof")))
             .thenReturn(new RegisterDeviceResponse("DEV001", "token-1", 30, true));
 
         mockMvc.perform(post("/v1/client/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Request-Id", "RID-client-register")
                 .header("X-Forwarded-For", "10.0.0.10, 10.0.0.1")
+                .header("Authorization", "Bearer token-proof")
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("0"))
@@ -104,7 +105,7 @@ class ClientControllerTest {
             .andExpect(jsonPath("$.data.heartbeatInterval").value(30))
             .andExpect(jsonPath("$.data.hasPublicKey").value(true));
 
-        verify(deviceService).register(any(RegisterDeviceRequest.class), eq("10.0.0.10"));
+        verify(deviceService).register(any(RegisterDeviceRequest.class), eq("10.0.0.10"), eq("token-proof"));
     }
 
     @Test

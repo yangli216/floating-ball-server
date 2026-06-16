@@ -65,11 +65,16 @@ public class DeviceService {
 
     @Transactional
     public RegisterDeviceResponse register(RegisterDeviceRequest request) {
-        return register(request, null);
+        return register(request, null, null);
     }
 
     @Transactional
     public RegisterDeviceResponse register(RegisterDeviceRequest request, String clientIp) {
+        return register(request, clientIp, null);
+    }
+
+    @Transactional
+    public RegisterDeviceResponse register(RegisterDeviceRequest request, String clientIp, String presentedDeviceToken) {
         String normalizedClientIp = normalizeIp(clientIp);
         AiOrg org = findUniqueActiveOrgByCode(request.getCdOrg());
         if (org == null) {
@@ -84,10 +89,15 @@ public class DeviceService {
         AiDevice existing = findDeviceByCodeAndOrg(request.getCdDevice(), org.getIdOrg(), "1");
 
         if (existing != null) {
-            if (StringUtils.hasText(existing.getDevicePublicKey())) {
-                log.warn("device anonymous re-register rejected. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
-                throw new BusinessException("设备已注册，请使用现有设备令牌；如本机密钥丢失请重新生成设备编码后注册");
+            if (requiresExistingDeviceToken(existing) && !existing.getDeviceToken().equals(presentedDeviceToken)) {
+                log.warn("device public key refresh rejected: token proof missing or mismatched. idDevice={}, cdDevice={}",
+                    existing.getIdDevice(), existing.getCdDevice());
+                throw new BusinessException(
+                    "DEVICE-KEY-ROTATION-UNAUTHORIZED",
+                    "设备已注册，请先使用原设备令牌完成密钥轮换；如本机令牌丢失，请联系管理员重置设备");
             }
+            boolean publicKeyChanged = StringUtils.hasText(request.getPublicKey())
+                && !request.getPublicKey().equals(existing.getDevicePublicKey());
             existing.setNaDevice(request.getNaDevice());
             existing.setClientVersion(request.getClientVersion());
             existing.setOsInfo(request.getOsInfo());
@@ -106,7 +116,11 @@ public class DeviceService {
             } catch (DuplicateKeyException ex) {
                 throw new BusinessException("设备编码已存在");
             }
-            log.info("device re-registered. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
+            if (publicKeyChanged) {
+                log.info("device public key refreshed during register. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
+            } else {
+                log.info("device re-registered. idDevice={}, cdDevice={}", existing.getIdDevice(), existing.getCdDevice());
+            }
             return new RegisterDeviceResponse(existing.getIdDevice(), existing.getDeviceToken(), DEFAULT_HEARTBEAT_INTERVAL, StringUtils.hasText(existing.getDevicePublicKey()));
         }
 
@@ -301,6 +315,11 @@ public class DeviceService {
             .eq(AiDevice::getIdOrg, idOrg)
             .eq(AiDevice::getFgActive, activeFlag)
             .last(databaseDialect.firstRows(1)));
+    }
+
+    private boolean requiresExistingDeviceToken(AiDevice existing) {
+        return StringUtils.hasText(existing.getDevicePublicKey())
+            && StringUtils.hasText(existing.getDeviceToken());
     }
 
     private List<AiDeviceView> toViews(List<AiDevice> records) {
