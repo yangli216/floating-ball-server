@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.emrtemplate.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplateCacheVO;
 import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplateFieldGenerationRequest;
 import com.regionalai.floatingball.server.modules.emrtemplate.dto.InpatientEmrTemplatePromptGenerateRequest;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -294,11 +296,27 @@ class InpatientEmrTemplateCacheServiceTest {
         cache.setFgActive("1");
         cache.setSdStatus("1");
         when(cacheMapper.selectById("cache-delete")).thenReturn(cache);
+        when(cacheMapper.deleteById("cache-delete")).thenReturn(Integer.valueOf(1));
 
         service.invalidate("cache-delete");
 
-        assertEquals("0", cache.getFgActive());
-        verify(cacheMapper).updateById(cache);
+        verify(cacheMapper).deleteById("cache-delete");
+    }
+
+    @Test
+    void invalidateFailsWhenDeleteDoesNotAffectRows() throws Exception {
+        AiInpatientEmrTemplateCache cache = new AiInpatientEmrTemplateCache();
+        cache.setIdCache("cache-delete-failed");
+        cache.setTemplateId("emr_tpl_daily_course");
+        cache.setTemplateHash("tpl_hash");
+        cache.setFieldsJson(new ObjectMapper().writeValueAsString(sampleFields()));
+        cache.setFieldCount(Integer.valueOf(2));
+        cache.setFgActive("1");
+        cache.setSdStatus("1");
+        when(cacheMapper.selectById("cache-delete-failed")).thenReturn(cache);
+        when(cacheMapper.deleteById("cache-delete-failed")).thenReturn(Integer.valueOf(0));
+
+        assertThrows(BusinessException.class, () -> service.invalidate("cache-delete-failed"));
     }
 
     private List<Map<String, Object>> sampleFields() {

@@ -26,15 +26,18 @@ need_cmd() {
   fi
 }
 
+SSH_BASE_OPTIONS=(-o StrictHostKeyChecking=accept-new)
+
 need_cmd mvn
 need_cmd ssh
 need_cmd scp
 
 run_ssh() {
   local remote_cmd="$1"
+
   if [[ -n "${SSH_PASS:-}" ]]; then
     if command -v sshpass >/dev/null 2>&1; then
-      SSHPASS="${SSH_PASS}" sshpass -e ssh -o StrictHostKeyChecking=accept-new "${TARGET_USER}@${TARGET_HOST}" "${remote_cmd}"
+      SSHPASS="${SSH_PASS}" sshpass -e ssh "${SSH_BASE_OPTIONS[@]}" "${TARGET_USER}@${TARGET_HOST}" "${remote_cmd}"
     elif command -v expect >/dev/null 2>&1; then
       TARGET="${TARGET_USER}@${TARGET_HOST}" REMOTE_CMD="${remote_cmd}" expect <<'EXPECT'
 set timeout -1
@@ -54,16 +57,17 @@ EXPECT
       exit 1
     fi
   else
-    ssh -o StrictHostKeyChecking=accept-new "${TARGET_USER}@${TARGET_HOST}" "${remote_cmd}"
+    ssh "${SSH_BASE_OPTIONS[@]}" "${TARGET_USER}@${TARGET_HOST}" "${remote_cmd}"
   fi
 }
 
 run_scp() {
   local local_path="$1"
   local remote_path="$2"
+
   if [[ -n "${SSH_PASS:-}" ]]; then
     if command -v sshpass >/dev/null 2>&1; then
-      SSHPASS="${SSH_PASS}" sshpass -e scp -o StrictHostKeyChecking=accept-new "${local_path}" "${TARGET_USER}@${TARGET_HOST}:${remote_path}"
+      SSHPASS="${SSH_PASS}" sshpass -e scp "${SSH_BASE_OPTIONS[@]}" "${local_path}" "${TARGET_USER}@${TARGET_HOST}:${remote_path}"
     elif command -v expect >/dev/null 2>&1; then
       LOCAL_PATH="${local_path}" REMOTE_TARGET="${TARGET_USER}@${TARGET_HOST}:${remote_path}" expect <<'EXPECT'
 set timeout -1
@@ -83,7 +87,7 @@ EXPECT
       exit 1
     fi
   else
-    scp -o StrictHostKeyChecking=accept-new "${local_path}" "${TARGET_USER}@${TARGET_HOST}:${remote_path}"
+    scp "${SSH_BASE_OPTIONS[@]}" "${local_path}" "${TARGET_USER}@${TARGET_HOST}:${remote_path}"
   fi
 }
 

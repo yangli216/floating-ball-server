@@ -291,9 +291,11 @@ public class InpatientEmrTemplateCacheService {
 
     @Transactional
     public void invalidate(String idCache) {
-        AiInpatientEmrTemplateCache cache = requireCache(idCache);
-        cache.setFgActive(ACTIVE_DISABLED);
-        cacheMapper.updateById(cache);
+        requireCache(idCache);
+        int affected = cacheMapper.deleteById(idCache);
+        if (affected <= 0) {
+            throw new BusinessException("模板缓存删除失败");
+        }
         log.info("inpatient emr template cache invalidated. idCache={}", idCache);
     }
 
