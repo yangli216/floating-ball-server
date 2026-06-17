@@ -130,6 +130,123 @@ BODY_SHA256
 - 仅在服务启动阶段执行，不提供公开匿名 HTTP 接口
 - 默认账号可填 `admin`，重置完成后应立即关闭该配置并重启服务
 
+### 2.4 检验检查结果手动录入
+
+#### 2.4.1 GET `/admin/api/exam-result-entry/applies`
+
+用途：查询 `hi_ods_apply` 中待第三方执行/回写的检验或检查申请单，供管理端模拟第三方录入结果。兼容旧路径 `/admin/api/lis-result-entry/applies`。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| current | number | 否 | 页码，默认 `1` |
+| size | number | 否 | 每页条数，默认 `10` |
+| keyword | string | 否 | 匹配申请单号、申请单名称、患者主键、就诊主键、诊断名称 |
+| dispType | string | 否 | 申请单类别：`1` 检验，`2` 检查；为空时查询检验和检查 |
+| businessType | string | 否 | 申请类别：`1` 门诊，`2` 住院；为空时查询全部业务类型 |
+| status | string | 否 | 申请单状态；默认查未报告/未作废，常用 `1` 提交、`2` 已执行 |
+| idOrg | string | 否 | 机构编号 |
+| dateFrom | string | 否 | 申请单创建开始日期，格式 `yyyy-MM-dd`；为空时默认近 3 天 |
+| dateTo | string | 否 | 申请单创建结束日期，格式 `yyyy-MM-dd`；为空时默认近 3 天 |
+
+说明：列表默认只查询近 3 天待执行数据，并按申请单创建时间倒序返回，最新申请单显示在前。
+
+响应 `data.records[]` 主要字段：
+
+```json
+{
+  "idApply": "APPLY001",
+  "cdApply": "LIS202606170001",
+  "naApply": "血常规",
+  "sdDisp": "1",
+  "sdBusiness": "1",
+  "sdApply": "1",
+  "idPi": "P001",
+  "idVis": "VIS001",
+  "nasDiag": "上呼吸道感染",
+  "naDeptExec": "检验科",
+  "naDocExec": "张医生",
+  "fgUrgent": "0",
+  "insertTime": "2026-06-17T09:00:00",
+  "idResult": null
+}
+```
+
+#### 2.4.2 GET `/admin/api/lis-result-entry/applies/{idApply}/reports`
+
+用途：查看指定检验申请单已录入的检验明细。新路径也支持 `/admin/api/exam-result-entry/applies/{idApply}/reports`。
+
+#### 2.4.3 POST `/admin/api/exam-result-entry/applies/{idApply}/lis-report`
+
+用途：录入检验指标，模拟第三方系统把报告明细写回。
+
+请求：
+
+```json
+{
+  "reportDoctor": "系统管理员",
+  "auditDoctor": "系统管理员",
+  "instrumentCode": "MANUAL",
+  "instrumentName": "手工录入",
+  "items": [
+    {
+      "cdResult": "WBC",
+      "naResult": "白细胞计数",
+      "testResult": "6.2",
+      "resultQualitative": "",
+      "referenceRange": "3.5-9.5",
+      "referenceLow": "3.5",
+      "referenceHigh": "9.5",
+      "resultUnit": "10^9/L",
+      "resultHint": ""
+    }
+  ]
+}
+```
+
+处理规则：
+
+1. 只允许检验类申请单（`sd_disp='1'`）回写；已作废或已报告申请单不能重复回写。
+2. 服务端生成 24 位 ObjectId 作为报告组 ID，写入 `hi_ods_apply.id_result`，每条明细写入 `hi_ods_apply_lis_report.id_report_group` 与 `resultid`；每条 `hi_ods_apply_lis_report.id_report` 也使用 24 位 ObjectId。
+3. 回写成功后，`hi_ods_apply.sd_apply` 更新为 `3`（已报告），`dt_exec/update_time/update_user/revision` 同步更新。
+4. 旧路径 `/admin/api/lis-result-entry/applies/{idApply}/reports` 仍兼容检验回写。
+5. 当前功能只模拟第三方回写检验常规报告，不创建 `hi_ods_lis_result` 等未纳入本项目基线的中间表。
+
+#### 2.4.4 GET `/admin/api/exam-result-entry/applies/{idApply}/pacs-report`
+
+用途：查看指定检查申请单已录入的检查报告。
+
+#### 2.4.5 POST `/admin/api/exam-result-entry/applies/{idApply}/pacs-report`
+
+用途：录入检查报告，模拟第三方 PACS/检查系统把报告写回。
+
+请求：
+
+```json
+{
+  "result": "胸廓对称，双肺纹理增多，未见明确实变影。",
+  "clinicalImpression": "咳嗽待查",
+  "diagnosticImaging": "双肺纹理增多，请结合临床。",
+  "negativePositive": "阴性",
+  "remark": "手工模拟第三方回写",
+  "cdStudy": "PACS202606170001",
+  "idDept": "A1",
+  "naDept": "放射科",
+  "reportDoctor": "系统管理员",
+  "auditDoctor": "系统管理员"
+}
+```
+
+处理规则：
+
+1. 只允许检查类申请单（`sd_disp='2'`）回写；已作废或已报告申请单不能重复回写。
+2. 服务端生成 24 位 ObjectId 作为报告 ID，写入 `hi_ods_apply.id_result` 与 `hi_ods_apply_pacs_report.id_report`。
+3. 回写成功后，`hi_ods_apply.sd_apply` 更新为 `3`（已报告），`dt_exec/update_time/update_user/revision` 同步更新。
+4. PACS 表保留数据库列名 `"RESULT"`，用于存储检查结果正文。
+
 ## 3. 客户端版本发布与内网更新
 
 ### 3.1 管理端上传客户端版本

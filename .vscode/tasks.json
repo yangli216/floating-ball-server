@@ -9,6 +9,7 @@
 				"-f",
 				"server/pom.xml",
 				"-DskipTests",
+				"-Dspring-boot.run.profiles=xiaoshan",
 				"spring-boot:run"
 			],
 			"isBackground": true,

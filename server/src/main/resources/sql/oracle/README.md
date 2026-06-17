@@ -64,11 +64,12 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 2. `c_ai_device.device_public_key` 请求签名公钥字段，以及 `register_ip` / `last_seen_ip` 注册与最近访问来源字段
 3. 症状模板、住院病历模板字段缓存、模板变更日志、辅诊功能事件、安全拒绝日志等业务表
 4. 操作日志、问诊日志、反馈日志的结构化查询列、语音复盘字段、变更摘要字段和并发唯一索引
-5. 默认区域 `REGION001`
-6. 默认机构 `ORG001`；`c_ai_org.cd_org` 必填，并通过 `uk_c_ai_org_code_active` 保证激活机构编码唯一
-7. 默认管理员 `admin`
-8. 默认 AI 配置 `CFG001`
-9. 脚本末尾显式 `COMMIT`
+5. 第三方 ODS 检验检查申请单 `hi_ods_apply`、检验常规报告 `hi_ods_apply_lis_report` 与检查报告 `hi_ods_apply_pacs_report`，用于管理端手工模拟第三方结果回写；不包含未提供结构的 `hi_ods_lis_result` 主表
+6. 默认区域 `REGION001`
+7. 默认机构 `ORG001`；`c_ai_org.cd_org` 必填，并通过 `uk_c_ai_org_code_active` 保证激活机构编码唯一
+8. 默认管理员 `admin`
+9. 默认 AI 配置 `CFG001`
+10. 脚本末尾显式 `COMMIT`
 
 说明：
 

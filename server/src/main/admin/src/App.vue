@@ -89,6 +89,7 @@ const menuItems = [
   { path: '/configs', label: '配置', icon: 'el-icon-setting' },
   { path: '/symptom-templates', label: '症状模板', icon: 'el-icon-document-checked' },
   { path: '/inpatient-emr-templates', label: '病历模板', icon: 'el-icon-document-copy' },
+  { path: '/exam-result-entry', label: '检验检查回写', icon: 'el-icon-edit-outline' },
   { path: '/releases', label: '版本发布', icon: 'el-icon-upload' },
   { path: '/logs', label: '日志', icon: 'el-icon-document' },
   { path: '/user-logs', label: '用户日志', icon: 'el-icon-notebook-2' },

@@ -801,6 +801,208 @@ CREATE UNIQUE INDEX uk_c_ai_user_role_active ON c_ai_user_role (
 );
 
 
+CREATE TABLE hi_ods_apply (
+    id_apply            VARCHAR2(32) PRIMARY KEY,
+    na_apply            VARCHAR2(256),
+    sd_disp             VARCHAR2(2),
+    cd_apply            VARCHAR2(128),
+    sd_business         VARCHAR2(2),
+    id_apply_sim        VARCHAR2(64),
+    na_apply_sim        VARCHAR2(500),
+    na_apply_group      VARCHAR2(256),
+    id_vis              VARCHAR2(64),
+    id_reg              VARCHAR2(64),
+    id_pi               VARCHAR2(64),
+    ids_diag            VARCHAR2(1000),
+    nas_diag            VARCHAR2(1000),
+    disease             VARCHAR2(128),
+    na_disease          VARCHAR2(256),
+    purpose             VARCHAR2(1000),
+    remark              VARCHAR2(1000),
+    id_doc_exec         VARCHAR2(64),
+    na_doc_exec         VARCHAR2(128),
+    id_dept_exec        VARCHAR2(64),
+    na_dept_exec        VARCHAR2(128),
+    id_part             VARCHAR2(64),
+    na_part             VARCHAR2(256),
+    id_cli              VARCHAR2(64),
+    id_result           VARCHAR2(24),
+    sd_apply            VARCHAR2(2) DEFAULT '0',
+    fg_urgent           CHAR(1) DEFAULT '0',
+    id_register         VARCHAR2(128),
+    id_org              VARCHAR2(64),
+    id_tet              VARCHAR2(64),
+    revision            NUMBER(10) DEFAULT 1,
+    insert_user         VARCHAR2(128),
+    insert_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_user         VARCHAR2(128),
+    update_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dt_exec             TIMESTAMP,
+    is_poct             CHAR(1),
+    stipulate           CHAR(1),
+    des_prob            VARCHAR2(1000),
+    des_cur_die         CLOB,
+    complete_check      CLOB,
+    fg_digital          CHAR(1),
+    fg_ct_reduct        CHAR(1),
+    fg_day_first        CHAR(1)
+);
+
+COMMENT ON TABLE hi_ods_apply IS '申请单记录,传给第三方数据';
+COMMENT ON COLUMN hi_ods_apply.id_apply IS '主键';
+COMMENT ON COLUMN hi_ods_apply.na_apply IS '申请单名称;诊疗项目名称';
+COMMENT ON COLUMN hi_ods_apply.sd_disp IS '申请单类别;phis.ods.dispType,1.检验,2检查,3.治疗,4手术,9其他';
+COMMENT ON COLUMN hi_ods_apply.cd_apply IS '申请单号';
+COMMENT ON COLUMN hi_ods_apply.sd_business IS '申请类别;phis.ods.businessType1.门诊,2住院';
+COMMENT ON COLUMN hi_ods_apply.id_apply_sim IS '同单据标识;用于标识哪些申请单是同时开的';
+COMMENT ON COLUMN hi_ods_apply.na_apply_sim IS '同单据名称;标识那些同时开的单据名称合集';
+COMMENT ON COLUMN hi_ods_apply.na_apply_group IS '组套名称;用于标识组套项目';
+COMMENT ON COLUMN hi_ods_apply.id_vis IS '就诊主键;住院存住院唯一号';
+COMMENT ON COLUMN hi_ods_apply.id_reg IS '挂号主键;住院存住院唯一号';
+COMMENT ON COLUMN hi_ods_apply.id_pi IS '患者主键';
+COMMENT ON COLUMN hi_ods_apply.ids_diag IS '关联诊断串';
+COMMENT ON COLUMN hi_ods_apply.nas_diag IS '关联诊断串名称';
+COMMENT ON COLUMN hi_ods_apply.disease IS '病种编码';
+COMMENT ON COLUMN hi_ods_apply.na_disease IS '病种名称';
+COMMENT ON COLUMN hi_ods_apply.purpose IS '检查目的';
+COMMENT ON COLUMN hi_ods_apply.remark IS '备注';
+COMMENT ON COLUMN hi_ods_apply.id_doc_exec IS '执行医生';
+COMMENT ON COLUMN hi_ods_apply.na_doc_exec IS '执行医生名称';
+COMMENT ON COLUMN hi_ods_apply.id_dept_exec IS '执行科室';
+COMMENT ON COLUMN hi_ods_apply.na_dept_exec IS '执行科室名称';
+COMMENT ON COLUMN hi_ods_apply.id_part IS '部位;检查关联hi_bd_cli_pacs_part表,检验预留后期扩展,其他诊疗项目后续扩展';
+COMMENT ON COLUMN hi_ods_apply.na_part IS '部位名称;检查是部位+方式,检验是部位';
+COMMENT ON COLUMN hi_ods_apply.id_cli IS '诊疗项目';
+COMMENT ON COLUMN hi_ods_apply.id_result IS '报告ID';
+COMMENT ON COLUMN hi_ods_apply.sd_apply IS '申请单状态;只记录申请单状态.是否已收费需要关联医嘱表phis.ods.applyStatus,0新建,1,提交,2已执行,3已报告.9已作废';
+COMMENT ON COLUMN hi_ods_apply.fg_urgent IS '加急标志;sys.sd.yesOrNo 1是0否,默认0';
+COMMENT ON COLUMN hi_ods_apply.id_register IS '登记号;第三方系统接收后返回的唯一号';
+COMMENT ON COLUMN hi_ods_apply.id_org IS '机构编号';
+COMMENT ON COLUMN hi_ods_apply.id_tet IS '租户号';
+COMMENT ON COLUMN hi_ods_apply.revision IS '乐观锁';
+COMMENT ON COLUMN hi_ods_apply.insert_user IS '创建人';
+COMMENT ON COLUMN hi_ods_apply.insert_time IS '创建时间';
+COMMENT ON COLUMN hi_ods_apply.update_user IS '更新人';
+COMMENT ON COLUMN hi_ods_apply.update_time IS '更新时间';
+COMMENT ON COLUMN hi_ods_apply.dt_exec IS '执行日期';
+COMMENT ON COLUMN hi_ods_apply.is_poct IS 'poct标志';
+COMMENT ON COLUMN hi_ods_apply.stipulate IS '规定病标志';
+COMMENT ON COLUMN hi_ods_apply.des_prob IS '主诉';
+COMMENT ON COLUMN hi_ods_apply.des_cur_die IS '现病史';
+COMMENT ON COLUMN hi_ods_apply.complete_check IS '体格检查';
+COMMENT ON COLUMN hi_ods_apply.fg_digital IS '数字影像费标志';
+COMMENT ON COLUMN hi_ods_apply.fg_ct_reduct IS '是否有检查CT减免标识';
+COMMENT ON COLUMN hi_ods_apply.fg_day_first IS '当日该项目第一条标识';
+
+CREATE INDEX idx_hi_ods_apply_wait ON hi_ods_apply (sd_disp, sd_apply, id_result, insert_time);
+CREATE INDEX idx_hi_ods_apply_cd ON hi_ods_apply (cd_apply);
+CREATE INDEX idx_hi_ods_apply_org ON hi_ods_apply (id_org, insert_time);
+
+
+CREATE TABLE hi_ods_apply_lis_report (
+    id_report           VARCHAR2(24) PRIMARY KEY,
+    id_apply            VARCHAR2(32),
+    id_result           VARCHAR2(24),
+    resultid            VARCHAR2(24),
+    na_result           VARCHAR2(256),
+    test_result         VARCHAR2(128),
+    result_qualitative  VARCHAR2(256),
+    reference_range     VARCHAR2(128),
+    reference_low       VARCHAR2(64),
+    reference_high      VARCHAR2(64),
+    result_unit         VARCHAR2(64),
+    result_hint         VARCHAR2(64),
+    cd_result           VARCHAR2(128),
+    instrument_code     VARCHAR2(128),
+    instrument_name     VARCHAR2(256),
+    id_org              VARCHAR2(64),
+    id_tet              VARCHAR2(64),
+    revision            NUMBER(10) DEFAULT 1,
+    insert_user         VARCHAR2(128),
+    insert_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_user         VARCHAR2(128),
+    update_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ctr                 CLOB,
+    id_report_group     VARCHAR2(24)
+);
+
+COMMENT ON TABLE hi_ods_apply_lis_report IS '检验常规报告';
+COMMENT ON COLUMN hi_ods_apply_lis_report.id_report IS '主键';
+COMMENT ON COLUMN hi_ods_apply_lis_report.id_apply IS '申请单主键;hi_ods_apply,废弃,下个版本去除';
+COMMENT ON COLUMN hi_ods_apply_lis_report.id_result IS '结果集主键;hi_ods_lis_result';
+COMMENT ON COLUMN hi_ods_apply_lis_report.resultid IS '第三方结果集主键;跟id_result不会同时存在';
+COMMENT ON COLUMN hi_ods_apply_lis_report.na_result IS '检验项目名称';
+COMMENT ON COLUMN hi_ods_apply_lis_report.test_result IS '检验定量结果';
+COMMENT ON COLUMN hi_ods_apply_lis_report.result_qualitative IS '检验定性结果';
+COMMENT ON COLUMN hi_ods_apply_lis_report.reference_range IS '参考范围';
+COMMENT ON COLUMN hi_ods_apply_lis_report.reference_low IS '参考值下限';
+COMMENT ON COLUMN hi_ods_apply_lis_report.reference_high IS '参考值上限';
+COMMENT ON COLUMN hi_ods_apply_lis_report.result_unit IS '单位';
+COMMENT ON COLUMN hi_ods_apply_lis_report.result_hint IS '结果异常提示';
+COMMENT ON COLUMN hi_ods_apply_lis_report.cd_result IS '结果编码';
+COMMENT ON COLUMN hi_ods_apply_lis_report.instrument_code IS '仪器编号';
+COMMENT ON COLUMN hi_ods_apply_lis_report.instrument_name IS '仪器名称';
+COMMENT ON COLUMN hi_ods_apply_lis_report.id_org IS '机构编号';
+COMMENT ON COLUMN hi_ods_apply_lis_report.id_tet IS '租户号';
+COMMENT ON COLUMN hi_ods_apply_lis_report.revision IS '乐观锁';
+COMMENT ON COLUMN hi_ods_apply_lis_report.insert_user IS '报告医生';
+COMMENT ON COLUMN hi_ods_apply_lis_report.insert_time IS '报告时间';
+COMMENT ON COLUMN hi_ods_apply_lis_report.update_user IS '审核医生';
+COMMENT ON COLUMN hi_ods_apply_lis_report.update_time IS '审核时间';
+COMMENT ON COLUMN hi_ods_apply_lis_report.ctr IS '扩展字段';
+COMMENT ON COLUMN hi_ods_apply_lis_report.id_report_group IS '报告id;一份报告的唯一标识,hi_ods_apply中的id_result';
+
+CREATE INDEX idx_hi_lis_report_apply ON hi_ods_apply_lis_report (id_apply);
+CREATE INDEX idx_hi_lis_report_group ON hi_ods_apply_lis_report (id_report_group);
+
+
+CREATE TABLE hi_ods_apply_pacs_report (
+    id_report             VARCHAR2(24) PRIMARY KEY,
+    id_apply              VARCHAR2(32),
+    "RESULT"              CLOB,
+    remark                VARCHAR2(1000),
+    clinical_impression   VARCHAR2(1000),
+    negative_positive     VARCHAR2(32),
+    diagnostic_imaging    CLOB,
+    na_update_user        VARCHAR2(128),
+    na_insert_user        VARCHAR2(128),
+    cd_study              VARCHAR2(128),
+    id_dept               VARCHAR2(64),
+    na_dept               VARCHAR2(128),
+    id_org                VARCHAR2(64),
+    id_tet                VARCHAR2(64),
+    revision              NUMBER(10) DEFAULT 1,
+    insert_user           VARCHAR2(128),
+    insert_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_user           VARCHAR2(128),
+    update_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE hi_ods_apply_pacs_report IS '检查报告';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.id_report IS '主键';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.id_apply IS '申请id;hi_ods_apply主键';
+COMMENT ON COLUMN hi_ods_apply_pacs_report."RESULT" IS '检查结果';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.remark IS '备注信息';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.clinical_impression IS '临床印象';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.negative_positive IS '阴阳性';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.diagnostic_imaging IS '影像诊断';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.na_update_user IS '审核医生姓名;有些第三方接口只传中文';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.na_insert_user IS '报告医生姓名;有些第三方接口只传中文';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.cd_study IS '影像号';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.id_dept IS '报告科室;phis自行增加结果有该字段 放射科-A1 超声科-A2 内镜中心-A3 心电室-A4';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.na_dept IS '报告科室名称';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.id_org IS '机构编号';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.id_tet IS '租户号';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.revision IS '乐观锁';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.insert_user IS '报告医生';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.insert_time IS '报告时间';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.update_user IS '审核医生';
+COMMENT ON COLUMN hi_ods_apply_pacs_report.update_time IS '审核时间';
+
+CREATE INDEX idx_hi_pacs_report_apply ON hi_ods_apply_pacs_report (id_apply);
+CREATE INDEX idx_hi_pacs_report_study ON hi_ods_apply_pacs_report (cd_study);
+
+
 INSERT INTO c_ai_region (id_region, cd_region, na_region, sd_region_type, sd_status, fg_active)
 VALUES ('REGION001', 'REG001', '默认区域', 'district', '1', '1');
 
