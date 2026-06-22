@@ -24,8 +24,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -93,13 +95,39 @@ class SymptomTemplateServiceTest {
         when(aiSymptomTemplateMapper.selectList(any()))
             .thenReturn(Collections.<AiSymptomTemplate>emptyList())
             .thenReturn(Collections.<AiSymptomTemplate>emptyList());
-        when(dataPackageService.getTemplateDelta("ORG001", "REG001", "0")).thenReturn(legacy);
+        when(dataPackageService.getTemplateDelta("ORG001", "REG001", null)).thenReturn(legacy);
 
         TemplateDeltaVO delta = symptomTemplateService.getClientDelta("ORG001", "REG001", "0");
 
-        assertEquals("legacy-1", delta.getVersion());
+        assertTrue(delta.getVersion().startsWith("legacy-1-compat-"));
         assertEquals(1, delta.getWestern().size());
-        verify(dataPackageService).getTemplateDelta("ORG001", "REG001", "0");
+        verify(dataPackageService).getTemplateDelta("ORG001", "REG001", null);
+    }
+
+    @Test
+    void getClientDeltaShouldNormalizeFallbackTemplatePackageWhenSymptomTableEmpty() {
+        TemplateDeltaVO legacy = new TemplateDeltaVO();
+        legacy.setVersion("legacy-1");
+        legacy.setWestern(Collections.<Object>singletonList(buildSectionScopedTemplate()));
+
+        when(aiSymptomTemplateMapper.selectList(any()))
+            .thenReturn(Collections.<AiSymptomTemplate>emptyList())
+            .thenReturn(Collections.<AiSymptomTemplate>emptyList());
+        when(dataPackageService.getTemplateDelta("ORG001", "REG001", null)).thenReturn(legacy);
+
+        TemplateDeltaVO delta = symptomTemplateService.getClientDelta("ORG001", "REG001", "0");
+
+        assertTrue(delta.getVersion().startsWith("legacy-1-compat-"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> template = (Map<String, Object>) delta.getWestern().get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> applicablePopulation = (Map<String, Object>) template.get("applicablePopulation");
+        assertEquals(Collections.singletonList("2"), applicablePopulation.get("genders"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) template.get("config");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sections = (List<Map<String, Object>>) config.get("sections");
+        assertNull(sections.get(0).get("applicablePopulation"));
     }
 
     @Test
@@ -234,6 +262,30 @@ class SymptomTemplateServiceTest {
         );
     }
 
+    @Test
+    void getClientDeltaShouldPromoteSectionApplicablePopulationToSymptomLevel() {
+        AiSymptomTemplate nipplePain = buildTemplate("T1", "nipple-pain", "乳头痛", "western", null, null, 1, LocalDateTime.now());
+        nipplePain.setConfigJson("{\"title\":\"\",\"sections\":[{\"id\":\"nipple-pain_section_0\",\"title\":\"症状属性问诊\",\"applicablePopulation\":{\"genders\":[\"2\"]},\"fields\":[{\"id\":\"nipple-pain_field_0\",\"key\":\"onsetTime\",\"label\":\"发病时间\",\"type\":\"input_radio\",\"props\":{\"placeholder\":\"请输入\",\"radioOptions\":[\"小时\",\"天\"]},\"storageKey\":\"onsetTime\"}]}]}");
+        nipplePain.setApplicablePopulationJson("{\"genders\":[],\"ageGroups\":[]}");
+
+        when(aiSymptomTemplateMapper.selectList(any()))
+            .thenReturn(Collections.singletonList(nipplePain))
+            .thenReturn(Collections.<AiSymptomTemplate>emptyList());
+
+        TemplateDeltaVO delta = symptomTemplateService.getClientDelta("ORG001", "REG001", null);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> template = (Map<String, Object>) delta.getWestern().get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> applicablePopulation = (Map<String, Object>) template.get("applicablePopulation");
+        assertEquals(Collections.singletonList("2"), applicablePopulation.get("genders"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) template.get("config");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sections = (List<Map<String, Object>>) config.get("sections");
+        assertNull(sections.get(0).get("applicablePopulation"));
+    }
+
     private AiSymptomTemplate buildTemplate(String id,
                                             String key,
                                             String name,
@@ -262,5 +314,31 @@ class SymptomTemplateServiceTest {
         item.setInsertTime(updateTime.minusHours(1));
         item.setUpdateTime(updateTime);
         return item;
+    }
+
+    private Map<String, Object> buildSectionScopedTemplate() {
+        Map<String, Object> field = new LinkedHashMap<String, Object>();
+        field.put("id", "nipple-pain_field_0");
+        field.put("key", "onsetTime");
+        field.put("label", "发病时间");
+        field.put("type", "input_radio");
+        field.put("props", Collections.<String, Object>singletonMap("radioOptions", Arrays.asList("小时", "天")));
+        field.put("storageKey", "onsetTime");
+
+        Map<String, Object> section = new LinkedHashMap<String, Object>();
+        section.put("id", "nipple-pain_section_0");
+        section.put("title", "症状属性问诊");
+        section.put("applicablePopulation", Collections.<String, Object>singletonMap("genders", Collections.singletonList("2")));
+        section.put("fields", Collections.singletonList(field));
+
+        Map<String, Object> config = new LinkedHashMap<String, Object>();
+        config.put("sections", Collections.singletonList(section));
+
+        Map<String, Object> template = new LinkedHashMap<String, Object>();
+        template.put("key", "nipple-pain");
+        template.put("name", "乳头痛");
+        template.put("applicablePopulation", Collections.<String, Object>singletonMap("genders", Collections.emptyList()));
+        template.put("config", config);
+        return template;
     }
 }

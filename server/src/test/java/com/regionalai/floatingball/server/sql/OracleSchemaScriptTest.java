@@ -58,6 +58,8 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE TABLE c_ai_symptom_template");
         assertContains(initSql, "CREATE TABLE c_ai_symptom_template_change_log");
         assertContains(initSql, "CREATE TABLE c_ai_feature_event");
+        assertContains(initSql, "CREATE TABLE c_ai_rec_pref_event");
+        assertContains(initSql, "CREATE TABLE c_ai_rec_pref_agg");
         assertContains(initSql, "CREATE TABLE c_security_rejection_log");
         assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
 
@@ -88,6 +90,8 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE INDEX idx_c_ai_device_register_ip");
         assertContains(initSql, "CREATE INDEX idx_c_ai_device_last_seen_ip");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feature_event_idem");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_log_consultation_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_code_active");
@@ -127,6 +131,10 @@ class OracleSchemaScriptTest {
 
         assertContains(initSql, "cd_org               VARCHAR(64) NOT NULL");
         assertContains(initSql, "features_json            TEXT");
+        assertContains(initSql, "CREATE TABLE c_ai_rec_pref_event");
+        assertContains(initSql, "CREATE TABLE c_ai_rec_pref_agg");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope");
         assertContains(initSql, "total_changes        NUMERIC(5)");
         assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_org_code_active");

@@ -203,7 +203,7 @@ public class SymptomTemplateService {
         List<AiSymptomTemplate> westernTemplates = findVisibleTemplates(MODE_WESTERN, orgId, regionId);
         List<AiSymptomTemplate> tcmTemplates = findVisibleTemplates(MODE_TCM, orgId, regionId);
         if (westernTemplates.isEmpty() && tcmTemplates.isEmpty()) {
-            return dataPackageService.getTemplateDelta(orgId, regionId, version);
+            return getNormalizedFallbackDelta(orgId, regionId, version);
         }
 
         String latestVersion = buildVisibleVersion(westernTemplates, tcmTemplates);
@@ -221,9 +221,30 @@ public class SymptomTemplateService {
         List<AiSymptomTemplate> westernTemplates = findVisibleTemplates(MODE_WESTERN, orgId, regionId);
         List<AiSymptomTemplate> tcmTemplates = findVisibleTemplates(MODE_TCM, orgId, regionId);
         if (westernTemplates.isEmpty() && tcmTemplates.isEmpty()) {
-            return dataPackageService.latestVisibleVersion("template", orgId, regionId);
+            return buildNormalizedFallbackVersion(dataPackageService.getTemplateDelta(orgId, regionId, null));
         }
         return buildVisibleVersion(westernTemplates, tcmTemplates);
+    }
+
+    private TemplateDeltaVO getNormalizedFallbackDelta(String orgId, String regionId, String version) {
+        TemplateDeltaVO rawDelta = dataPackageService.getTemplateDelta(orgId, regionId, null);
+        String normalizedVersion = buildNormalizedFallbackVersion(rawDelta);
+        TemplateDeltaVO delta = new TemplateDeltaVO();
+        delta.setVersion(normalizedVersion);
+        if (StringUtils.hasText(version) && version.equals(normalizedVersion)) {
+            return delta;
+        }
+        delta.setWestern(SymptomTemplateCompatibilityNormalizer.normalizeTemplates(rawDelta.getWestern()));
+        delta.setTcm(SymptomTemplateCompatibilityNormalizer.normalizeTemplates(rawDelta.getTcm()));
+        return delta;
+    }
+
+    private String buildNormalizedFallbackVersion(TemplateDeltaVO rawDelta) {
+        List<Object> western = SymptomTemplateCompatibilityNormalizer.normalizeTemplates(rawDelta.getWestern());
+        List<Object> tcm = SymptomTemplateCompatibilityNormalizer.normalizeTemplates(rawDelta.getTcm());
+        String sourceVersion = StringUtils.hasText(rawDelta.getVersion()) ? rawDelta.getVersion() : "0";
+        String payload = sourceVersion + "|" + writeJson(western) + "|" + writeJson(tcm);
+        return sourceVersion + "-compat-" + DigestUtils.md5DigestAsHex(payload.getBytes(StandardCharsets.UTF_8)).substring(0, 8);
     }
 
     private void mergeRequest(AiSymptomTemplate target, SymptomTemplateVO request, AiSymptomTemplate existing) {
@@ -627,12 +648,15 @@ public class SymptomTemplateService {
 
     private String buildVisibleVersion(List<AiSymptomTemplate> westernTemplates, List<AiSymptomTemplate> tcmTemplates) {
         StringBuilder builder = new StringBuilder();
-        appendVersionPart(builder, MODE_WESTERN, westernTemplates);
-        appendVersionPart(builder, MODE_TCM, tcmTemplates);
+        appendVersionPart(builder, MODE_WESTERN, westernTemplates, toClientTemplates(westernTemplates));
+        appendVersionPart(builder, MODE_TCM, tcmTemplates, toClientTemplates(tcmTemplates));
         return "symptom-" + DigestUtils.md5DigestAsHex(builder.toString().getBytes(StandardCharsets.UTF_8)).substring(0, 12);
     }
 
-    private void appendVersionPart(StringBuilder builder, String medicalMode, List<AiSymptomTemplate> templates) {
+    private void appendVersionPart(StringBuilder builder,
+                                   String medicalMode,
+                                   List<AiSymptomTemplate> templates,
+                                   List<Object> normalizedTemplates) {
         builder.append(medicalMode).append(':');
         for (AiSymptomTemplate item : templates) {
             builder.append(item.getIdTemplate()).append('|')
@@ -642,6 +666,7 @@ public class SymptomTemplateService {
                 .append(safeText(item.getIdRegion())).append('|')
                 .append(toEpochMillis(item.getUpdateTime())).append(';');
         }
+        builder.append("normalized=").append(writeJson(normalizedTemplates));
         builder.append('#');
     }
 
@@ -650,7 +675,7 @@ public class SymptomTemplateService {
         for (AiSymptomTemplate item : templates) {
             result.add(toClientTemplate(item));
         }
-        return result;
+        return SymptomTemplateCompatibilityNormalizer.normalizeTemplates(result);
     }
 
     private Map<String, Object> toClientTemplate(AiSymptomTemplate item) {
@@ -670,7 +695,7 @@ public class SymptomTemplateService {
         }
         result.put("createdAt", Long.valueOf(toEpochMillis(item.getInsertTime())));
         result.put("updatedAt", Long.valueOf(toEpochMillis(item.getUpdateTime())));
-        return result;
+        return SymptomTemplateCompatibilityNormalizer.normalizeTemplateMap(result);
     }
 
     private SymptomTemplateVO toView(AiSymptomTemplate item) {
@@ -693,6 +718,7 @@ public class SymptomTemplateService {
         vo.setIdOrg(item.getIdOrg());
         vo.setCreatedAt(Long.valueOf(toEpochMillis(item.getInsertTime())));
         vo.setUpdatedAt(Long.valueOf(toEpochMillis(item.getUpdateTime())));
+        SymptomTemplateCompatibilityNormalizer.normalizeTemplateVO(vo);
         return vo;
     }
 

@@ -584,6 +584,129 @@ CREATE INDEX idx_c_ai_feature_event_doctor ON c_ai_feature_event (id_doctor, eve
 CREATE INDEX idx_c_ai_feature_event_org ON c_ai_feature_event (id_org, id_region, event_time, fg_active);
 
 
+CREATE TABLE c_ai_rec_pref_event (
+    id_event             VARCHAR(64) PRIMARY KEY,
+    id_device            VARCHAR(32),
+    id_org               VARCHAR(32),
+    id_region            VARCHAR(32),
+    recommendation_type  VARCHAR(32) NOT NULL,
+    action_code          VARCHAR(32) NOT NULL,
+    idempotency_key      VARCHAR(255) NOT NULL,
+    item_key             VARCHAR(255) NOT NULL,
+    item_id              VARCHAR(128),
+    item_code            VARCHAR(128),
+    item_name            VARCHAR(255),
+    fg_selected          CHAR(1) DEFAULT '1' NOT NULL,
+    fg_primary           CHAR(1) DEFAULT '0' NOT NULL,
+    trace_id             VARCHAR(64),
+    consultation_id      VARCHAR(64),
+    session_id           VARCHAR(64),
+    source_module        VARCHAR(128),
+    scene_code           VARCHAR(256),
+    id_doctor            VARCHAR(64),
+    na_doctor            VARCHAR(128),
+    id_dept              VARCHAR(64),
+    na_dept              VARCHAR(128),
+    prompt_version       VARCHAR(128),
+    template_version     VARCHAR(128),
+    model_version        VARCHAR(128),
+    payload_json         TEXT,
+    event_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_rec_pref_event IS '推荐偏好原始事件表';
+COMMENT ON COLUMN c_ai_rec_pref_event.id_event IS '事件主键ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.id_device IS '设备ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.id_region IS '区域ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.recommendation_type IS '推荐类型：diagnosis/medicine/exam/lab_test/procedure';
+COMMENT ON COLUMN c_ai_rec_pref_event.action_code IS '医生动作：final_select/manual_match/confirm_match';
+COMMENT ON COLUMN c_ai_rec_pref_event.idempotency_key IS '幂等键，同一设备内唯一';
+COMMENT ON COLUMN c_ai_rec_pref_event.item_key IS '标准候选项稳定身份';
+COMMENT ON COLUMN c_ai_rec_pref_event.item_id IS '标准候选项ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.item_code IS '标准候选项编码';
+COMMENT ON COLUMN c_ai_rec_pref_event.item_name IS '标准候选项名称';
+COMMENT ON COLUMN c_ai_rec_pref_event.fg_selected IS '是否最终选中';
+COMMENT ON COLUMN c_ai_rec_pref_event.fg_primary IS '是否主诊断';
+COMMENT ON COLUMN c_ai_rec_pref_event.trace_id IS '关联AI调用traceId';
+COMMENT ON COLUMN c_ai_rec_pref_event.consultation_id IS '关联问诊ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.session_id IS '关联会话ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.source_module IS '来源模块';
+COMMENT ON COLUMN c_ai_rec_pref_event.scene_code IS '场景编码';
+COMMENT ON COLUMN c_ai_rec_pref_event.id_doctor IS '医生ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.na_doctor IS '医生姓名';
+COMMENT ON COLUMN c_ai_rec_pref_event.id_dept IS '科室ID';
+COMMENT ON COLUMN c_ai_rec_pref_event.na_dept IS '科室名称';
+COMMENT ON COLUMN c_ai_rec_pref_event.prompt_version IS 'Prompt版本';
+COMMENT ON COLUMN c_ai_rec_pref_event.template_version IS '模板版本';
+COMMENT ON COLUMN c_ai_rec_pref_event.model_version IS '模型版本';
+COMMENT ON COLUMN c_ai_rec_pref_event.payload_json IS '事件扩展负载JSON';
+COMMENT ON COLUMN c_ai_rec_pref_event.event_time IS '事件发生时间';
+COMMENT ON COLUMN c_ai_rec_pref_event.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_rec_pref_event.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_rec_pref_event.update_time IS '更新时间';
+
+CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem ON c_ai_rec_pref_event (id_device, idempotency_key);
+CREATE INDEX idx_c_ai_rec_pref_event_item ON c_ai_rec_pref_event (id_org, recommendation_type, item_key, event_time, fg_active);
+CREATE INDEX idx_c_ai_rec_pref_event_doctor ON c_ai_rec_pref_event (id_doctor, recommendation_type, event_time, fg_active);
+CREATE INDEX idx_c_ai_rec_pref_event_dept ON c_ai_rec_pref_event (id_dept, recommendation_type, event_time, fg_active);
+
+
+CREATE TABLE c_ai_rec_pref_agg (
+    id_agg               VARCHAR(64) PRIMARY KEY,
+    id_org               VARCHAR(32),
+    id_region            VARCHAR(32),
+    id_dept              VARCHAR(64),
+    id_doctor            VARCHAR(64),
+    recommendation_type  VARCHAR(32) NOT NULL,
+    item_key             VARCHAR(255) NOT NULL,
+    item_id              VARCHAR(128),
+    item_code            VARCHAR(128),
+    item_name            VARCHAR(255),
+    selected_count       NUMERIC(10) DEFAULT 0 NOT NULL,
+    confirm_count        NUMERIC(10) DEFAULT 0 NOT NULL,
+    manual_match_count   NUMERIC(10) DEFAULT 0 NOT NULL,
+    preference_score     NUMERIC(8,4) DEFAULT 0 NOT NULL,
+    last_event_time      TIMESTAMP,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_rec_pref_agg IS '推荐偏好聚合表';
+COMMENT ON COLUMN c_ai_rec_pref_agg.id_agg IS '聚合主键ID';
+COMMENT ON COLUMN c_ai_rec_pref_agg.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_rec_pref_agg.id_region IS '区域ID';
+COMMENT ON COLUMN c_ai_rec_pref_agg.id_dept IS '科室ID，空表示机构级';
+COMMENT ON COLUMN c_ai_rec_pref_agg.id_doctor IS '医生ID，空表示机构或科室级';
+COMMENT ON COLUMN c_ai_rec_pref_agg.recommendation_type IS '推荐类型';
+COMMENT ON COLUMN c_ai_rec_pref_agg.item_key IS '标准候选项稳定身份';
+COMMENT ON COLUMN c_ai_rec_pref_agg.item_id IS '标准候选项ID';
+COMMENT ON COLUMN c_ai_rec_pref_agg.item_code IS '标准候选项编码';
+COMMENT ON COLUMN c_ai_rec_pref_agg.item_name IS '标准候选项名称';
+COMMENT ON COLUMN c_ai_rec_pref_agg.selected_count IS '最终选择次数';
+COMMENT ON COLUMN c_ai_rec_pref_agg.confirm_count IS '确认匹配次数';
+COMMENT ON COLUMN c_ai_rec_pref_agg.manual_match_count IS '手动匹配次数';
+COMMENT ON COLUMN c_ai_rec_pref_agg.preference_score IS '偏好分';
+COMMENT ON COLUMN c_ai_rec_pref_agg.last_event_time IS '最近事件时间';
+COMMENT ON COLUMN c_ai_rec_pref_agg.fg_active IS '逻辑删除标记';
+COMMENT ON COLUMN c_ai_rec_pref_agg.insert_time IS '创建时间';
+COMMENT ON COLUMN c_ai_rec_pref_agg.update_time IS '更新时间';
+
+CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope ON c_ai_rec_pref_agg (
+    (CASE WHEN fg_active = '1' THEN COALESCE(id_org, '-') END),
+    (CASE WHEN fg_active = '1' THEN COALESCE(id_dept, '-') END),
+    (CASE WHEN fg_active = '1' THEN COALESCE(id_doctor, '-') END),
+    (CASE WHEN fg_active = '1' THEN recommendation_type END),
+    (CASE WHEN fg_active = '1' THEN item_key END)
+);
+CREATE INDEX idx_c_ai_rec_pref_agg_item ON c_ai_rec_pref_agg (id_org, recommendation_type, item_key, fg_active);
+CREATE INDEX idx_c_ai_rec_pref_agg_doctor ON c_ai_rec_pref_agg (id_doctor, recommendation_type, fg_active);
+
+
 CREATE TABLE c_security_rejection_log (
     id_log               VARCHAR(32) PRIMARY KEY,
     rejection_type       VARCHAR(64) NOT NULL,

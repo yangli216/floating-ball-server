@@ -830,7 +830,117 @@ AI 调用类 `operation` 事件补充约束：
 5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；同一就诊再次显式触发入口按新调用计数，后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
 6. 不支持的 `featureCode`、缺失 `idempotencyKey`、不可序列化的 `payload` 计入 `rejected`，并在 `rejections[]` 返回 `index/eventId/featureCode/reason`；服务端不得把这类数据静默计入 `skipped`。
 
-### 3.9 POST `/v1/client/user-logs/consultations`
+### 3.9 POST `/v1/client/recommendation-preferences/events/batch`
+
+用途：桌面端批量提交“医生在标准候选项中的选择偏好”。该接口只接收已完成本地/HIS 目录匹配后的诊断和医嘱标准项，不学习 AI 原始文案。
+
+请求：
+
+```json
+{
+  "events": [
+    {
+      "eventId": "uuid",
+      "idempotencyKey": "recommendation-preference:CONSULT-001:diagnosis:D001",
+      "recommendationType": "diagnosis",
+      "action": "final_select",
+      "itemKey": "diagnosis:D001",
+      "itemId": "D001",
+      "itemCode": "J06.900",
+      "itemName": "急性上呼吸道感染",
+      "selected": true,
+      "primary": true,
+      "traceId": "TRACE-001",
+      "consultationId": "CONSULT-001",
+      "sessionId": "SESSION-001",
+      "sourceModule": "voice_consultation",
+      "scene": "voice-consultation",
+      "doctorId": "DOC-001",
+      "doctorName": "张医生",
+      "deptId": "DEPT-001",
+      "deptName": "全科",
+      "promptVersion": "prompt-20260616",
+      "templateVersion": "template-20260616",
+      "modelVersion": "qwen-plus",
+      "payload": {
+        "matchStatus": "exact"
+      },
+      "timestamp": 1770000000000
+    }
+  ]
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "accepted": 1,
+  "skipped": 0,
+  "rejected": 0,
+  "rejections": []
+}
+```
+
+约束：
+
+1. 该接口必须走 `Authorization: Bearer {deviceToken}` 与 ECDSA P-256 请求签名。
+2. `eventId` 或 `idempotencyKey` 至少提供一个；服务端以 `idDevice + idempotencyKey` 幂等，未传 `idempotencyKey` 时使用 `event:{eventId}` 兜底，重复上报计入 `skipped`。
+3. `recommendationType` 首版固定支持：`diagnosis`、`medicine`、`exam`、`lab_test`、`procedure`。
+4. `action` 首版固定支持：`final_select`、`manual_match`、`confirm_match`。
+5. `itemKey` 必须是标准候选项身份：诊断使用 `diagnosis:{id}`，无标准 ID 时使用 `diagnosis-code:{code}`；医嘱使用 `order:{type}:{matchedItem.id || idSrv}`。
+6. 服务端只聚合 `selected=true` 或 `manual_match / confirm_match` 的标准项；缺少 `itemKey`、`itemKey` 与类型不匹配、类型不支持、action 不支持、payload 不可序列化计入 `rejected`。
+
+### 3.10 POST `/v1/client/recommendation-preferences/rank`
+
+用途：桌面端传入当前已匹配候选项，服务端按“医生级 > 科室级 > 机构级”返回偏好分和轻量 boost。服务端不新增候选、不替换候选、不根据 AI 原文匹配。
+
+请求：
+
+```json
+{
+  "recommendationType": "diagnosis",
+  "scene": "voice-consultation",
+  "doctorId": "DOC-001",
+  "deptId": "DEPT-001",
+  "candidates": [
+    {
+      "itemKey": "diagnosis:D001",
+      "itemId": "D001",
+      "itemCode": "J06.900",
+      "itemName": "急性上呼吸道感染",
+      "originalRank": 0
+    }
+  ]
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "enabled": true,
+  "recommendationType": "diagnosis",
+  "items": [
+    {
+      "itemKey": "diagnosis:D001",
+      "preferenceScore": 0.8,
+      "boost": 0.12,
+      "scope": "doctor",
+      "reason": "doctor_preference"
+    }
+  ]
+}
+```
+
+约束：
+
+1. 该接口必须走设备鉴权与 ECDSA P-256 请求签名。
+2. `recommendationPreferenceRerank=false` 或候选样本不足时，服务端返回 `enabled=false` 或 `boost=0`，客户端必须静默回退原排序。
+3. 默认样本阈值为 3，默认最大 boost 为 0.15；首版通过 `c_ai_config.features_json` 的 `recommendationPreferenceRerank` 开关灰度启用。
+4. rank 响应只包含请求候选的偏好信息，不返回患者信息或历史原始事件。
+
+### 3.11 POST `/v1/client/user-logs/consultations`
 
 用途：桌面端提交运维用户日志快照。该接口独立于原始操作日志，用于按“一名患者一次问诊”聚合首版 AI 生成内容和医生最终修改内容。
 
@@ -891,7 +1001,7 @@ AI 调用类 `operation` 事件补充约束：
 3. 客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写时的最终状态。
 4. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
 
-### 3.9 POST `/v1/client/feedbacks`
+### 3.12 POST `/v1/client/feedbacks`
 
 用途：桌面端提交问题反馈，统一覆盖**通用反馈（设置入口）**、**语音推荐反馈**、**语音病例字段反馈**、**语音整页评分反馈**四种场景。支持评分、说明、内置截图、问题标签、医生/机构/科室身份回填，以及最近一次 AI 调用链路上下文。
 

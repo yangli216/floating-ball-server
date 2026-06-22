@@ -64,6 +64,7 @@ floating-ball-server/
         │   ├── modules/release/    # 内网客户端版本发布与 Tauri latest.json
         │   ├── modules/audit/      # 审计事件与日志
         │   ├── modules/feedback/   # 用户反馈与调用链路聚合
+        │   ├── modules/recommendationpreference/ # 机构/科室/医生推荐偏好事件与灰度重排
         │   ├── modules/userlog/    # 运维用户日志，按一次问诊聚合首版与最终内容
         │   ├── modules/knowledge/  # PMPHAI/知识库代理
         │   ├── modules/adminui/    # 管理端静态页面入口控制
@@ -125,6 +126,7 @@ floating-ball-server/
 - `modules/lisresult` 负责面向管理端的检验检查结果手动录入与第三方回写模拟：只查询 `hi_ods_apply` 中检验/检查类、未报告/未作废的申请单；检验录入后将报告组 ID 写回 `hi_ods_apply.id_result`，并把每个检验指标写入 `hi_ods_apply_lis_report`；检查录入后将报告 ID 写回 `hi_ods_apply.id_result`，并把报告结果、临床印象、影像诊断、阴阳性等字段写入 `hi_ods_apply_pacs_report`。该功能不接管业务系统产生申请单的链路，也不新增本地 `/api/consultation/*` 能力。
 - `modules/prompt` 只保留桌面端 Prompt delta 读取链路，管理端不再提供 Prompt 维护入口
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源，管理端不再提供数据包维护入口
+- `modules/recommendationpreference` 负责接收桌面端在目录匹配之后产生的诊断和医嘱标准候选选择事件，按机构/科室/医生聚合偏好分，并为灰度客户端返回轻量重排 boost；该模块不学习 AI 原始文案，不注入 Prompt，不生成新的候选项
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
 
 ### 4.2.1 内网客户端版本发布
