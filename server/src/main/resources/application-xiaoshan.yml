@@ -40,3 +40,5 @@ floating-ball:
     allow-private-network: ${FB_OUTBOUND_ALLOW_PRIVATE_NETWORK:true}
     allow-insecure-http: ${FB_OUTBOUND_ALLOW_INSECURE_HTTP:true}
     allow-proxy-fake-ip: ${FB_OUTBOUND_ALLOW_PROXY_FAKE_IP:true}
+  audit:
+    speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:/data/floating-ball/speech-files}
