@@ -72,7 +72,7 @@ public class UserActivityService {
         long prevTotalConsultations = userActivityMapper.countConsultations(prevQuery);
         long prevEffectiveConsultations = userActivityMapper.countEffectiveConsultations(prevQuery);
 
-        vo.setActiveUsersGrowth(formatPercentGrowth(activeUsers, prevActive));
+        vo.setActiveUsersGrowth(formatAbsoluteGrowth(activeUsers, prevActive));
         vo.setInactiveUsersGrowth(formatAbsoluteGrowth(inactiveUsers, prevInactive));
 
         double prevRate = prevTotal > 0 ? (double) prevActive / prevTotal * 100 : 0;
@@ -177,7 +177,7 @@ public class UserActivityService {
 
             XSSFSheet summarySheet = workbook.createSheet("活跃度汇总");
             writeHeader(summarySheet, headerStyle, "指标", "数值", "对比变化");
-            writeRow(summarySheet, 1, "活跃用户数", summary.getActiveUsers(), summary.getActiveUsersGrowth() + "%");
+            writeRow(summarySheet, 1, "活跃用户数", summary.getActiveUsers(), summary.getActiveUsersGrowth());
             writeRow(summarySheet, 2, "不活跃用户数", summary.getInactiveUsers(), summary.getInactiveUsersGrowth());
             writeRow(summarySheet, 3, "活跃率", summary.getActivityRate() + "%", summary.getActivityRateGrowth() + "%");
             writeRow(summarySheet, 4, "有效问诊率", summary.getEffectiveConsultationRate() + "%", summary.getEffectiveConsultationRateGrowth() + "%");
@@ -323,14 +323,6 @@ public class UserActivityService {
 
     private String formatPercent(double value) {
         return new BigDecimal(value).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
-    }
-
-    private String formatPercentGrowth(long current, long previous) {
-        if (previous == 0) {
-            return current > 0 ? "100" : "0";
-        }
-        double growth = (double) (current - previous) / previous * 100;
-        return new BigDecimal(growth).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
     private String formatAbsoluteGrowth(long current, long previous) {

@@ -477,6 +477,14 @@ select:focus-visible,
   overflow-x: auto;
 }
 
+.page-section--table .el-table {
+  min-width: max-content;
+}
+
+.page-section--table .el-table__fixed-right {
+  right: 0 !important;
+}
+
 .page-section--toolbar {
   display: flex;
   align-items: center;
@@ -524,6 +532,10 @@ select:focus-visible,
   min-width: 0;
 }
 
+.page-toolbar__filters > * {
+  flex: 0 0 auto;
+}
+
 .filter-row {
   display: flex;
   align-items: flex-end;
@@ -553,7 +565,24 @@ select:focus-visible,
 }
 
 .filter-date {
-  width: 360px;
+  width: 380px;
+}
+
+.filter-date.el-date-editor--daterange,
+.filter-date.el-date-editor--datetimerange {
+  width: 380px;
+}
+
+.filter-date .el-range-input {
+  min-width: 0;
+}
+
+.filter-date .el-range-separator {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  color: var(--color-text-regular);
+  text-align: center;
 }
 
 .filter-select {
@@ -656,15 +685,18 @@ select:focus-visible,
 
 .table-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
   align-items: center;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .table-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   min-height: 28px;
   padding: 0 2px;
   border: none;
@@ -674,6 +706,14 @@ select:focus-visible,
   cursor: pointer;
   text-decoration: none;
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.el-table .el-table__cell .cell:has(.table-action),
+.el-table .el-table__cell .cell:has(.table-actions),
+.el-table .el-table__cell .cell:has(.icon-action) {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .table-action:hover {

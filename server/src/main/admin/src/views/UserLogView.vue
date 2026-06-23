@@ -99,7 +99,7 @@
           <span v-else class="empty-inline">--</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="100" fixed="right">
+      <el-table-column label="操作" width="96" fixed="right">
         <template slot-scope="{ row }">
           <el-button type="text" size="mini" @click="openDetail(row)">详情</el-button>
         </template>

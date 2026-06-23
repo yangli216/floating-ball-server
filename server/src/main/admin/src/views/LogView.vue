@@ -157,7 +157,7 @@
           {{ formatDateTime(row.operationTime) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="88" fixed="right">
+      <el-table-column label="操作" width="96" fixed="right">
         <template slot-scope="{ row }">
           <table-action @click="openRawData(row)">详情</table-action>
         </template>

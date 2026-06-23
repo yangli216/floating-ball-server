@@ -77,6 +77,13 @@ public class DatabaseDialect {
         return "JSON_VALUE(" + column + ", '" + jsonPath + "' RETURNING NUMBER)";
     }
 
+    public String textContains(String column, String parameterPlaceholder) {
+        if (isPgCompatible()) {
+            return "POSITION(" + parameterPlaceholder + " IN " + column + ") > 0";
+        }
+        return "DBMS_LOB.INSTR(" + column + ", " + parameterPlaceholder + ") > 0";
+    }
+
     private Kind resolve(String configured) {
         if (configured == null) {
             return Kind.ORACLE;

@@ -1,5 +1,5 @@
 server:
-  port: ${FB_SERVER_PORT:8080}
+  port: ${FB_SERVER_PORT:8088}
 
 logging:
   level:
@@ -7,7 +7,7 @@ logging:
     com.regionalai.floatingball.server: ${FB_APP_LOG_LEVEL:INFO}
     org.apache.coyote.http11.Http11Processor: WARN
   file:
-    path: ${FB_LOG_PATH:/opt/floating-ball-server/logs}
+    path: ${java.io.tmpdir}/floating-ball-server/logs
 
 spring:
   datasource:
@@ -26,11 +26,11 @@ mybatis-plus:
   db-type: ${FB_DB_TYPE:opengauss}
 
 floating-ball:
-  audit:
-    speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:/opt/floating-ball-server/data/speech-audit}
-  release:
-    storage-dir: ${FB_RELEASE_STORAGE_DIR:/opt/floating-ball-server/data/releases}
-    public-base-url: ${FB_RELEASE_PUBLIC_BASE_URL:}
+#  audit:
+#    speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:/opt/floating-ball-server/data/speech-audit}
+#  release:
+#    storage-dir: ${FB_RELEASE_STORAGE_DIR:/opt/floating-ball-server/data/releases}
+#    public-base-url: ${FB_RELEASE_PUBLIC_BASE_URL:}
   cors:
     allowed-origins:
       - ${FB_ADMIN_ORIGIN:http://127.0.0.1:8080}

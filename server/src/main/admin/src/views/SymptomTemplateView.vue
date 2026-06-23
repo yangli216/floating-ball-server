@@ -488,7 +488,7 @@
         <el-table-column label="时间" width="168">
           <template slot-scope="{ row }">{{ formatDateTime(row.operationTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="88" fixed="right">
+        <el-table-column label="操作" width="96" fixed="right">
           <template slot-scope="{ row }">
             <table-action @click="openChangeLogDetail(row)">详情</table-action>
           </template>

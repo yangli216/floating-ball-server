@@ -278,6 +278,31 @@ class FeedbackServiceTest {
     }
 
     @Test
+    void detailShouldUsePgCompatiblePayloadSearchForGaussdbTimeline() {
+        feedbackService = new FeedbackService(aiFeedbackMapper, aiOpLogMapper, objectMapper, new DatabaseDialect(DatabaseDialect.Kind.OPENGAUSS));
+        AiFeedback feedback = new AiFeedback();
+        feedback.setIdFeedback("feedback-1");
+        feedback.setFgActive("1");
+        feedback.setIdDevice("device-1");
+        feedback.setTraceId("trace-1");
+        feedback.setFeedbackTime(java.time.LocalDateTime.of(2026, 5, 1, 10, 0, 0));
+
+        when(aiFeedbackMapper.selectOne(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiFeedback>>any()))
+            .thenReturn(feedback);
+        when(aiOpLogMapper.selectList(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<AiOpLog>>any()))
+            .thenReturn(Collections.emptyList());
+
+        feedbackService.detail("feedback-1");
+
+        verify(aiOpLogMapper).selectList(argThat(wrapper -> {
+            String segment = String.valueOf(wrapper.getCustomSqlSegment());
+            return segment.contains("POSITION")
+                && segment.contains("payload_json")
+                && !segment.toLowerCase().contains("dbms_lob");
+        }));
+    }
+
+    @Test
     void submitShouldRejectInvalidScoreBlankCommentAndNonImageScreenshot() {
         ClientFeedbackSubmitRequest missingComment = new ClientFeedbackSubmitRequest();
         missingComment.setScore(3);

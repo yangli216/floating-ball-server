@@ -59,6 +59,7 @@ class UserActivityServiceTest {
         assertEquals(2L, summary.getInactiveUsers());
         assertEquals("50", summary.getActivityRate());
         assertEquals("60", summary.getEffectiveConsultationRate());
+        assertEquals("1", summary.getActiveUsersGrowth());
         assertEquals("10", summary.getEffectiveConsultationRateGrowth());
 
         ArgumentCaptor<UserActivityQueryDTO> activeQueryCaptor = ArgumentCaptor.forClass(UserActivityQueryDTO.class);
@@ -124,6 +125,7 @@ class UserActivityServiceTest {
             assertEquals("活跃度汇总", workbook.getSheetAt(0).getSheetName());
             assertEquals("用户明细", workbook.getSheetAt(1).getSheetName());
             assertEquals("活跃用户数", workbook.getSheetAt(0).getRow(1).getCell(0).getStringCellValue());
+            assertEquals("1", workbook.getSheetAt(0).getRow(1).getCell(2).getStringCellValue());
             assertEquals("有效问诊率", workbook.getSheetAt(0).getRow(4).getCell(0).getStringCellValue());
             assertEquals("范医生", workbook.getSheetAt(1).getRow(1).getCell(0).getStringCellValue());
             assertEquals("有效问诊数", workbook.getSheetAt(1).getRow(0).getCell(6).getStringCellValue());

@@ -26,6 +26,7 @@ class DatabaseDialectTest {
         assertTrue(dialect.isPgCompatible());
         assertEquals("LIMIT 3", dialect.firstRows(3));
         assertEquals("COALESCE(a, b)", dialect.nvl("a", "b"));
+        assertEquals("POSITION({0} IN payload_json) > 0", dialect.textContains("payload_json", "{0}"));
         assertTrue(dialect.dayText("insert_time").contains("::date"));
     }
 
@@ -38,6 +39,7 @@ class DatabaseDialectTest {
         assertFalse(dialect.isPgCompatible());
         assertEquals("FETCH FIRST 1 ROWS ONLY", dialect.firstRows(1));
         assertEquals("NVL(a, b)", dialect.nvl("a", "b"));
+        assertEquals("DBMS_LOB.INSTR(payload_json, {0}) > 0", dialect.textContains("payload_json", "{0}"));
         assertTrue(dialect.dayText("insert_time").contains("TRUNC"));
     }
 

@@ -93,7 +93,7 @@
             {{ formatDateTime(row.insertTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="136" fixed="right">
           <template slot-scope="{ row }">
             <div class="table-actions">
               <table-action @click="openEntry(row)">录入结果</table-action>

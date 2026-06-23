@@ -2510,7 +2510,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "inactiveUsers": 16,
   "activityRate": "88.9",
   "effectiveConsultationRate": "73.5",
-  "activeUsersGrowth": "8.3",
+  "activeUsersGrowth": "8",
   "inactiveUsersGrowth": "1",
   "activityRateGrowth": "2.5",
   "effectiveConsultationRateGrowth": "5.2"
@@ -2523,7 +2523,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `inactiveUsers`：所选时段内无问诊记录的设备数
 - `activityRate`：活跃率百分比，活跃用户数 / 总设备数 × 100
 - `effectiveConsultationRate`：有效问诊率百分比，有效问诊数 / 总问诊数 × 100，其中 `status='completed'`（一键回写）计为有效问诊
-- `*Growth`：较上期增长率或变化量
+- `activeUsersGrowth` / `inactiveUsersGrowth`：较上期设备数差值，用于前端展示“增长/减少 N 人”
+- `activityRateGrowth` / `effectiveConsultationRateGrowth`：较上期百分点差值
 
 ### 5.59 GET `/admin/api/user-activity/region-tree`
 

@@ -22,7 +22,7 @@
           start-placeholder="开始时间"
           end-placeholder="结束时间"
           value-format="yyyy-MM-dd HH:mm:ss"
-          class="filter-date"
+          class="filter-date feedback-date-range"
         />
         <el-button type="primary" icon="el-icon-search" @click="handleSearch">查询</el-button>
         <el-button @click="reset">重置</el-button>
@@ -127,9 +127,11 @@
       <el-table-column label="时间" min-width="160">
         <template slot-scope="{ row }">{{ formatDateTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="100" fixed="right">
+      <el-table-column label="操作" width="132" fixed="right">
         <template slot-scope="{ row }">
-          <el-button type="text" size="mini" @click="openDetail(row)">查看详情</el-button>
+          <div class="table-actions">
+            <button type="button" class="table-action" @click="openDetail(row)">查看详情</button>
+          </div>
         </template>
       </el-table-column>
     </el-table>

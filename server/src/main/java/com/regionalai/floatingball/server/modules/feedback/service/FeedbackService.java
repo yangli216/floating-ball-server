@@ -543,9 +543,9 @@ public class FeedbackService {
             wrapper.eq("id_device", feedback.getIdDevice());
         }
         if (StringUtils.hasText(feedback.getTraceId())) {
-            wrapper.apply("dbms_lob.instr(payload_json, {0}) > 0", feedback.getTraceId().trim());
+            wrapper.apply(databaseDialect.textContains("payload_json", "{0}"), feedback.getTraceId().trim());
         } else if (StringUtils.hasText(feedback.getSessionId())) {
-            wrapper.apply("dbms_lob.instr(payload_json, {0}) > 0", feedback.getSessionId().trim());
+            wrapper.apply(databaseDialect.textContains("payload_json", "{0}"), feedback.getSessionId().trim());
             if (feedback.getFeedbackTime() != null) {
                 wrapper.ge("operation_time", feedback.getFeedbackTime().minusMinutes(30));
                 wrapper.le("operation_time", feedback.getFeedbackTime().plusMinutes(5));
