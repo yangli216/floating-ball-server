@@ -26,7 +26,7 @@ class PromptServiceTest {
 
     @BeforeEach
     void setUp() {
-        promptService = new PromptService(aiPromptMapper);
+        promptService = new PromptService(aiPromptMapper, new PromptDefaultCatalog());
     }
 
     @Test

@@ -1,0 +1,6 @@
+请复核以下语音问诊结果，只返回 JSON。
+
+{{input}}
+
+【上游节点输出】
+{{upstreamOutput}}

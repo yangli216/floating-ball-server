@@ -4,6 +4,7 @@ import Button from 'element-ui/lib/button'
 import Container from 'element-ui/lib/container'
 import DatePicker from 'element-ui/lib/date-picker'
 import Dialog from 'element-ui/lib/dialog'
+import Drawer from 'element-ui/lib/drawer'
 import Form from 'element-ui/lib/form'
 import FormItem from 'element-ui/lib/form-item'
 import Header from 'element-ui/lib/header'
@@ -32,6 +33,7 @@ const components = [
   Container,
   DatePicker,
   Dialog,
+  Drawer,
   Form,
   FormItem,
   Header,

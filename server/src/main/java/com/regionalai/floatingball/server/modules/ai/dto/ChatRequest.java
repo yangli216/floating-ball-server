@@ -11,6 +11,7 @@ public class ChatRequest {
 
     private String model;
     private String configProfile;
+    private String consultationId;
     private String traceId;
     private String scene;
     private String sourceModule;

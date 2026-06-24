@@ -897,10 +897,12 @@ public class AiProxyService {
                                                     String errorMessage,
                                                     String upstreamBody) {
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
+        payload.put("consultationId", request == null ? null : request.getConsultationId());
         payload.put("traceId", request == null ? null : request.getTraceId());
         payload.put("scene", request == null ? null : request.getScene());
         payload.put("sourceModule", request == null ? null : request.getSourceModule());
         payload.put("sessionId", request == null ? null : request.getSessionId());
+        payload.put("consultationId", request == null ? null : request.getConsultationId());
         payload.put("configProfile", request == null ? null : request.getConfigProfile());
         payload.put("baseUrl", upstreamConfig.getBaseUrl());
         payload.put("model", upstreamConfig.getModel());

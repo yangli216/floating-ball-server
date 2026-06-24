@@ -1,0 +1,12 @@
+请校准并提炼以下门诊医患语音转写，只返回 JSON。
+
+【问诊记录】
+{{consultationId}}
+
+【患者/医生/机构上下文】
+患者：{{patientName}}
+医生：{{doctorName}}
+机构：{{orgName}}
+
+【原始 ASR 转写】
+{{transcribedText}}

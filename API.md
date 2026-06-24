@@ -1107,6 +1107,7 @@ AI 调用类 `operation` 事件补充约束：
 {
   "configProfile": "default",
   "model": "deepseek-chat",
+  "consultationId": "CONSULT-001",
   "messages": [
     { "role": "system", "content": "你是医生助手" },
     { "role": "user", "content": "患者咳嗽三天" }
@@ -1121,6 +1122,7 @@ AI 调用类 `operation` 事件补充约束：
 - `configProfile`：可选，默认 `default`
 - 当值为 `fast` 时，服务端优先使用当前设备可见 AI 配置中的 `fastModelName`；未配置时回退主模型配置
 - 当值为 `reviewer` 时，服务端优先使用当前设备可见 AI 配置中的独立审查模型地址 / 密钥 / 模型；缺失项回退主模型配置
+- `consultationId`：可选，当前问诊或病历生成运行的业务锚点；服务端会写入 `c_ai_op_log.consultation_id`，供调用排障和业务关联查询使用
 - `enable_thinking` 是否开启由服务端当前 AI 配置统一决定；区域化桌面端不单独透传该开关覆盖服务端配置
 
 非流式响应 `data`：
@@ -1857,10 +1859,23 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 用途：逻辑停用配置。
 
 ### 5.34 GET `/admin/api/prompts`
-用途：分页查询 Prompt 列表。
+用途：分页查询 Prompt 列表。返回包含 `source` 与 `builtIn`；`builtIn=true` 表示服务端内置默认 Prompt，只能创建覆盖版本，不能直接修改。
+
+请求参数：
+
+- `current` / `size`：分页
+- `keyword`：匹配编码、名称、类型
+- `sdStatus`：`0` 草稿、`1` 已发布、`2` 已归档
+- `idOrg` / `idRegion`：按作用域筛选
+
+响应字段补充：
+
+- `source`：`built_in` / `configured`
+- `builtIn`：是否内置默认
+- `sdStatus`：配置记录状态；内置默认按已发布展示
 
 ### 5.35 POST `/admin/api/prompts`
-用途：新增 Prompt。
+用途：新增 Prompt。新增后默认草稿；发布后进入桌面端 `/v1/client/prompts/delta`，并成为业务调试节点的默认 Prompt 候选。
 
 请求：
 
@@ -1879,10 +1894,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ```
 
 ### 5.36 PUT `/admin/api/prompts/{idPrompt}`
-用途：修改 Prompt 内容与可见范围。
+用途：修改 Prompt 内容与可见范围。`builtin:*` 内置记录不能直接修改，应通过“创建覆盖”生成配置记录。
 
 ### 5.37 POST `/admin/api/prompts/{idPrompt}/publish`
-用途：发布 Prompt；同场景下其他已发布版本自动转归归档态。
+用途：发布 Prompt；同编码、同作用域下其他已发布版本自动转归归档态。作用域解析优先级为机构级 > 区域级 > 全局级 > 内置默认。
 
 ### 5.38 POST `/admin/api/prompts/{idPrompt}/archive`
 用途：归档 Prompt。
@@ -2362,6 +2377,107 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 1. `module/action` 保留原始入库值；`displayModule/displayAction` 为服务端统一生成的中文展示字段。
 2. 管理端时间线应优先展示 `displayModule/displayAction`，同时保留原始字段用于精确定位与排障。
 
+### 5.57 GET `/admin/api/business-workflow-debug/consultations`
+用途：业务调试台的就诊记录列表。该接口按真实业务记录选择调试上下文，不依赖 AI trace 是否已经采集。
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| current | number | 否 | 页码，默认 `1` |
+| size | number | 否 | 每页条数，默认 `10` |
+| keyword | string | 否 | 匹配患者、医生、机构、问诊 ID |
+| status | string | 否 | `generated` / `completed` / `abandoned` |
+
+响应 `data.records[]`：
+
+```json
+{
+  "idRun": "user-log-id",
+  "consultationId": "CONSULT-001",
+  "scene": "voice_consultation",
+  "sceneName": "语音接诊",
+  "patientName": "王某",
+  "patientGender": "男",
+  "patientAge": "56岁",
+  "doctorName": "张医生",
+  "orgName": "区域中心医院",
+  "status": "completed",
+  "startedAt": "2026-06-23T09:30:00",
+  "hasSpeechText": true
+}
+```
+
+### 5.58 GET `/admin/api/business-workflow-debug/consultations/{idRun}/context`
+用途：加载一次语音接诊的业务上下文和可调试节点目录。节点 Prompt 按原设备所属机构/区域解析，优先级为机构级 > 区域级 > 全局级 > 内置默认。
+
+响应 `data`：
+
+```json
+{
+  "run": {},
+  "context": {
+    "speechText": "原始 ASR 文本",
+    "patientContext": {},
+    "firstSnapshot": {},
+    "finalSnapshot": {}
+  },
+  "nodes": [
+    {
+      "nodeCode": "voice_transcript_calibration",
+      "title": "语音文本校准",
+      "promptCode": "voiceTranscriptCalibration",
+      "promptSource": "built_in",
+      "defaultConfigProfile": "fast",
+      "defaultTemperature": 0.1,
+      "systemPrompt": "...",
+      "userPrompt": "...",
+      "inputPresets": ["原始语音文本", "患者/医生/机构上下文"]
+    }
+  ]
+}
+```
+
+首版语音接诊节点目录：`voice_transcript_calibration`、`medical_record_generation`、`diagnosis_recommendation`、`treatment_recommendation`、`examination_recommendation`、`lab_test_recommendation`、`procedure_recommendation`、`voice_safety_review`。
+
+### 5.59 POST `/admin/api/business-workflow-debug/execute`
+用途：重放业务节点。请求中的 `systemPrompt`、`userPrompt`、`inputPayload` 均为本次调试临时值，不会修改已发布 Prompt，也不会改写业务病历结果。
+
+请求：
+
+```json
+{
+  "idRun": "user-log-id",
+  "nodeCode": "medical_record_generation",
+  "systemPrompt": "你是一名专业的基层门诊病历生成助手...",
+  "userPrompt": "请根据以下上下文生成门诊病历草稿...",
+  "configProfile": "default",
+  "temperature": 0.2,
+  "inputPayload": {
+    "input": "当前节点核心输入",
+    "upstreamOutput": "上游节点输出"
+  }
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "nodeCode": "medical_record_generation",
+  "traceId": "business-debug-uuid",
+  "content": "{\"chiefComplaint\":\"...\"}",
+  "parsedJson": {},
+  "durationMs": 1200
+}
+```
+
+约束：
+
+1. `configProfile` 只允许 `default` / `fast` / `reviewer`。
+2. 服务端复用原就诊记录设备所属机构/区域的 AI 配置，密钥不返回管理端。
+3. 该接口只面向管理端调试；结果保存在页面内供下游节点引用，服务端仅写入普通 AI 审计日志用于排障。
+
 ### 5.51 GET `/admin/api/feedbacks`
 
 用途：分页查询用户反馈列表。摘要字段面向非技术运营人员，技术列在管理端"高级筛选"中按需展开。默认只返回每个反馈槽位的最新版本；如需查看历史修订，可显式传 `includeHistory=true`。
@@ -2473,16 +2589,17 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 2. 机构管理
 3. 令牌管理
 4. AI 配置
-5. 症状模板管理
-6. 客户端版本发布
-7. 操作日志查询
-8. 管理员登录
-9. 用户管理
-10. 角色管理
-11. 概览统计
-12. 反馈、用户日志、统计分析与活跃度查询
+5. Prompt 配置
+6. 症状模板管理
+7. 客户端版本发布
+8. 操作日志查询
+9. 管理员登录
+10. 用户管理
+11. 角色管理
+12. 概览统计
+13. 反馈、用户日志、统计分析与活跃度查询
 
-这些接口在第一轮脚手架阶段优先保证 CRUD 结构和分页查询能力，细节以实现文档和代码为准。Prompt 与数据包仍服务桌面端 delta 链路，但不再作为管理端维护资源暴露。
+这些接口在第一轮脚手架阶段优先保证 CRUD 结构和分页查询能力，细节以实现文档和代码为准。Prompt 已恢复为管理端维护资源；数据包仍服务桌面端 delta 链路，但不再作为管理端维护资源暴露。
 
 ### 5.58 GET `/admin/api/user-activity/summary`
 

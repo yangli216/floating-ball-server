@@ -1,0 +1,11 @@
+请根据以下资料生成治疗方案推荐，只返回 JSON。
+
+【患者上下文】
+患者：{{patientName}}
+{{patientContext}}
+
+【诊断/病历/结构化事实】
+{{input}}
+
+【上游节点输出】
+{{upstreamOutput}}

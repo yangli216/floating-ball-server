@@ -7,7 +7,7 @@
 `floating-ball-server` 是 `floating-ball` 的配套后台，承担两类职责：
 
 1. 面向桌面端的远端客户端能力：设备注册、配置引导、Prompt / 数据包增量下发、AI 代理、审计上报
-2. 面向管理员的后台管理能力：区域、机构、令牌、AI 配置、症状模板、检验检查结果手工回写、客户端版本发布、日志
+2. 面向管理员的后台管理能力：区域、机构、令牌、AI 配置、Prompt、症状模板、检验检查结果手工回写、客户端版本发布、日志
 3. 面向平台管理员的基础治理能力：管理员登录、用户、角色、概览统计
 
 本项目不承接 `floating-ball` 的本地 HIS 桥接，不替代 `floating-ball/api.md` 中的 `/api/consultation/*`。
@@ -66,6 +66,7 @@ floating-ball-server/
         │   ├── modules/feedback/   # 用户反馈与调用链路聚合
         │   ├── modules/recommendationpreference/ # 机构/科室/医生推荐偏好事件与灰度重排
         │   ├── modules/userlog/    # 运维用户日志，按一次问诊聚合首版与最终内容
+        │   ├── modules/businessdebug/ # 业务调试台，按业务可用节点重放核心 AI 环节
         │   ├── modules/knowledge/  # PMPHAI/知识库代理
         │   ├── modules/adminui/    # 管理端静态页面入口控制
         │   ├── modules/ai/         # chat / transcribe / realtime 代理
@@ -114,7 +115,7 @@ floating-ball-server/
 - `ClientController`：设备注册、心跳、bootstrap、delta、审计上报
 - `AiProxyController`：聊天代理、语音转写、实时语音
 - `PmphaiProxyController`：PMPHAI 搜索、详情、列表浏览、签名跳转
-- `Admin*Controller`：区域、机构、令牌、配置、症状模板、客户端版本发布、日志、用户日志
+- `Admin*Controller`：区域、机构、令牌、配置、Prompt、症状模板、客户端版本发布、日志、用户日志
 
 ### 4.2 服务层
 
@@ -124,7 +125,7 @@ floating-ball-server/
 - `modules/symptom` 负责症状模板的逐条 CRUD、内置模板导入、JSON 模板文件导入、作用域合并、客户端 `templates/delta` 聚合与症状模板修改日志，数据结构对齐 `floating-ball` 的 `SymptomManagement.vue` / disease editor
 - `modules/emrtemplate` 负责住院病历 HTML 模板解析结果缓存，客户端按 HIS 传入的 `templateId` 复用已解析字段；缓存记录保存客户端传入的模板主键、模板名称、原生 `htmlContent`、内容 hash 和完整字段列表。管理端支持查询缓存、源码/HTML 预览模板、停用/删除缓存、手动调整字段是否由 AI 生成、维护字段 AI 生成提示词，并展示字段规则生成的默认提示词；默认提示词会包含模板名称、记录类型、字段名称、所属段落和字段含义。字段提示词覆盖和 AI 生成类型会在客户端解析缓存命中或上传模板解析结果时与本次客户端字段合并后返回，供桌面端生成住院病历预览。
 - `modules/lisresult` 负责面向管理端的检验检查结果手动录入与第三方回写模拟：只查询 `hi_ods_apply` 中检验/检查类、未报告/未作废的申请单；检验录入后将报告组 ID 写回 `hi_ods_apply.id_result`，并把每个检验指标写入 `hi_ods_apply_lis_report`；检查录入后将报告 ID 写回 `hi_ods_apply.id_result`，并把报告结果、临床印象、影像诊断、阴阳性等字段写入 `hi_ods_apply_pacs_report`。该功能不接管业务系统产生申请单的链路，也不新增本地 `/api/consultation/*` 能力。
-- `modules/prompt` 只保留桌面端 Prompt delta 读取链路，管理端不再提供 Prompt 维护入口
+- `modules/prompt` 负责 Prompt 配置化的逐步迁移：保留桌面端 `prompts/delta` 读取链路，管理端提供 Prompt 列表、新增、编辑、发布、归档和停用；服务端内置首批语音问诊默认 Prompt，配置表存在已发布覆盖时按机构级 > 区域级 > 全局级优先级生效。
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源，管理端不再提供数据包维护入口
 - `modules/recommendationpreference` 负责接收桌面端在目录匹配之后产生的诊断和医嘱标准候选选择事件，按机构/科室/医生聚合偏好分，并为灰度客户端返回轻量重排 boost；该模块不学习 AI 原始文案，不注入 Prompt，不生成新的候选项
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
@@ -301,6 +302,20 @@ floating-ball-server/
 2. 安全拒绝日志记录拒绝类型、请求方法、路径、客户端 IP、设备、机构、请求 ID、拒绝原因、签名头、客户端版本和更新通道；敏感 token 与完整签名不入库。
 3. 管理端“安全拦截”列表、“安全分析”概览/趋势/分布统一读取 `c_security_rejection_log`，不从普通审计日志或 HTTP 异常日志反推安全事件。
 
+### 5.8 业务调试台
+
+业务调试台面向“核心业务环节可重放”，不依赖历史 AI trace 拼装虚拟工作流。管理端从真实业务记录加载上下文，再由开发人员选择要调试的可用业务节点。
+
+首版支持语音接诊场景：
+
+1. 数据锚点：从 `c_ai_user_consultation_log` 选择一次语音接诊记录，读取原始 ASR 文本、患者/医生/机构上下文、首版/最终病历快照等业务上下文。
+2. 可用节点目录：语音文本校准、病历生成、诊断推荐、治疗方案推荐、检查推荐、检验推荐、处置推荐、安全复核。节点目录先以服务端代码维护，避免过早引入流程编排表；后续需要保存实验模板或跨场景编排时再表化。
+3. 入参来源：每个节点允许手工编辑 `currentInput` 和 `upstreamOutput`，管理端提供“原始语音文本、上游最后结果、全部上游结果、首版病历、最终病历”等快捷载入。
+4. Prompt 调优：节点按 `promptCode` 解析当前机构/区域生效 Prompt，回退服务端内置默认 Prompt；管理员可在页面内临时修改 system/user prompt 后重放，不影响已发布配置。
+5. 执行结果：调试结果只保存在当前页面链路中，并通过服务端 AI 代理写入普通审计日志用于排障；不依赖历史 `c_ai_op_log` 作为节点来源，也不改写业务病历结果。
+6. `/v1/ai/chat` 请求允许携带可选 `consultationId`，服务端与客户端审计日志把该字段落入 `c_ai_op_log.consultation_id`，作为普通调用排障的业务锚点。
+7. 调试重放必须走管理端鉴权，并复用原设备所属机构/区域的服务端 AI 配置；不得要求管理员输入或查看 API Key。
+
 ### 5.4 PMPHAI 知识库代理链路
 
 1. 区域化模式下，桌面端调用 `/v1/knowledge/pmphai/*`
@@ -334,7 +349,7 @@ floating-ball-server/
 14. `/v1/knowledge/pmphai/list`
 15. `/v1/knowledge/pmphai/page-url`
 16. 管理端最小 CRUD：
-   - 完整 CRUD：区域、机构、令牌、AI 配置、症状模板
+   - 完整 CRUD：区域、机构、令牌、AI 配置、Prompt、症状模板
    - 查询增强：日志
 
 ### 6.2 第二阶段
@@ -362,7 +377,7 @@ floating-ball-server/
 3. 角色管理：
    - 角色分页查询、新增、修改、停用
 4. 概览统计：
-   - 首页汇总区域、机构、令牌、配置、症状模板、日志、用户、角色数量
+   - 首页汇总区域、机构、令牌、配置、Prompt、症状模板、日志、用户、角色数量
 5. 综合概况统计分析（`modules/analytics`）：
    - 核心指标卡片：功能调用总量、日均功能调用量、AI诊断建议采纳率、诊断符合率、活跃医生数、问诊总数
    - 服务趋势折线图：按日聚合功能调用量与问诊量趋势

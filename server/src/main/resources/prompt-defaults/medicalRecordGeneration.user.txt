@@ -1,0 +1,15 @@
+请根据以下上下文生成门诊病历草稿，只返回 JSON。
+
+【患者/医生/机构】
+患者：{{patientName}}
+医生：{{doctorName}}
+机构：{{orgName}}
+
+【原始语音文本】
+{{speechText}}
+
+【上游节点输出】
+{{upstreamOutput}}
+
+【当前节点输入】
+{{input}}

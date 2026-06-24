@@ -1,0 +1,6 @@
+请根据以下资料生成检验推荐 JSON 数组。
+
+{{input}}
+
+【上游节点输出】
+{{upstreamOutput}}
