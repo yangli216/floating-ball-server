@@ -420,14 +420,8 @@ export default {
       }).catch(() => {})
     },
     updateUserStatus(row, sdStatus) {
-      return http.put(`/admin/api/users/${row.idUser}`, {
-        cdUser: row.cdUser || '',
-        naUser: row.naUser || '',
-        password: '',
-        idOrg: row.idOrg || '',
-        roleIds: this.resolveFormRoleIds(row),
-        sdStatus
-      })
+      const action = sdStatus === '1' ? 'enable' : 'disable'
+      return http.post(`/admin/api/users/${row.idUser}/${action}`)
     }
   }
 }

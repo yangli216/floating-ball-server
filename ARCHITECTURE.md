@@ -459,6 +459,7 @@ floating-ball-server/
    - 索引：`idx_c_security_rej_time` / `_type` / `_ip` / `_device` / `_path`
 14. `c_ai_user`
    - 激活账号通过 `uk_c_ai_user_code_active` 保证 `cd_user` 唯一，用户资料与角色映射替换在同一事务内完成
+   - `sd_status` 表示启用/停用，管理端启停只修改该字段；`fg_active` 仅表示逻辑作废，不作为日常启停入口
 15. `c_ai_role`
    - 激活角色通过 `uk_c_ai_role_code_active` 保证 `cd_role` 唯一
 16. `c_ai_user_role`

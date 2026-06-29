@@ -52,6 +52,16 @@ public class AdminUserController {
         return ApiResponse.success(userService.update(idUser, request), RequestIdUtils.resolve(httpServletRequest));
     }
 
+    @PostMapping("/{idUser}/enable")
+    public ApiResponse<AdminUserView> enable(@PathVariable String idUser, HttpServletRequest request) {
+        return ApiResponse.success(userService.enable(idUser), RequestIdUtils.resolve(request));
+    }
+
+    @PostMapping("/{idUser}/disable")
+    public ApiResponse<AdminUserView> disable(@PathVariable String idUser, HttpServletRequest request) {
+        return ApiResponse.success(userService.disable(idUser), RequestIdUtils.resolve(request));
+    }
+
     @DeleteMapping("/{idUser}")
     public ApiResponse<Void> invalidate(@PathVariable String idUser, HttpServletRequest request) {
         userService.invalidate(idUser);

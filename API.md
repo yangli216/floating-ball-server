@@ -1625,8 +1625,16 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ### 5.12 PUT `/admin/api/users/{idUser}`
 用途：修改用户资料、角色和状态；`password` 为空时保留原值。
 
+说明：该接口用于完整保存用户资料，会校验登录账号唯一性、所属机构和角色有效性。列表中的启用/停用操作不复用该接口，避免状态切换被资料校验或角色映射校验误伤。
+
+### 5.12.1 POST `/admin/api/users/{idUser}/enable`
+用途：启用用户，仅把 `c_ai_user.sd_status` 更新为 `1`，不修改账号、密码、机构或角色映射。
+
+### 5.12.2 POST `/admin/api/users/{idUser}/disable`
+用途：停用用户，仅把 `c_ai_user.sd_status` 更新为 `0`，不修改账号、密码、机构或角色映射。
+
 ### 5.13 DELETE `/admin/api/users/{idUser}`
-用途：逻辑停用用户。
+用途：逻辑作废用户，并同步作废其激活角色映射；该接口不作为日常启用/停用入口。
 
 ### 5.14 GET `/admin/api/roles`
 用途：分页查询角色列表。

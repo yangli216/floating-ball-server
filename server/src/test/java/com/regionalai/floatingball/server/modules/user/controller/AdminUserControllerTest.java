@@ -118,4 +118,42 @@ class AdminUserControllerTest {
 
         verify(userService).invalidate(eq("USER001"));
     }
+
+    @Test
+    void enableShouldDelegateToService() throws Exception {
+        AdminUserView user = new AdminUserView();
+        user.setIdUser("USER001");
+        user.setCdUser("zhangsan");
+        user.setSdStatus("1");
+
+        when(userService.enable("USER001")).thenReturn(user);
+
+        mockMvc.perform(post("/admin/api/users/USER001/enable")
+                .header("X-Request-Id", "RID-user-enable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("0"))
+            .andExpect(jsonPath("$.requestId").value("RID-user-enable"))
+            .andExpect(jsonPath("$.data.sdStatus").value("1"));
+
+        verify(userService).enable(eq("USER001"));
+    }
+
+    @Test
+    void disableShouldDelegateToService() throws Exception {
+        AdminUserView user = new AdminUserView();
+        user.setIdUser("USER001");
+        user.setCdUser("zhangsan");
+        user.setSdStatus("0");
+
+        when(userService.disable("USER001")).thenReturn(user);
+
+        mockMvc.perform(post("/admin/api/users/USER001/disable")
+                .header("X-Request-Id", "RID-user-disable"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("0"))
+            .andExpect(jsonPath("$.requestId").value("RID-user-disable"))
+            .andExpect(jsonPath("$.data.sdStatus").value("0"));
+
+        verify(userService).disable(eq("USER001"));
+    }
 }

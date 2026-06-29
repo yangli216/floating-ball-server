@@ -192,4 +192,52 @@ class UserServiceTest {
         assertEquals("默认机构", response.getRecords().get(0).getNaOrg());
         assertEquals(Arrays.asList("系统管理员"), response.getRecords().get(0).getRoleNames());
     }
+
+    @Test
+    void disableShouldOnlyUpdateUserStatus() {
+        AiUser user = new AiUser();
+        user.setIdUser("USER001");
+        user.setCdUser("zhangsan");
+        user.setNaUser("张三");
+        user.setIdOrg("ORG001");
+        user.setSdStatus("1");
+        user.setFgActive("1");
+
+        when(aiUserMapper.selectById("USER001")).thenReturn(user);
+        when(aiUserRoleMapper.selectList(any())).thenReturn(Collections.<AiUserRole>emptyList());
+
+        AdminUserView result = userService.disable("USER001");
+
+        assertEquals("0", user.getSdStatus());
+        assertEquals("0", result.getSdStatus());
+        verify(aiUserMapper).updateById(user);
+        verify(aiUserMapper, never()).selectOne(any());
+        verify(aiOrgMapper, never()).selectOne(any());
+        verify(aiRoleMapper, never()).selectBatchIds(any());
+        verify(aiUserRoleMapper, never()).insert(any(AiUserRole.class));
+    }
+
+    @Test
+    void enableShouldOnlyUpdateUserStatus() {
+        AiUser user = new AiUser();
+        user.setIdUser("USER001");
+        user.setCdUser("zhangsan");
+        user.setNaUser("张三");
+        user.setIdOrg("ORG001");
+        user.setSdStatus("0");
+        user.setFgActive("1");
+
+        when(aiUserMapper.selectById("USER001")).thenReturn(user);
+        when(aiUserRoleMapper.selectList(any())).thenReturn(Collections.<AiUserRole>emptyList());
+
+        AdminUserView result = userService.enable("USER001");
+
+        assertEquals("1", user.getSdStatus());
+        assertEquals("1", result.getSdStatus());
+        verify(aiUserMapper).updateById(user);
+        verify(aiUserMapper, never()).selectOne(any());
+        verify(aiOrgMapper, never()).selectOne(any());
+        verify(aiRoleMapper, never()).selectBatchIds(any());
+        verify(aiUserRoleMapper, never()).insert(any(AiUserRole.class));
+    }
 }

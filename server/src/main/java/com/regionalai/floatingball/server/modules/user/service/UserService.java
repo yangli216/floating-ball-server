@@ -144,6 +144,16 @@ public class UserService {
         }
     }
 
+    @Transactional
+    public AdminUserView enable(String idUser) {
+        return updateStatus(idUser, "1");
+    }
+
+    @Transactional
+    public AdminUserView disable(String idUser) {
+        return updateStatus(idUser, "0");
+    }
+
     private List<String> resolveRoleFilteredUserIds(String idRole) {
         if (!StringUtils.hasText(idRole)) {
             return Collections.emptyList();
@@ -255,6 +265,13 @@ public class UserService {
             throw new BusinessException("用户不存在");
         }
         return user;
+    }
+
+    private AdminUserView updateStatus(String idUser, String sdStatus) {
+        AiUser user = requireActiveUser(idUser);
+        user.setSdStatus(sdStatus);
+        aiUserMapper.updateById(user);
+        return toView(aiUserMapper.selectById(idUser), buildRoleMapByUserId(Collections.singletonList(idUser)).get(idUser), null);
     }
 
     private void ensureActiveOrg(String idOrg) {
