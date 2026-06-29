@@ -454,6 +454,7 @@ CREATE INDEX idx_c_ai_op_log_scene ON c_ai_op_log (source_module, scene_code, op
 
 CREATE TABLE c_ai_user_consultation_log (
     id_log               VARCHAR(32) PRIMARY KEY,
+    consultation_round_id VARCHAR(64),
     consultation_id      VARCHAR(64) NOT NULL,
     id_device            VARCHAR(32),
     id_org               VARCHAR(32),
@@ -486,7 +487,8 @@ CREATE TABLE c_ai_user_consultation_log (
 
 COMMENT ON TABLE c_ai_user_consultation_log IS '运维用户日志-问诊聚合表';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_log IS '用户日志主键ID';
-COMMENT ON COLUMN c_ai_user_consultation_log.consultation_id IS '问诊ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.consultation_round_id IS '问诊轮次ID（客户端生成UUID，每轮问诊一个，贯穿该轮所有提交）';
+COMMENT ON COLUMN c_ai_user_consultation_log.consultation_id IS '问诊ID（就诊锚点，同一患者多次问诊共用，仅用于聚合展示）';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_device IS '设备ID';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_org IS '机构ID';
 COMMENT ON COLUMN c_ai_user_consultation_log.na_org IS '机构名称';
@@ -510,7 +512,7 @@ COMMENT ON COLUMN c_ai_user_consultation_log.final_snapshot_json IS '医生最�
 COMMENT ON COLUMN c_ai_user_consultation_log.selection_json IS '最终选中状态JSON';
 COMMENT ON COLUMN c_ai_user_consultation_log.change_summary_json IS '变更汇总JSON（含各类别变更数）';
 COMMENT ON COLUMN c_ai_user_consultation_log.total_changes IS '变更总项数';
-COMMENT ON COLUMN c_ai_user_consultation_log.status IS '状态：generated已生成 completed已完成';
+COMMENT ON COLUMN c_ai_user_consultation_log.status IS '状态：generated已生成 completed已完成 abandoned已放弃';
 COMMENT ON COLUMN c_ai_user_consultation_log.fg_active IS '逻辑删除标记';
 COMMENT ON COLUMN c_ai_user_consultation_log.insert_time IS '创建时间';
 COMMENT ON COLUMN c_ai_user_consultation_log.update_time IS '更新时间';
@@ -519,10 +521,9 @@ CREATE INDEX idx_c_ai_user_log_time ON c_ai_user_consultation_log (consultation_
 CREATE INDEX idx_c_ai_user_log_patient ON c_ai_user_consultation_log (patient_id, consultation_time, fg_active);
 CREATE INDEX idx_c_ai_user_log_doctor ON c_ai_user_consultation_log (id_doctor, consultation_time, fg_active);
 CREATE INDEX idx_c_ai_user_log_consultation ON c_ai_user_consultation_log (consultation_id, consultation_type, id_device, fg_active);
-CREATE UNIQUE INDEX uk_c_ai_user_log_consultation_active ON c_ai_user_consultation_log (
-    (CASE WHEN fg_active = '1' THEN consultation_id END),
-    (CASE WHEN fg_active = '1' THEN consultation_type END),
-    (CASE WHEN fg_active = '1' THEN COALESCE(id_device, '-') END)
+CREATE INDEX idx_c_ai_user_log_round ON c_ai_user_consultation_log (consultation_round_id, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_user_log_round_active ON c_ai_user_consultation_log (
+    (CASE WHEN fg_active = '1' AND status = 'generated' THEN consultation_round_id END)
 );
 
 

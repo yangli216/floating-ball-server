@@ -710,6 +710,7 @@ export default {
       filters: createFilters(),
       advancedFiltersOpen: false,
       records: [],
+      deletedTemplateIds: [],
       selectedId: '',
       editingRecord: null,
       originalRecord: null,
@@ -791,7 +792,8 @@ export default {
             idOrg: this.filters.idOrg || undefined
           }
         })
-        this.records = data.records || []
+        const deletedIds = this.deletedTemplateIds
+        this.records = (data.records || []).filter(item => item && !deletedIds.includes(item.id))
         if (this.selectedId) {
           const selected = this.records.find(item => item.id === this.selectedId)
           if (selected) {
@@ -873,6 +875,26 @@ export default {
       this.normalizeRecord(this.editingRecord)
       this.tcmMetadataText = this.editingRecord.tcmMetadata ? JSON.stringify(this.editingRecord.tcmMetadata, null, 2) : ''
       this.newBodyPart = ''
+    },
+    rememberDeletedTemplate(id) {
+      if (id && !this.deletedTemplateIds.includes(id)) {
+        this.deletedTemplateIds.push(id)
+      }
+    },
+    removeDeletedRecord(id) {
+      const deletedIndex = this.records.findIndex(item => item.id === id)
+      if (deletedIndex !== -1) {
+        this.records.splice(deletedIndex, 1)
+      }
+      if (!this.records.length) {
+        this.selectedId = ''
+        this.editingRecord = null
+        this.originalRecord = null
+        this.tcmMetadataText = ''
+        return
+      }
+      const nextIndex = deletedIndex === -1 ? 0 : Math.min(deletedIndex, this.records.length - 1)
+      this.selectRecord(this.records[nextIndex])
     },
     openCreate() {
       const draft = createDefaultRecord(this.filters.medicalMode, this.filters)
@@ -1205,17 +1227,17 @@ export default {
         this.selectedId = ''
         return
       }
-      this.$confirm(`确认删除症状模板「${this.editingRecord.name || this.editingRecord.key}」吗？`, '提示', {
+      const deletedId = this.editingRecord.id
+      const deletedName = this.editingRecord.name || this.editingRecord.key
+      this.$confirm(`确认删除症状模板「${deletedName}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {
-          await http.delete(`/admin/api/symptom-templates/${this.editingRecord.id}`)
+          await http.delete(`/admin/api/symptom-templates/${deletedId}`)
           this.$message.success('删除成功')
-          this.selectedId = ''
-          this.editingRecord = null
-          this.originalRecord = null
-          this.tcmMetadataText = ''
-          this.loadData()
+          this.rememberDeletedTemplate(deletedId)
+          this.removeDeletedRecord(deletedId)
+          await this.loadData()
         } catch (error) {
           this.$message.error((error && error.message) || '删除失败')
         }

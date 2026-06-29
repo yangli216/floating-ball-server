@@ -6,6 +6,7 @@ import lombok.Data;
 public class UserConsultationLogRequest {
 
     private String consultationId;
+    private String consultationRoundId;
     private String consultationType;
     private Long consultationTime;
 

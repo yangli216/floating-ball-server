@@ -201,7 +201,8 @@ class RecommendationPreferenceServiceTest {
         assertEquals(1, response.getItems().size());
         assertEquals("doctor", response.getItems().get(0).getScope());
         assertEquals(0.8D, response.getItems().get(0).getPreferenceScore());
-        assertEquals(0.12D, response.getItems().get(0).getBoost());
+        assertEquals(10, response.getItems().get(0).getSampleCount());
+        assertEquals(0.7561D, response.getItems().get(0).getBoost());
     }
 
     @Test
@@ -212,6 +213,7 @@ class RecommendationPreferenceServiceTest {
 
         assertTrue(response.isEnabled());
         assertEquals("none", response.getItems().get(0).getScope());
+        assertEquals(2, response.getItems().get(0).getSampleCount());
         assertEquals(0D, response.getItems().get(0).getBoost());
         assertEquals("insufficient_samples", response.getItems().get(0).getReason());
     }

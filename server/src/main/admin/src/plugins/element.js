@@ -22,8 +22,10 @@ import RadioButton from 'element-ui/lib/radio-button'
 import RadioGroup from 'element-ui/lib/radio-group'
 import Select from 'element-ui/lib/select'
 import Switch from 'element-ui/lib/switch'
+import TabPane from 'element-ui/lib/tab-pane'
 import Table from 'element-ui/lib/table'
 import TableColumn from 'element-ui/lib/table-column'
+import Tabs from 'element-ui/lib/tabs'
 import Tag from 'element-ui/lib/tag'
 import 'element-ui/lib/theme-chalk/index.css'
 
@@ -48,8 +50,10 @@ const components = [
   RadioGroup,
   Select,
   Switch,
+  TabPane,
   Table,
   TableColumn,
+  Tabs,
   Tag
 ]
 

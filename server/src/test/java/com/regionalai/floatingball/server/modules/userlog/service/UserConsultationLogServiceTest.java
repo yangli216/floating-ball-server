@@ -66,6 +66,7 @@ class UserConsultationLogServiceTest {
 
         UserConsultationLogRequest request = new UserConsultationLogRequest();
         request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
         request.setConsultationType("voice");
         request.setPatientId("P001");
         request.setPatientName("王某");
@@ -82,6 +83,7 @@ class UserConsultationLogServiceTest {
 
         AiUserConsultationLog saved = captor.getValue();
         assertEquals("CONSULT-001", saved.getConsultationId());
+        assertEquals("ROUND-001", saved.getConsultationRoundId());
         assertEquals("voice", saved.getConsultationType());
         assertEquals("DEV001", saved.getIdDevice());
         assertEquals("ORG001", saved.getIdOrg());
@@ -104,6 +106,7 @@ class UserConsultationLogServiceTest {
 
         UserConsultationLogRequest request = new UserConsultationLogRequest();
         request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
         request.setConsultationType("voice");
         request.setSpeechText("患者发热一天");
         request.setAudio(Base64.getEncoder().encodeToString("audio-bytes".getBytes("UTF-8")));
@@ -130,6 +133,7 @@ class UserConsultationLogServiceTest {
         AiUserConsultationLog existing = new AiUserConsultationLog();
         existing.setIdLog("LOG001");
         existing.setConsultationId("CONSULT-001");
+        existing.setConsultationRoundId("ROUND-001");
         existing.setConsultationType("voice");
         existing.setIdDevice("DEV001");
         existing.setFgActive("1");
@@ -148,6 +152,7 @@ class UserConsultationLogServiceTest {
 
         UserConsultationLogRequest request = new UserConsultationLogRequest();
         request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
         request.setConsultationType("voice");
         request.setFinalSnapshot(finalSnapshot);
         request.setSelectionSnapshot(selectionSnapshot);
@@ -167,10 +172,80 @@ class UserConsultationLogServiceTest {
     }
 
     @Test
+    void saveShouldUpdateStatusToAbandonedWhenAbandonedFlagIsTrue() throws Exception {
+        // 模拟"放弃"场景：已有一条 generated 记录，提交 abandoned=true 后应更新为 abandoned
+        AiUserConsultationLog existing = new AiUserConsultationLog();
+        existing.setIdLog("LOG001");
+        existing.setConsultationId("CONSULT-001");
+        existing.setConsultationRoundId("ROUND-001");
+        existing.setConsultationType("smart");
+        existing.setIdDevice("DEV001");
+        existing.setFgActive("1");
+        existing.setStatus("generated");
+        existing.setFirstSnapshotJson("{\"chiefComplaint\":\"发热1天\"}");
+        when(mapper.selectOne(any())).thenReturn(existing);
+
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setIdOrg("ORG001");
+
+        Map<String, Object> finalSnapshot = new HashMap<String, Object>();
+        finalSnapshot.put("chiefComplaint", "发热1天");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
+        request.setConsultationType("smart");
+        request.setFinalSnapshot(finalSnapshot);
+        request.setAbandoned(Boolean.TRUE);
+
+        service.save(device, request);
+
+        ArgumentCaptor<AiUserConsultationLog> captor = ArgumentCaptor.forClass(AiUserConsultationLog.class);
+        verify(mapper, never()).insert(any());
+        verify(mapper).updateById(captor.capture());
+
+        AiUserConsultationLog updated = captor.getValue();
+        assertEquals("LOG001", updated.getIdLog());
+        assertEquals("abandoned", updated.getStatus());
+        assertEquals(OBJECT_MAPPER.valueToTree(finalSnapshot), OBJECT_MAPPER.readTree(updated.getFinalSnapshotJson()));
+    }
+
+    @Test
+    void saveShouldSetAbandonedEvenWithoutFinalSnapshot() {
+        // 模拟"放弃"场景：已有一条 generated 记录，仅提交 abandoned=true（无 finalSnapshot）也应更新为 abandoned
+        AiUserConsultationLog existing = new AiUserConsultationLog();
+        existing.setIdLog("LOG001");
+        existing.setConsultationId("CONSULT-001");
+        existing.setConsultationRoundId("ROUND-001");
+        existing.setConsultationType("voice");
+        existing.setIdDevice("DEV001");
+        existing.setFgActive("1");
+        existing.setStatus("generated");
+        when(mapper.selectOne(any())).thenReturn(existing);
+
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
+        request.setConsultationType("voice");
+        request.setAbandoned(Boolean.TRUE);
+
+        service.save(device, request);
+
+        ArgumentCaptor<AiUserConsultationLog> captor = ArgumentCaptor.forClass(AiUserConsultationLog.class);
+        verify(mapper).updateById(captor.capture());
+        assertEquals("abandoned", captor.getValue().getStatus());
+    }
+
+    @Test
     void saveShouldRetryAsUpdateWhenConcurrentCreateHitsUniqueConstraint() {
         AiUserConsultationLog existing = new AiUserConsultationLog();
         existing.setIdLog("LOG001");
         existing.setConsultationId("CONSULT-001");
+        existing.setConsultationRoundId("ROUND-001");
         existing.setConsultationType("voice");
         existing.setIdDevice("DEV001");
         existing.setFgActive("1");
@@ -178,7 +253,7 @@ class UserConsultationLogServiceTest {
 
         when(mapper.selectOne(any())).thenReturn(null).thenReturn(existing);
         when(mapper.insert(any(AiUserConsultationLog.class)))
-            .thenThrow(new DuplicateKeyException("uk_c_ai_user_log_consultation_active"));
+            .thenThrow(new DuplicateKeyException("uk_c_ai_user_log_round_active"));
 
         AiDevice device = new AiDevice();
         device.setIdDevice("DEV001");
@@ -189,6 +264,7 @@ class UserConsultationLogServiceTest {
 
         UserConsultationLogRequest request = new UserConsultationLogRequest();
         request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
         request.setConsultationType("voice");
         request.setFinalSnapshot(finalSnapshot);
 
@@ -205,6 +281,7 @@ class UserConsultationLogServiceTest {
         AiUserConsultationLog existing = new AiUserConsultationLog();
         existing.setIdLog("LOG001");
         existing.setConsultationId("CONSULT-001");
+        existing.setConsultationRoundId("ROUND-001");
         existing.setConsultationType("voice");
         existing.setIdDevice("DEV001");
         existing.setFgActive("1");
@@ -212,7 +289,7 @@ class UserConsultationLogServiceTest {
 
         when(mapper.selectOne(any())).thenReturn(null).thenReturn(existing);
         when(mapper.insert(any(AiUserConsultationLog.class)))
-            .thenThrow(new DuplicateKeyException("uk_c_ai_user_log_consultation_active"));
+            .thenThrow(new DuplicateKeyException("uk_c_ai_user_log_round_active"));
         when(audioLogStorageService.store(any(byte[].class), any(String.class), any(String.class)))
             .thenReturn("/tmp/floating-ball-server/speech-audit/new.wav");
 
@@ -221,6 +298,7 @@ class UserConsultationLogServiceTest {
 
         UserConsultationLogRequest request = new UserConsultationLogRequest();
         request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
         request.setConsultationType("voice");
         request.setAudio(Base64.getEncoder().encodeToString("audio-bytes".getBytes("UTF-8")));
         request.setAudioMimeType("audio/wav");
@@ -236,11 +314,23 @@ class UserConsultationLogServiceTest {
     void saveShouldRejectUnsupportedConsultationType() {
         UserConsultationLogRequest request = new UserConsultationLogRequest();
         request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
         request.setConsultationType("raw");
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.save(null, request));
 
         assertEquals("问诊类型非法", ex.getMessage());
+    }
+
+    @Test
+    void saveShouldRejectMissingConsultationRoundId() {
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationType("voice");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.save(null, request));
+
+        assertEquals("问诊轮次ID不能为空", ex.getMessage());
     }
 
     @Test
@@ -251,6 +341,84 @@ class UserConsultationLogServiceTest {
         );
 
         assertEquals("用户日志查询时间格式非法", ex.getMessage());
+    }
+
+    @Test
+    void saveShouldCreateNewRecordWhenPreviousConsultationAlreadyCompleted() throws Exception {
+        // 第一轮问诊已完成（status=completed），同一就诊再次发起问诊时必须新建记录，不能覆盖
+        AiUserConsultationLog previousCompleted = new AiUserConsultationLog();
+        previousCompleted.setIdLog("LOG-OLD");
+        previousCompleted.setConsultationId("CONSULT-001");
+        previousCompleted.setConsultationRoundId("ROUND-001");
+        previousCompleted.setConsultationType("voice");
+        previousCompleted.setIdDevice("DEV001");
+        previousCompleted.setFgActive("1");
+        previousCompleted.setStatus("completed");
+        previousCompleted.setFirstSnapshotJson("{\"chiefComplaint\":\"咳嗽3天\"}");
+        previousCompleted.setFinalSnapshotJson("{\"chiefComplaint\":\"咳嗽3天\"}");
+
+        // findExisting 按 consultationRoundId 查找且只匹配 status=generated 的记录，
+        // 第二轮使用新的 roundId，已 completed 的第一轮记录不会被命中
+        when(mapper.selectOne(any())).thenReturn(null);
+        when(mapper.insert(any(AiUserConsultationLog.class))).thenAnswer(invocation -> {
+            AiUserConsultationLog entity = invocation.getArgument(0);
+            entity.setIdLog("LOG-NEW");
+            return 1;
+        });
+
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setIdOrg("ORG001");
+
+        Map<String, Object> firstSnapshot = new HashMap<String, Object>();
+        firstSnapshot.put("chiefComplaint", "发热1天");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-002");
+        request.setConsultationType("voice");
+        request.setPatientId("P001");
+        request.setPatientName("王某");
+        request.setFirstSnapshot(firstSnapshot);
+
+        AiUserConsultationLog result = service.save(device, request);
+
+        // 必须是新建，不是更新旧记录
+        verify(mapper).insert(any(AiUserConsultationLog.class));
+        verify(mapper, never()).updateById(any());
+        assertEquals("LOG-NEW", result.getIdLog());
+        assertEquals("ROUND-002", result.getConsultationRoundId());
+        assertEquals("generated", result.getStatus());
+        assertEquals(OBJECT_MAPPER.valueToTree(firstSnapshot), OBJECT_MAPPER.readTree(result.getFirstSnapshotJson()));
+    }
+
+    @Test
+    void saveShouldCreateNewRecordWhenPreviousConsultationAlreadyAbandoned() throws Exception {
+        // 第一轮问诊已放弃（status=abandoned），同一就诊再次发起问诊时必须新建记录
+        when(mapper.selectOne(any())).thenReturn(null);
+        when(mapper.insert(any(AiUserConsultationLog.class))).thenAnswer(invocation -> {
+            AiUserConsultationLog entity = invocation.getArgument(0);
+            entity.setIdLog("LOG-NEW");
+            return 1;
+        });
+
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+
+        Map<String, Object> firstSnapshot = new HashMap<String, Object>();
+        firstSnapshot.put("chiefComplaint", "发热1天");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-002");
+        request.setConsultationType("smart");
+        request.setFirstSnapshot(firstSnapshot);
+
+        AiUserConsultationLog result = service.save(device, request);
+
+        verify(mapper).insert(any(AiUserConsultationLog.class));
+        verify(mapper, never()).updateById(any());
+        assertEquals("generated", result.getStatus());
     }
 
     @Test

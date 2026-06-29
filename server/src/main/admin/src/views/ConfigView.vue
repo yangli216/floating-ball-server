@@ -42,7 +42,7 @@
         <template slot-scope="{ row }">
           <div class="table-actions">
             <table-action @click="openEdit(row)">编辑</table-action>
-            <table-action danger @click="removeRecord(row)">停用</table-action>
+            <table-action :danger="isEnabled(row)" @click="toggleStatus(row)">{{ isEnabled(row) ? '停用' : '启用' }}</table-action>
           </div>
         </template>
       </el-table-column>
@@ -392,6 +392,9 @@ export default {
     statusMeta(value) {
       return findStatusMeta(configStatusOptions, value)
     },
+    isEnabled(row) {
+      return row && row.sdStatus === '1'
+    },
     resolveScope(row) {
       return resolveScopeLabel(row, this.orgMap, this.regionMap)
     },
@@ -578,18 +581,54 @@ export default {
         }
       })
     },
-    removeRecord(row) {
-      this.$confirm(`确认停用配置「${row.naConfig}」吗？`, '提示', {
+    toggleStatus(row) {
+      const enable = !this.isEnabled(row)
+      const actionText = enable ? '启用' : '停用'
+      this.$confirm(`确认${actionText}配置「${row.naConfig}」吗？`, '提示', {
         type: 'warning'
       }).then(async () => {
         try {
-          await http.delete(`/admin/api/configs/${row.idConfig}`)
-          this.$message.success('停用成功')
+          await this.updateConfigStatus(row, enable ? '1' : '0')
+          this.$message.success(`${actionText}成功`)
           this.loadData()
         } catch (error) {
-          this.$message.error(error.message || '停用失败')
+          this.$message.error(error.message || `${actionText}失败`)
         }
       }).catch(() => {})
+    },
+    updateConfigStatus(row, sdStatus) {
+      const speechProvider = normalizeSpeechProvider(row.speechProvider)
+      const audioModel = row.audioModel || DEFAULT_AUDIO_MODEL
+      return http.put(`/admin/api/configs/${row.idConfig}`, {
+        cdConfig: row.cdConfig || '',
+        naConfig: row.naConfig || '',
+        provider: row.provider || '',
+        apiBaseUrl: row.apiBaseUrl || '',
+        apiKey: '',
+        modelName: row.modelName || '',
+        fastModelName: row.fastModelName || '',
+        enableThinking: Boolean(row.enableThinking),
+        audioBaseUrl: row.audioBaseUrl || '',
+        audioApiKey: '',
+        audioModel,
+        speechProvider,
+        speechModel: resolveSpeechModel(speechProvider, row.speechModel || '', audioModel),
+        knowledgeBaseEnabled: flagToBoolean(row.knowledgeBaseEnabled),
+        knowledgeBaseBaseUrl: row.knowledgeBaseBaseUrl || '',
+        pmphaiEnabled: flagToBoolean(row.pmphaiEnabled),
+        pmphaiBaseUrl: row.pmphaiBaseUrl || '',
+        pmphaiAppKey: '',
+        pmphaiAppSecret: '',
+        reviewerEnabled: flagToBoolean(row.reviewerEnabled),
+        reviewerBaseUrl: row.reviewerBaseUrl || '',
+        reviewerApiKey: '',
+        reviewerModel: row.reviewerModel || '',
+        reviewerCheckExaminationEnabled: row.reviewerCheckExaminationEnabled !== false,
+        featuresJson: row.featuresJson || '',
+        idOrg: row.idOrg || null,
+        idRegion: row.idRegion || null,
+        sdStatus
+      })
     }
   }
 }

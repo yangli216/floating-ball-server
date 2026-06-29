@@ -19,6 +19,9 @@ public class AiUserConsultationLog extends BaseEntity {
     @TableId(value = "id_log", type = IdType.ASSIGN_UUID)
     private String idLog;
 
+    @TableField("consultation_round_id")
+    private String consultationRoundId;
+
     @TableField("consultation_id")
     private String consultationId;
 

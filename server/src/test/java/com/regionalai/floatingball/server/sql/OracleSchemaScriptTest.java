@@ -93,7 +93,7 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope");
-        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_log_consultation_active");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_log_round_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_code_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_role_code_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_role_active");

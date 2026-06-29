@@ -78,21 +78,27 @@ public class UserConsultationLogService {
         if (consultationId == null) {
             throw new BusinessException("问诊ID不能为空");
         }
+        String consultationRoundId = trimToNull(request.getConsultationRoundId());
+        if (consultationRoundId == null) {
+            throw new BusinessException("问诊轮次ID不能为空");
+        }
         String consultationType = normalizeConsultationType(request.getConsultationType());
-        return saveResolved(device, request, consultationId, consultationType, false);
+        return saveResolved(device, request, consultationId, consultationRoundId, consultationType, false);
     }
 
     private AiUserConsultationLog saveResolved(AiDevice device,
                                                UserConsultationLogRequest request,
                                                String consultationId,
+                                               String consultationRoundId,
                                                String consultationType,
                                                boolean retryingAfterDuplicate) {
 
-        AiUserConsultationLog entity = findExisting(device, consultationId, consultationType);
+        AiUserConsultationLog entity = findExisting(consultationRoundId);
         boolean create = entity == null;
         if (create) {
             entity = new AiUserConsultationLog();
             entity.setConsultationId(consultationId);
+            entity.setConsultationRoundId(consultationRoundId);
             entity.setConsultationType(consultationType);
             entity.setIdDevice(device == null ? null : device.getIdDevice());
             entity.setFgActive("1");
@@ -144,7 +150,7 @@ public class UserConsultationLogService {
         } catch (RuntimeException ex) {
             audioLogStorageService.deleteQuietly(storedAudioPath);
             if (create && !retryingAfterDuplicate && ex instanceof DuplicateKeyException) {
-                return saveResolved(device, request, consultationId, consultationType, true);
+                return saveResolved(device, request, consultationId, consultationRoundId, consultationType, true);
             }
             log.error("user consultation log save failed. consultationId={}, error={}", consultationId, ex.getMessage());
             throw ex;
@@ -362,14 +368,14 @@ public class UserConsultationLogService {
         }
     }
 
-    private AiUserConsultationLog findExisting(AiDevice device, String consultationId, String consultationType) {
+    private AiUserConsultationLog findExisting(String consultationRoundId) {
+        // 按 consultationRoundId 合并同一轮问诊的多次提交（speech → firstSnapshot → finalSnapshot）。
+        // consultationRoundId 是客户端生成的 UUID，每轮问诊唯一，贯穿该轮所有提交。
+        // 已 completed/abandoned 的记录不会被命中，确保同一就诊再次发起问诊时生成新记录。
         LambdaQueryWrapper<AiUserConsultationLog> wrapper = new LambdaQueryWrapper<AiUserConsultationLog>()
             .eq(AiUserConsultationLog::getFgActive, "1")
-            .eq(AiUserConsultationLog::getConsultationId, consultationId)
-            .eq(AiUserConsultationLog::getConsultationType, consultationType);
-        if (device != null && StringUtils.hasText(device.getIdDevice())) {
-            wrapper.eq(AiUserConsultationLog::getIdDevice, device.getIdDevice());
-        }
+            .eq(AiUserConsultationLog::getConsultationRoundId, consultationRoundId)
+            .eq(AiUserConsultationLog::getStatus, STATUS_GENERATED);
         return userConsultationLogMapper.selectOne(wrapper.last(databaseDialect.firstRows(1)));
     }
 
@@ -541,6 +547,7 @@ public class UserConsultationLogService {
             UserConsultationLogListItem item = new UserConsultationLogListItem();
             item.setIdLog(record.getIdLog());
             item.setConsultationId(record.getConsultationId());
+            item.setConsultationRoundId(record.getConsultationRoundId());
             item.setIdOrg(record.getIdOrg());
             item.setNaOrg(record.getNaOrg());
             item.setIdDoctor(record.getIdDoctor());

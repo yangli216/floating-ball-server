@@ -43,7 +43,11 @@ public class RecommendationPreferenceService {
     private static final String FEATURE_COLLECTION = "recommendationPreferenceCollection";
     private static final String FEATURE_RERANK = "recommendationPreferenceRerank";
     private static final int DEFAULT_RERANK_MIN_COUNT = 3;
-    private static final double DEFAULT_MAX_BOOST = 0.15D;
+    private static final int DEFAULT_CONFIDENCE_FULL_SAMPLE_COUNT = 20;
+    private static final double DEFAULT_MAX_RANK_BOOST = 1.2D;
+    private static final double DOCTOR_SCOPE_WEIGHT = 1D;
+    private static final double DEPT_SCOPE_WEIGHT = 0.7D;
+    private static final double ORG_SCOPE_WEIGHT = 0.45D;
     private static final int MAX_CANDIDATES = 50;
 
     private static final Set<String> SUPPORTED_TYPES = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
@@ -124,17 +128,19 @@ public class RecommendationPreferenceService {
             }
 
             ScopedAggregate scoped = findBestAggregate(orgId, deptId, doctorId, type, itemKey);
-            if (scoped == null || sampleCount(scoped.aggregate) < DEFAULT_RERANK_MIN_COUNT) {
-                response.getItems().add(new RecommendationPreferenceRankResponse.Item(itemKey, 0D, 0D, "none", "insufficient_samples"));
+            int samples = scoped == null ? 0 : sampleCount(scoped.aggregate);
+            if (scoped == null || samples < DEFAULT_RERANK_MIN_COUNT) {
+                response.getItems().add(new RecommendationPreferenceRankResponse.Item(itemKey, 0D, 0D, samples, "none", "insufficient_samples"));
                 continue;
             }
 
             double score = scoped.aggregate.getPreferenceScore() == null ? 0D : scoped.aggregate.getPreferenceScore().doubleValue();
-            double boost = Math.min(DEFAULT_MAX_BOOST, Math.max(0D, score) * DEFAULT_MAX_BOOST);
+            double boost = rankBoost(score, samples, scoped.scope);
             response.getItems().add(new RecommendationPreferenceRankResponse.Item(
                 itemKey,
                 round(score),
                 round(boost),
+                samples,
                 scoped.scope,
                 scoped.scope + "_preference"
             ));
@@ -416,6 +422,32 @@ public class RecommendationPreferenceService {
 
     private int sampleCount(AiRecommendationPreferenceAggregate aggregate) {
         return safeInt(aggregate.getSelectedCount()) + safeInt(aggregate.getConfirmCount()) + safeInt(aggregate.getManualMatchCount());
+    }
+
+    private double rankBoost(double preferenceScore, int sampleCount, String scope) {
+        double score = Math.min(1D, Math.max(0D, preferenceScore));
+        double boost = DEFAULT_MAX_RANK_BOOST * score * sampleConfidence(sampleCount) * scopeWeight(scope);
+        return Math.min(DEFAULT_MAX_RANK_BOOST, Math.max(0D, boost));
+    }
+
+    private double sampleConfidence(int sampleCount) {
+        if (sampleCount < DEFAULT_RERANK_MIN_COUNT) {
+            return 0D;
+        }
+        return Math.min(1D, Math.log(1D + sampleCount) / Math.log(1D + DEFAULT_CONFIDENCE_FULL_SAMPLE_COUNT));
+    }
+
+    private double scopeWeight(String scope) {
+        if ("doctor".equals(scope)) {
+            return DOCTOR_SCOPE_WEIGHT;
+        }
+        if ("dept".equals(scope)) {
+            return DEPT_SCOPE_WEIGHT;
+        }
+        if ("org".equals(scope)) {
+            return ORG_SCOPE_WEIGHT;
+        }
+        return 0D;
     }
 
     private int safeInt(Integer value) {

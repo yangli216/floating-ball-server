@@ -1,6 +1,10 @@
 package com.regionalai.floatingball.server.modules.symptom.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.datapackage.dto.TemplateDeltaVO;
@@ -16,6 +20,9 @@ import com.regionalai.floatingball.server.security.AdminContextHolder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.apache.ibatis.session.Configuration;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -53,6 +60,10 @@ class SymptomTemplateServiceTest {
     @BeforeEach
     void setUp() {
         AdminContextHolder.clear();
+        Configuration configuration = new Configuration();
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(configuration, "");
+        assistant.setCurrentNamespace("test");
+        TableInfoHelper.initTableInfo(assistant, AiSymptomTemplate.class);
         ObjectMapper objectMapper = new ObjectMapper();
         symptomTemplateService = new SymptomTemplateService(
             aiSymptomTemplateMapper,
@@ -62,6 +73,24 @@ class SymptomTemplateServiceTest {
             changeLogService,
             new DatabaseDialect(DatabaseDialect.Kind.ORACLE)
         );
+    }
+
+    @Test
+    void listShouldOnlyQueryActiveTemplates() {
+        AiSymptomTemplate active = buildTemplate("T1", "fever", "发热", "western", null, null, 1, LocalDateTime.now());
+        Page<AiSymptomTemplate> mapperResult = new Page<AiSymptomTemplate>(1, 500, 1);
+        mapperResult.setRecords(Collections.singletonList(active));
+        when(aiSymptomTemplateMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mapperResult);
+
+        PageResponse<SymptomTemplateVO> response = symptomTemplateService.list(1, 500, null, "western", null, "1", null, null);
+
+        assertEquals(1L, response.getTotal());
+        assertEquals("fever", response.getRecords().get(0).getKey());
+        ArgumentCaptor<LambdaQueryWrapper<AiSymptomTemplate>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(aiSymptomTemplateMapper).selectPage(any(Page.class), wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        assertTrue(sqlSegment.contains("fg_active"));
+        assertTrue(sqlSegment.contains("sd_status"));
     }
 
     @Test

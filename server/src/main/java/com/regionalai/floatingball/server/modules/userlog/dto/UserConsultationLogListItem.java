@@ -9,6 +9,7 @@ public class UserConsultationLogListItem {
 
     private String idLog;
     private String consultationId;
+    private String consultationRoundId;
     private String idOrg;
     private String naOrg;
     private String idDoctor;

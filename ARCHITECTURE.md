@@ -7,7 +7,7 @@
 `floating-ball-server` 是 `floating-ball` 的配套后台，承担两类职责：
 
 1. 面向桌面端的远端客户端能力：设备注册、配置引导、Prompt / 数据包增量下发、AI 代理、审计上报
-2. 面向管理员的后台管理能力：区域、机构、令牌、AI 配置、Prompt、症状模板、检验检查结果手工回写、客户端版本发布、日志
+2. 面向管理员的后台管理能力：区域、机构、令牌、AI 配置、Prompt、症状模板、检验检查结果手工回写、客户端版本发布、日志、推荐偏好观测
 3. 面向平台管理员的基础治理能力：管理员登录、用户、角色、概览统计
 
 本项目不承接 `floating-ball` 的本地 HIS 桥接，不替代 `floating-ball/api.md` 中的 `/api/consultation/*`。
@@ -128,7 +128,7 @@ floating-ball-server/
 - `modules/lisresult` 负责面向管理端的检验检查结果手动录入与第三方回写模拟：只查询 `hi_ods_apply` 中检验/检查类、未报告/未作废的申请单；检验录入后将报告组 ID 写回 `hi_ods_apply.id_result`，并把每个检验指标写入 `hi_ods_apply_lis_report`；检查录入后将报告 ID 写回 `hi_ods_apply.id_result`，并把报告结果、临床印象、影像诊断、阴阳性等字段写入 `hi_ods_apply_pacs_report`。该功能不接管业务系统产生申请单的链路，也不新增本地 `/api/consultation/*` 能力。
 - `modules/prompt` 负责 Prompt 配置化的逐步迁移：保留桌面端 `prompts/delta` 读取链路，管理端提供 Prompt 列表、新增、编辑、发布、归档和停用；服务端内置首批语音问诊默认 Prompt，配置表存在已发布覆盖时按机构级 > 区域级 > 全局级优先级生效。
 - `modules/datapackage` 继续负责映射数据包读取；`template` 类型数据包仅作为症状模板表未初始化时的兼容回退来源，管理端不再提供数据包维护入口
-- `modules/recommendationpreference` 负责接收桌面端在目录匹配之后产生的诊断和医嘱标准候选选择事件，按机构/科室/医生聚合偏好分，并为灰度客户端返回轻量重排 boost；该模块不学习 AI 原始文案，不注入 Prompt，不生成新的候选项
+- `modules/recommendationpreference` 负责接收桌面端在目录匹配之后产生的诊断和医嘱标准候选选择事件，按机构/科室/医生聚合偏好分，并为灰度客户端返回带样本置信度与作用域权重的名次 boost；管理端提供只读观测页查看聚合偏好分、样本计数和原始事件，便于确认采集效果与排查上报链路。该模块不学习 AI 原始文案，不注入 Prompt，不生成新的候选项，首版管理端不提供人工编辑偏好分入口
 - `modules/release` 使用服务端本地文件目录托管桌面端安装包、签名文件、`latest.json` 元数据、`policy.json` 发布策略与历史发布快照，不新增数据库表；管理端上传后由客户端通过公开 `/v1/client/releases/{channel}/latest.json` 检测更新，并通过 `/v1/client/releases/{channel}/policy.json` 判断是否必须更新
 
 ### 4.2.1 内网客户端版本发布
@@ -292,8 +292,8 @@ floating-ball-server/
 
 1. 用户日志是面向运维人员的问诊聚合视图，独立于 `modules/audit` 的原始操作日志，不复用 `/admin/api/logs` 与 `c_ai_op_log`。
 2. 桌面端区域化模式下，语音问诊停止录音后先上报 `speechText` 与录音 base64；服务端将录音文件落到 `floating-ball.audit.speech-file-dir`，表内仅保存 `audio_file_path`、原文件名、MIME 和大小，避免把原始音频写入 JSON。
-3. 桌面端区域化模式下，在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交时上报 `finalSnapshot` 与 `selectionSnapshot`。
-4. 服务端按 `consultationId + consultationType + idDevice` upsert 到 `c_ai_user_consultation_log`，保证“一个病人一次问诊一条记录”，不记录医生每次中间编辑。
+3. 桌面端区域化模式下，在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交或放弃时上报 `finalSnapshot`、`selectionSnapshot` 与结束状态。
+4. 服务端按 `consultationId + consultationType + idDevice` 只聚合同一轮尚未结束的问诊日志；记录进入 `completed` 或 `abandoned` 后，同一就诊再次发起智能问诊/语音问诊必须创建新记录，保证“同一病人多次问诊多条记录”，且不记录医生每次中间编辑。
 5. 服务端在写入最终快照时同步计算 `change_summary_json` 与 `total_changes`，供统计分析计算诊断符合率与用户日志变更筛选使用。
 6. 管理端新增“用户日志”模块，列表列为机构、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
 
@@ -448,7 +448,7 @@ floating-ball-server/
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
    - `change_summary_json` 保存主诉、现病史、诊断、用药、检查、检验、处置和选中状态等类别变更计数，`total_changes` 保存总变更数，统计分析诊断符合率依赖其中的 `diagnosisChanges`
-   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`，并通过 `uk_c_ai_user_log_consultation_active` 保证激活记录中 `consultation_id + consultation_type + id_device` 唯一
+   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`，并通过 `uk_c_ai_user_log_consultation_active` 保证激活且尚未结束的 `consultation_id + consultation_type + id_device` 只有一条，已回写/放弃后同一就诊可再次生成新日志
 12. `c_ai_feature_event`
    - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
    - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次
@@ -473,7 +473,7 @@ floating-ball-server/
 1. 用户新增、修改、停用：`c_ai_user` 与 `c_ai_user_role` 同事务提交或回滚；账号唯一性不只依赖代码检查。
 2. 机构维护、角色停用、设备注册/维护：涉及主表和关联状态变化时同事务提交；机构编码必填且激活记录唯一，机构编码、设备编码、设备令牌、角色编码由数据库唯一索引兜底。
 3. 反馈提交：上一版 `fg_latest` 降级、新版插入、首版 root 回填必须同事务完成；`uk_c_ai_feedback_latest_scope` 防止并发提交产生两个最新版。
-4. 问诊日志保存：按 `consultation_id + consultation_type + id_device` 做事务化 upsert；并发首次创建由唯一索引兜底，服务端在唯一冲突后重读并重试一次更新。
+4. 问诊日志保存：按 `consultation_id + consultation_type + id_device` 只对尚未结束的 `generated` 记录做事务化 upsert；`completed` / `abandoned` 记录保留为历史轮次，同一就诊再次生成时插入新记录。并发首次创建由唯一索引兜底，服务端在唯一冲突后重读未结束记录并重试一次更新。
 5. 现场旧库一次性迁移添加唯一约束前必须先清理重复激活数据；迁移脚本应在发现重复时中止并提示具体对象。
 
 ## 8. 数据库初始化约定

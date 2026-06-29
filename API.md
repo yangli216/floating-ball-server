@@ -893,7 +893,7 @@ AI 调用类 `operation` 事件补充约束：
 
 ### 3.10 POST `/v1/client/recommendation-preferences/rank`
 
-用途：桌面端传入当前已匹配候选项，服务端按“医生级 > 科室级 > 机构级”返回偏好分和轻量 boost。服务端不新增候选、不替换候选、不根据 AI 原文匹配。
+用途：桌面端传入当前已匹配候选项，服务端按“医生级 > 科室级 > 机构级”返回偏好分和名次 boost。服务端不新增候选、不替换候选、不根据 AI 原文匹配。
 
 请求：
 
@@ -925,7 +925,8 @@ AI 调用类 `operation` 事件补充约束：
     {
       "itemKey": "diagnosis:D001",
       "preferenceScore": 0.8,
-      "boost": 0.12,
+      "boost": 0.7561,
+      "sampleCount": 10,
       "scope": "doctor",
       "reason": "doctor_preference"
     }
@@ -937,18 +938,22 @@ AI 调用类 `operation` 事件补充约束：
 
 1. 该接口必须走设备鉴权与 ECDSA P-256 请求签名。
 2. `recommendationPreferenceRerank=false` 或候选样本不足时，服务端返回 `enabled=false` 或 `boost=0`，客户端必须静默回退原排序。
-3. 默认样本阈值为 3，默认最大 boost 为 0.15；首版通过 `c_ai_config.features_json` 的 `recommendationPreferenceRerank` 开关灰度启用。
-4. rank 响应只包含请求候选的偏好信息，不返回患者信息或历史原始事件。
+3. `boost` 表示可抵扣的原始排序位置数，客户端按 `originalRank - boost` 做稳定排序；默认最大名次 boost 为 1.2，强偏好医生级候选最多约上移 1 个相邻名次。
+4. 服务端默认样本阈值为 3；样本不足时返回 `sampleCount` 与 `boost=0`，不参与重排。
+5. 默认公式：`boost = 1.2 * preferenceScore * sampleConfidence * scopeWeight`，其中 `sampleConfidence = min(1, log(1 + sampleCount) / log(21))`，`scopeWeight` 为医生级 `1.0`、科室级 `0.7`、机构级 `0.45`。
+6. 首版通过 `c_ai_config.features_json` 的 `recommendationPreferenceRerank` 开关灰度启用；`recommendationPreferenceRerankMinCount=3` 与 `recommendationPreferenceRerankMaxBoost=1.2` 作为服务端默认常量，不要求管理端首版可配置。
+7. rank 响应只包含请求候选的偏好信息，不返回患者信息或历史原始事件。
 
 ### 3.11 POST `/v1/client/user-logs/consultations`
 
-用途：桌面端提交运维用户日志快照。该接口独立于原始操作日志，用于按“一名患者一次问诊”聚合首版 AI 生成内容和医生最终修改内容。
+用途：桌面端提交运维用户日志快照。该接口独立于原始操作日志，用于按"一名患者一次问诊轮次"聚合首版 AI 生成内容和医生最终修改内容。
 
 请求：
 
 ```json
 {
   "consultationId": "CONSULT-001",
+  "consultationRoundId": "550e8400-e29b-41d4-a716-446655440000",
   "consultationType": "voice",
   "consultationTime": 1770000000000,
   "patientId": "P001",
@@ -997,9 +1002,10 @@ AI 调用类 `operation` 事件补充约束：
 约束：
 
 1. `consultationType` 取值：`voice`（语音问诊）、`smart`（智能问诊）。
-2. 服务端按 `consultationId + consultationType + idDevice` 事务化 upsert；数据库通过唯一索引保证激活记录不重复，先收到首版快照则创建记录，后收到最终快照则更新同一条记录。
-3. 客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写时的最终状态。
-4. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
+2. `consultationRoundId` 为必填字段，由客户端在每轮问诊开始时生成 UUID。`consultationId` 是就诊锚点（visitId/patientId），同一患者多次问诊共用，仅用于 timeline 聚合和展示；`consultationRoundId` 是问诊轮次标识，每轮问诊唯一，贯穿该轮所有提交（speech → firstSnapshot → finalSnapshot/abandoned）。
+3. 服务端按 `consultationRoundId` 合并同一轮问诊的多次提交；数据库通过唯一索引 `uk_c_ai_user_log_round_active` 保证同一 `consultationRoundId` 同时只有一条 `generated` 记录。先收到首版快照则创建记录，后收到最终快照则更新同一条记录为 `completed` 或 `abandoned`。
+4. 若同一就诊在回写或放弃后再次发起智能问诊/语音问诊，客户端必须生成新的 `consultationRoundId`，服务端据此创建新的用户日志记录。客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写或放弃时的最终状态。
+5. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
 
 ### 3.12 POST `/v1/client/feedbacks`
 
@@ -2033,6 +2039,10 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ### 5.47 GET `/admin/api/symptom-templates`
 用途：分页查询症状模板列表，返回完整模板结构，供后台 disease editor 直接编辑。
 
+说明：
+
+- 仅返回 `fg_active=1` 的逻辑有效症状模板；执行删除成功后的记录不应再出现在列表中。
+
 请求参数：
 
 - `current`
@@ -2274,7 +2284,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 5. `displayModule/displayAction/displayTitle/displaySourceModule/displayScene` 为服务端统一生成的中文展示字段；管理端应优先展示这些字段，同时保留 `naModule/opAction/opTitle/sourceModule/sceneCode` 原始码用于精准排障与复制检索
 
 ### 5.54 GET `/admin/api/user-logs/consultations`
-用途：分页查询运维用户日志列表。该模块是专门给运维人员使用的问诊聚合日志，不替代原有操作日志页面。
+用途：分页查询运维用户日志列表。该模块是专门给运维人员使用的问诊轮次聚合日志，不替代原有操作日志页面。
 
 请求参数：
 
@@ -2581,6 +2591,121 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 1. `timeline[*].title` 已按服务端统一展示目录优先中文化；管理端无需再自行猜测 `payload.action/operationName`。
 2. `timeline[*].displaySourceModule` 仅用于快速识别来源模块，排障仍应结合 `payload` 原始字段。
 
+### 5.57.1 GET `/admin/api/recommendation-preferences/summary`
+
+用途：返回推荐偏好观测页的汇总指标，用于确认机构内偏好采集是否产生数据。该接口只读取推荐偏好聚合表和原始事件表，不修改偏好分、不触发重排。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| recommendationType | string | 否 | 推荐类型：`diagnosis` / `medicine` / `exam` / `lab_test` / `procedure` |
+| scope | string | 否 | 聚合范围：`doctor` / `dept` / `org` |
+| idRegion | string | 否 | 区域 ID |
+| idOrg | string | 否 | 机构 ID |
+| idDept | string | 否 | 科室 ID |
+| idDoctor | string | 否 | 医生 ID |
+| keyword | string | 否 | 匹配标准项名称、编码、ID、itemKey、医生、科室 |
+| dateFrom | string | 否 | 事件开始时间，支持 `yyyy-MM-dd` 或 `yyyy-MM-dd HH:mm:ss` |
+| dateTo | string | 否 | 事件结束时间，支持 `yyyy-MM-dd` 或 `yyyy-MM-dd HH:mm:ss` |
+
+响应 `data`：
+
+```json
+{
+  "aggregateCount": 24,
+  "eventCount": 128,
+  "doctorScopeCount": 8,
+  "deptScopeCount": 7,
+  "orgScopeCount": 9,
+  "averagePreferenceScore": 0.42
+}
+```
+
+### 5.57.2 GET `/admin/api/recommendation-preferences/aggregates`
+
+用途：分页查看机构/科室/医生维度的标准候选项偏好聚合结果。管理端只展示偏好分与计数，不提供编辑入口。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：同 `summary`，另支持：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| current | long | 否 | 页码，默认 1 |
+| size | long | 否 | 每页条数，默认 10 |
+
+响应 `data.records[]` 主要字段：
+
+```json
+{
+  "idAgg": "uuid",
+  "scope": "doctor",
+  "idRegion": "REGION001",
+  "idOrg": "ORG001",
+  "idDept": "DEPT001",
+  "idDoctor": "DOC001",
+  "recommendationType": "diagnosis",
+  "itemKey": "diagnosis:D001",
+  "itemId": "D001",
+  "itemCode": "J06.900",
+  "itemName": "急性上呼吸道感染",
+  "selectedCount": 6,
+  "confirmCount": 2,
+  "manualMatchCount": 1,
+  "sampleCount": 9,
+  "preferenceScore": 0.8,
+  "lastEventTime": "2026-06-24T10:30:00",
+  "insertTime": "2026-06-20T09:00:00",
+  "updateTime": "2026-06-24T10:30:00"
+}
+```
+
+排序规则：默认按 `lastEventTime DESC, preferenceScore DESC` 返回，优先展示近期有医生确认行为的数据。
+
+### 5.57.3 GET `/admin/api/recommendation-preferences/events`
+
+用途：分页查看推荐偏好原始事件，便于排查桌面端上报、幂等去重和医生最终选择来源。该接口不返回患者信息，不根据 AI 原文做匹配。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求参数：同 `aggregates`，其中 `scope` 会按事件中是否存在 `idDoctor/idDept` 推导过滤。
+
+响应 `data.records[]` 主要字段：
+
+```json
+{
+  "idEvent": "uuid",
+  "idDevice": "DEVICE001",
+  "idRegion": "REGION001",
+  "idOrg": "ORG001",
+  "recommendationType": "diagnosis",
+  "actionCode": "final_select",
+  "itemKey": "diagnosis:D001",
+  "itemId": "D001",
+  "itemCode": "J06.900",
+  "itemName": "急性上呼吸道感染",
+  "selected": true,
+  "primary": true,
+  "traceId": "TRACE-001",
+  "consultationId": "CONSULT-001",
+  "sessionId": "SESSION-001",
+  "sourceModule": "voice_consultation",
+  "sceneCode": "voice-consultation",
+  "idDoctor": "DOC001",
+  "naDoctor": "张医生",
+  "idDept": "DEPT001",
+  "naDept": "全科",
+  "promptVersion": "prompt-20260616",
+  "templateVersion": "template-20260616",
+  "modelVersion": "qwen-plus",
+  "eventTime": "2026-06-24T10:30:00",
+  "insertTime": "2026-06-24T10:30:02"
+}
+```
+
 ## 5. 管理端接口范围
 
 首期管理端 API 只要求覆盖以下资源：
@@ -2598,6 +2723,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 11. 角色管理
 12. 概览统计
 13. 反馈、用户日志、统计分析与活跃度查询
+14. 推荐偏好观测：聚合偏好分、原始事件、医生/科室/机构维度筛选
 
 这些接口在第一轮脚手架阶段优先保证 CRUD 结构和分页查询能力，细节以实现文档和代码为准。Prompt 已恢复为管理端维护资源；数据包仍服务桌面端 delta 链路，但不再作为管理端维护资源暴露。
 
