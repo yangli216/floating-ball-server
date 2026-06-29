@@ -1,0 +1,44 @@
+server:
+  port: 9090
+
+logging:
+  level:
+    root: INFO
+    com.regionalai.floatingball.server: DEBUG
+    org.apache.coyote.http11.Http11Processor: WARN
+  file:
+    path: ${java.io.tmpdir}/floating-ball-server/logs
+
+spring:
+  datasource:
+    url: ${FB_DB_URL:jdbc:oracle:thin:@192.168.201.139:1521/test}
+    username: ${FB_DB_USERNAME:RBMH_AI_TEST}
+    password: ${FB_DB_PASSWORD:BSOFT2023!}
+
+floating-ball:
+  admin:
+    bootstrap-reset:
+      enabled: true
+      username: admin
+      password: admin123
+  cors:
+    allowed-origins:
+      - http://localhost:5174
+      - http://127.0.0.1:5174
+      - http://localhost:4173
+      - http://127.0.0.1:4173
+  ai:
+    connect-timeout-ms: 30000
+    read-timeout-ms: 120000
+    proxy:
+      enabled: ${FB_AI_PROXY_ENABLED:true}
+      host: ${FB_AI_PROXY_HOST:127.0.0.1}
+      port: ${FB_AI_PROXY_PORT:7890}
+  outbound-security:
+    allowed-hosts: ${FB_OUTBOUND_ALLOWED_HOSTS:}
+    allow-all-hosts: ${FB_OUTBOUND_ALLOW_ALL_HOSTS:true}
+    allow-private-network: ${FB_OUTBOUND_ALLOW_PRIVATE_NETWORK:true}
+    allow-insecure-http: ${FB_OUTBOUND_ALLOW_INSECURE_HTTP:true}
+    allow-proxy-fake-ip: ${FB_OUTBOUND_ALLOW_PROXY_FAKE_IP:true}
+  audit:
+    speech-file-dir: ${FB_AUDIT_SPEECH_FILE_DIR:/data/floating-ball/speech-files}
