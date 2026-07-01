@@ -73,6 +73,7 @@ class OracleSchemaScriptTest {
 
         assertContains(initSql, "speech_text          CLOB");
         assertContains(initSql, "audio_file_name      VARCHAR2(255)");
+        assertContains(initSql, "id_his_org           VARCHAR2(64)");
         assertContains(initSql, "change_summary_json  CLOB");
         assertContains(initSql, "total_changes        NUMBER(5)");
 
@@ -135,6 +136,7 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE TABLE c_ai_rec_pref_agg");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope");
+        assertContains(initSql, "id_his_org           VARCHAR(64)");
         assertContains(initSql, "total_changes        NUMERIC(5)");
         assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_org_code_active");

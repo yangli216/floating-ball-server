@@ -458,6 +458,7 @@ CREATE TABLE c_ai_user_consultation_log (
     consultation_id      VARCHAR(64) NOT NULL,
     id_device            VARCHAR(32),
     id_org               VARCHAR(32),
+    id_his_org           VARCHAR(64),
     na_org               VARCHAR(255),
     id_doctor            VARCHAR(64),
     na_doctor            VARCHAR(128),
@@ -490,7 +491,8 @@ COMMENT ON COLUMN c_ai_user_consultation_log.id_log IS '用户日志主键ID';
 COMMENT ON COLUMN c_ai_user_consultation_log.consultation_round_id IS '问诊轮次ID（客户端生成UUID，每轮问诊一个，贯穿该轮所有提交）';
 COMMENT ON COLUMN c_ai_user_consultation_log.consultation_id IS '问诊ID（就诊锚点，同一患者多次问诊共用，仅用于聚合展示）';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_device IS '设备ID';
-COMMENT ON COLUMN c_ai_user_consultation_log.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_org IS '后台机构ID（来自设备鉴权）';
+COMMENT ON COLUMN c_ai_user_consultation_log.id_his_org IS 'HIS端机构ID（来自桌面端问诊上下文）';
 COMMENT ON COLUMN c_ai_user_consultation_log.na_org IS '机构名称';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_doctor IS '医生ID';
 COMMENT ON COLUMN c_ai_user_consultation_log.na_doctor IS '医生姓名';

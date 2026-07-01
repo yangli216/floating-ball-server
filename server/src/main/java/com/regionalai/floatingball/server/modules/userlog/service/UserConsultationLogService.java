@@ -194,7 +194,7 @@ public class UserConsultationLogService {
 
         try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
             org.apache.poi.xssf.usermodel.XSSFSheet sheet = workbook.createSheet("用户日志");
-            String[] headers = {"机构", "医生", "问诊时间", "患者", "性别", "年龄", "问诊类型", "问诊结果", "修改数", "问诊ID"};
+            String[] headers = {"机构", "后台机构ID", "HIS机构ID", "医生", "问诊时间", "患者", "性别", "年龄", "问诊类型", "问诊结果", "修改数", "问诊ID"};
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
             org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
             org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
@@ -210,15 +210,17 @@ public class UserConsultationLogService {
                 AiUserConsultationLog record = records.get(i);
                 org.apache.poi.ss.usermodel.Row row = sheet.createRow(i + 1);
                 row.createCell(0).setCellValue(safe(record.getNaOrg(), record.getIdOrg()));
-                row.createCell(1).setCellValue(safe(record.getNaDoctor(), record.getIdDoctor()));
-                row.createCell(2).setCellValue(record.getConsultationTime() != null ? record.getConsultationTime().format(DATE_TIME_FORMATTER) : "");
-                row.createCell(3).setCellValue(safe(record.getPatientName(), record.getPatientId()));
-                row.createCell(4).setCellValue(safe(record.getPatientGender()));
-                row.createCell(5).setCellValue(safe(record.getPatientAge()));
-                row.createCell(6).setCellValue(resolveConsultationTypeLabel(record.getConsultationType()));
-                row.createCell(7).setCellValue(resolveStatusLabel(record.getStatus()));
-                row.createCell(8).setCellValue(record.getTotalChanges() != null ? record.getTotalChanges() : 0);
-                row.createCell(9).setCellValue(safe(record.getConsultationId()));
+                row.createCell(1).setCellValue(safe(record.getIdOrg()));
+                row.createCell(2).setCellValue(safe(record.getHisOrgId()));
+                row.createCell(3).setCellValue(safe(record.getNaDoctor(), record.getIdDoctor()));
+                row.createCell(4).setCellValue(record.getConsultationTime() != null ? record.getConsultationTime().format(DATE_TIME_FORMATTER) : "");
+                row.createCell(5).setCellValue(safe(record.getPatientName(), record.getPatientId()));
+                row.createCell(6).setCellValue(safe(record.getPatientGender()));
+                row.createCell(7).setCellValue(safe(record.getPatientAge()));
+                row.createCell(8).setCellValue(resolveConsultationTypeLabel(record.getConsultationType()));
+                row.createCell(9).setCellValue(resolveStatusLabel(record.getStatus()));
+                row.createCell(10).setCellValue(record.getTotalChanges() != null ? record.getTotalChanges() : 0);
+                row.createCell(11).setCellValue(safe(record.getConsultationId()));
             }
 
             for (int i = 0; i < headers.length; i++) {
@@ -252,6 +254,8 @@ public class UserConsultationLogService {
                 .like(AiUserConsultationLog::getNaOrg, text)
                 .or()
                 .like(AiUserConsultationLog::getIdOrg, text)
+                .or()
+                .like(AiUserConsultationLog::getHisOrgId, text)
                 .or()
                 .like(AiUserConsultationLog::getNaDoctor, text)
                 .or()
@@ -380,7 +384,8 @@ public class UserConsultationLogService {
     }
 
     private void fillCommonFields(AiUserConsultationLog entity, AiDevice device, UserConsultationLogRequest request) {
-        entity.setIdOrg(firstNonBlank(device == null ? null : device.getIdOrg(), request.getOrgCode(), entity.getIdOrg()));
+        entity.setIdOrg(firstNonBlank(device == null ? null : device.getIdOrg(), entity.getIdOrg()));
+        entity.setHisOrgId(firstNonBlank(request.getHisOrgId(), request.getOrgCode(), entity.getHisOrgId()));
         entity.setNaOrg(firstNonBlank(request.getOrgName(), entity.getNaOrg()));
         entity.setIdDoctor(firstNonBlank(request.getDoctorId(), entity.getIdDoctor()));
         entity.setNaDoctor(firstNonBlank(request.getDoctorName(), entity.getNaDoctor()));
@@ -549,6 +554,7 @@ public class UserConsultationLogService {
             item.setConsultationId(record.getConsultationId());
             item.setConsultationRoundId(record.getConsultationRoundId());
             item.setIdOrg(record.getIdOrg());
+            item.setHisOrgId(record.getHisOrgId());
             item.setNaOrg(record.getNaOrg());
             item.setIdDoctor(record.getIdDoctor());
             item.setNaDoctor(record.getNaDoctor());

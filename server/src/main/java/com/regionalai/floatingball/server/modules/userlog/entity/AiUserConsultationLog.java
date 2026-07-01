@@ -31,6 +31,9 @@ public class AiUserConsultationLog extends BaseEntity {
     @TableField("id_org")
     private String idOrg;
 
+    @TableField("id_his_org")
+    private String hisOrgId;
+
     @TableField("na_org")
     private String naOrg;
 

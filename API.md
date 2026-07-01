@@ -962,7 +962,8 @@ AI 调用类 `operation` 事件补充约束：
   "patientAge": "45岁",
   "doctorId": "D001",
   "doctorName": "张医生",
-  "orgCode": "ORG001",
+  "orgCode": "HIS_ORG_001",
+  "hisOrgId": "HIS_ORG_001",
   "orgName": "区域中心医院",
   "deptId": "DEPT001",
   "deptName": "全科",
@@ -1006,6 +1007,7 @@ AI 调用类 `operation` 事件补充约束：
 3. 服务端按 `consultationRoundId` 合并同一轮问诊的多次提交；数据库通过唯一索引 `uk_c_ai_user_log_round_active` 保证同一 `consultationRoundId` 同时只有一条 `generated` 记录。先收到首版快照则创建记录，后收到最终快照则更新同一条记录为 `completed` 或 `abandoned`。
 4. 若同一就诊在回写或放弃后再次发起智能问诊/语音问诊，客户端必须生成新的 `consultationRoundId`，服务端据此创建新的用户日志记录。客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写或放弃时的最终状态。
 5. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
+6. `idOrg` 由设备鉴权解析出的后台机构 ID 持久化，用于后台配置、统计和权限范围；`orgCode` / `hisOrgId` 表示 HIS 端机构 ID，服务端持久化到 `id_his_org`，用于问诊来源追踪，不再覆盖 `id_org`。`hisOrgId` 缺失时兼容读取旧载荷中的 `orgCode`。
 
 ### 3.12 POST `/v1/client/feedbacks`
 
@@ -2297,7 +2299,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 请求参数：
 
 - `current`、`size`
-- `keyword`：跨机构、医生、患者、问诊 ID 模糊搜索
+- `keyword`：跨后台机构、HIS 机构 ID、医生、患者、问诊 ID 模糊搜索
 - `consultationType`：`voice` / `smart`
 - `dateFrom`、`dateTo`
 
@@ -2312,6 +2314,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
     {
       "idLog": "uuid",
       "consultationId": "CONSULT-001",
+      "idOrg": "ORG001",
+      "hisOrgId": "HIS_ORG_001",
       "naOrg": "区域中心医院",
       "naDoctor": "张医生",
       "consultationTime": "2026-04-27T10:00:00",
@@ -2337,6 +2341,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "idLog": "uuid",
   "consultationId": "CONSULT-001",
   "idOrg": "ORG001",
+  "hisOrgId": "HIS_ORG_001",
   "naOrg": "区域中心医院",
   "idDoctor": "D001",
   "naDoctor": "张医生",

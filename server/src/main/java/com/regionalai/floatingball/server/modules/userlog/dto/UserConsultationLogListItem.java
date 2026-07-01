@@ -11,6 +11,7 @@ public class UserConsultationLogListItem {
     private String consultationId;
     private String consultationRoundId;
     private String idOrg;
+    private String hisOrgId;
     private String naOrg;
     private String idDoctor;
     private String naDoctor;

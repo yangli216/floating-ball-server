@@ -293,9 +293,10 @@ floating-ball-server/
 1. 用户日志是面向运维人员的问诊聚合视图，独立于 `modules/audit` 的原始操作日志，不复用 `/admin/api/logs` 与 `c_ai_op_log`。
 2. 桌面端区域化模式下，语音问诊停止录音后先上报 `speechText` 与录音 base64；服务端将录音文件落到 `floating-ball.audit.speech-file-dir`，表内仅保存 `audio_file_path`、原文件名、MIME 和大小，避免把原始音频写入 JSON。
 3. 桌面端区域化模式下，在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交或放弃时上报 `finalSnapshot`、`selectionSnapshot` 与结束状态。
-4. 服务端按 `consultationId + consultationType + idDevice` 只聚合同一轮尚未结束的问诊日志；记录进入 `completed` 或 `abandoned` 后，同一就诊再次发起智能问诊/语音问诊必须创建新记录，保证“同一病人多次问诊多条记录”，且不记录医生每次中间编辑。
-5. 服务端在写入最终快照时同步计算 `change_summary_json` 与 `total_changes`，供统计分析计算诊断符合率与用户日志变更筛选使用。
-6. 管理端新增“用户日志”模块，列表列为机构、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
+4. 服务端按客户端生成的 `consultationRoundId` 只聚合同一轮尚未结束的问诊日志；记录进入 `completed` 或 `abandoned` 后，同一就诊再次发起智能问诊/语音问诊必须使用新的 `consultationRoundId` 创建新记录，保证“同一病人多次问诊多条记录”，且不记录医生每次中间编辑。
+5. 问诊日志中的 `id_org` 只记录设备鉴权解析出的后台机构 ID，用于后台配置、统计和权限范围；桌面端从 HIS 握手传入的机构 ID 单独记录到 `id_his_org`，避免把 HIS 机构 ID 与后台机构主键混用。
+6. 服务端在写入最终快照时同步计算 `change_summary_json` 与 `total_changes`，供统计分析计算诊断符合率与用户日志变更筛选使用。
+7. 管理端新增“用户日志”模块，列表列为机构、HIS 机构 ID、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
 
 ### 5.7 安全拒绝日志链路
 
@@ -444,11 +445,12 @@ floating-ball-server/
    - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`（机构 ID 沿用 `id_org`），由桌面端 SDK handshake 解析的 `urt` 信息回填
    - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`，并通过 `uk_c_ai_feedback_latest_scope` 保证同一设备、同一 `feedback_scope_key` 只有一条激活的最新版反馈
 11. `c_ai_user_consultation_log`
-   - 按一次问诊聚合运维用户日志，关键列包括机构、医生、患者、问诊类型、问诊时间
+   - 按一次问诊聚合运维用户日志，关键列包括后台机构、HIS 机构 ID、医生、患者、问诊类型、问诊时间
+   - `id_org` 保存设备鉴权得到的后台机构 ID；`id_his_org` 保存桌面端从 HIS 握手上报的机构 ID，不参与后台机构级配置解析
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
    - `change_summary_json` 保存主诉、现病史、诊断、用药、检查、检验、处置和选中状态等类别变更计数，`total_changes` 保存总变更数，统计分析诊断符合率依赖其中的 `diagnosisChanges`
-   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation`，并通过 `uk_c_ai_user_log_consultation_active` 保证激活且尚未结束的 `consultation_id + consultation_type + id_device` 只有一条，已回写/放弃后同一就诊可再次生成新日志
+   - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation` / `_round`，并通过 `uk_c_ai_user_log_round_active` 保证激活且尚未结束的 `consultation_round_id` 只有一条，已回写/放弃后同一就诊可再次生成新日志
 12. `c_ai_feature_event`
    - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
    - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次

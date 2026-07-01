@@ -58,6 +58,9 @@
       <el-table-column label="机构" min-width="150" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ displayText(row.naOrg || row.idOrg) }}</template>
       </el-table-column>
+<!--      <el-table-column label="HIS机构ID" min-width="130" show-overflow-tooltip>-->
+<!--        <template slot-scope="{ row }">{{ displayText(row.hisOrgId) }}</template>-->
+<!--      </el-table-column>-->
       <el-table-column label="医生" min-width="120" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ displayText(row.naDoctor || row.idDoctor) }}</template>
       </el-table-column>
@@ -124,6 +127,10 @@
           <div class="detail-card">
             <div class="detail-card__label">机构</div>
             <div class="detail-card__value">{{ displayText(detailRecord.naOrg || detailRecord.idOrg) }}</div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-card__label">HIS机构ID</div>
+            <div class="detail-card__value mono">{{ displayText(detailRecord.hisOrgId) }}</div>
           </div>
           <div class="detail-card">
             <div class="detail-card__label">医生</div>

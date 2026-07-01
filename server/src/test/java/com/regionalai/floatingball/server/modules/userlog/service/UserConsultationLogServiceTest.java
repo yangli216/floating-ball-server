@@ -72,6 +72,7 @@ class UserConsultationLogServiceTest {
         request.setPatientName("王某");
         request.setDoctorId("D001");
         request.setDoctorName("张医生");
+        request.setOrgCode("HIS-ORG-001");
         request.setOrgName("区域中心医院");
         request.setFirstSnapshot(firstSnapshot);
 
@@ -87,12 +88,60 @@ class UserConsultationLogServiceTest {
         assertEquals("voice", saved.getConsultationType());
         assertEquals("DEV001", saved.getIdDevice());
         assertEquals("ORG001", saved.getIdOrg());
+        assertEquals("HIS-ORG-001", saved.getHisOrgId());
         assertEquals("区域中心医院", saved.getNaOrg());
         assertEquals("D001", saved.getIdDoctor());
         assertEquals("张医生", saved.getNaDoctor());
         assertEquals("王某", saved.getPatientName());
         assertEquals("generated", saved.getStatus());
         assertEquals(OBJECT_MAPPER.valueToTree(firstSnapshot), OBJECT_MAPPER.readTree(saved.getFirstSnapshotJson()));
+    }
+
+    @Test
+    void saveShouldKeepDeviceOrgAndPersistHisOrgSeparately() {
+        when(mapper.selectOne(any())).thenReturn(null);
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setIdOrg("SERVER-ORG-001");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
+        request.setConsultationType("smart");
+        request.setOrgCode("HIS-ORG-FALLBACK");
+        request.setHisOrgId("HIS-ORG-001");
+
+        service.save(device, request);
+
+        ArgumentCaptor<AiUserConsultationLog> captor = ArgumentCaptor.forClass(AiUserConsultationLog.class);
+        verify(mapper).insert(captor.capture());
+
+        AiUserConsultationLog saved = captor.getValue();
+        assertEquals("SERVER-ORG-001", saved.getIdOrg());
+        assertEquals("HIS-ORG-001", saved.getHisOrgId());
+    }
+
+    @Test
+    void saveShouldUseOrgCodeAsLegacyHisOrgFallback() {
+        when(mapper.selectOne(any())).thenReturn(null);
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setIdOrg("SERVER-ORG-001");
+
+        UserConsultationLogRequest request = new UserConsultationLogRequest();
+        request.setConsultationId("CONSULT-001");
+        request.setConsultationRoundId("ROUND-001");
+        request.setConsultationType("smart");
+        request.setOrgCode("HIS-ORG-LEGACY");
+
+        service.save(device, request);
+
+        ArgumentCaptor<AiUserConsultationLog> captor = ArgumentCaptor.forClass(AiUserConsultationLog.class);
+        verify(mapper).insert(captor.capture());
+
+        AiUserConsultationLog saved = captor.getValue();
+        assertEquals("SERVER-ORG-001", saved.getIdOrg());
+        assertEquals("HIS-ORG-LEGACY", saved.getHisOrgId());
     }
 
     @Test

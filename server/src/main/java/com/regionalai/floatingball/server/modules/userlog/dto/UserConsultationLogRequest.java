@@ -18,6 +18,7 @@ public class UserConsultationLogRequest {
     private String doctorId;
     private String doctorName;
     private String orgCode;
+    private String hisOrgId;
     private String orgName;
     private String deptId;
     private String deptName;
