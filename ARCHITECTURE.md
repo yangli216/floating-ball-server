@@ -442,11 +442,11 @@ floating-ball-server/
 10. `c_ai_feedback`
    - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）
    - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
-   - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`；`id_org` 仍来自设备鉴权解析出的后台机构 ID，`na_org` 优先取 SDK handshake `urt.orgPureName`，`id_dept` 优先取 `urt.deptId`
+   - 反馈人身份列：`id_doctor` / `na_doctor` / `id_dept` / `na_dept` / `na_org`；`id_org` 仍来自设备鉴权解析出的后台机构 ID，`na_org` 取 SDK handshake `urt.orgPureName`，`id_dept` 取 `urt.userRoleDepts.deptId`
    - 索引：`idx_c_ai_feedback_kind` / `_doctor` / `_dept`，并通过 `uk_c_ai_feedback_latest_scope` 保证同一设备、同一 `feedback_scope_key` 只有一条激活的最新版反馈
 11. `c_ai_user_consultation_log`
    - 按一次问诊聚合运维用户日志，关键列包括后台机构、HIS 机构 ID、医生、患者、问诊类型、问诊时间
-   - `id_org` 保存设备鉴权得到的后台机构 ID；`id_his_org` 保存桌面端从 SDK handshake `urt.orgId` 上报的 HIS 机构 ID，不参与后台机构级配置解析；`na_org` / `id_dept` 分别优先来自 `urt.orgPureName` / `urt.deptId`
+   - `id_org` 保存设备鉴权得到的后台机构 ID；`id_his_org` 保存桌面端从 SDK handshake `urt.userRoleDepts.orgId` 上报的 HIS 机构 ID，不参与后台机构级配置解析；`na_org` 来自 `urt.orgPureName`，`id_dept` 来自 `urt.userRoleDepts.deptId`
    - `first_snapshot_json` 保存 AI 首次生成内容，`final_snapshot_json` 保存医生最终修改后内容，`selection_json` 保存诊断/用药/检查/检验最终选中状态
    - `speech_text` 保存语音问诊 ASR 识别文字；`audio_file_path` / `audio_file_name` / `audio_mime_type` / `audio_size` 保存录音文件引用和元数据
    - `change_summary_json` 保存主诉、现病史、诊断、用药、检查、检验、处置和选中状态等类别变更计数，`total_changes` 保存总变更数，统计分析诊断符合率依赖其中的 `diagnosisChanges`

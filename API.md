@@ -1007,8 +1007,8 @@ AI 调用类 `operation` 事件补充约束：
 3. 服务端按 `consultationRoundId` 合并同一轮问诊的多次提交；数据库通过唯一索引 `uk_c_ai_user_log_round_active` 保证同一 `consultationRoundId` 同时只有一条 `generated` 记录。先收到首版快照则创建记录，后收到最终快照则更新同一条记录为 `completed` 或 `abandoned`。
 4. 若同一就诊在回写或放弃后再次发起智能问诊/语音问诊，客户端必须生成新的 `consultationRoundId`，服务端据此创建新的用户日志记录。客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写或放弃时的最终状态。
 5. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
-6. `idOrg` 由设备鉴权解析出的后台机构 ID 持久化，用于后台配置、统计和权限范围；`hisOrgId` 表示 HIS 端机构 ID，桌面端必须优先取 SDK handshake `urt.orgId`，服务端持久化到 `id_his_org`，用于问诊来源追踪，不再覆盖 `id_org`。`hisOrgId` 缺失时服务端兼容读取旧载荷中的 `orgCode`。
-7. `orgName` 桌面端必须优先取 SDK handshake `urt.orgPureName`；`deptId` 必须优先取 `urt.deptId`，`userRoleDepts` 仅作为兼容兜底。
+6. `idOrg` 由设备鉴权解析出的后台机构 ID 持久化，用于后台配置、统计和权限范围；`hisOrgId` 表示 HIS 端机构 ID，桌面端只能取 SDK handshake `urt.userRoleDepts.orgId`，服务端持久化到 `id_his_org`，用于问诊来源追踪，不再覆盖 `id_org`，也不再用 `orgCode` 兜底。
+7. `orgName` 桌面端取 SDK handshake `urt.orgPureName`；`deptId` 取 `urt.userRoleDepts.deptId`。
 
 ### 3.12 POST `/v1/client/feedbacks`
 
@@ -1058,7 +1058,7 @@ AI 调用类 `operation` 事件补充约束：
 | `hasCorrection` | boolean | 是否包含医生修正（语音 `record_field` / `recommendation` 反馈用） |
 | `doctorId` / `doctorName` | string | 医生身份；桌面端从 SDK handshake `urt.idDoctor / naDoctor` 缓存 |
 | `orgName` | string | 机构名称；桌面端从 SDK handshake `urt.orgPureName` 缓存 |
-| `deptId` / `deptName` | string | 科室身份；`deptId` 优先从 SDK handshake `urt.deptId` 缓存，`userRoleDepts` 仅作为兼容兜底 |
+| `deptId` / `deptName` | string | 科室身份；`deptId` 从 SDK handshake `urt.userRoleDepts.deptId` 缓存 |
 | `sourceModule` | string | 反馈入口标识。常见取值：`settings_feedback`、`voice_session`、`voice_recommendation`、`voice_record_field` |
 | `chainContext.consultationId` | string | 可选，当前问诊锚点；用于把同一问诊的多次反馈修订归到同一槽位 |
 | `chainContext.feedbackScopeKey` | string | 可选，反馈槽位唯一键，建议由客户端按“问诊锚点 + 模块”生成 |

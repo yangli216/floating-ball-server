@@ -385,7 +385,7 @@ public class UserConsultationLogService {
 
     private void fillCommonFields(AiUserConsultationLog entity, AiDevice device, UserConsultationLogRequest request) {
         entity.setIdOrg(firstNonBlank(device == null ? null : device.getIdOrg(), entity.getIdOrg()));
-        entity.setHisOrgId(firstNonBlank(request.getHisOrgId(), request.getOrgCode(), entity.getHisOrgId()));
+        entity.setHisOrgId(firstNonBlank(request.getHisOrgId(), entity.getHisOrgId()));
         entity.setNaOrg(firstNonBlank(request.getOrgName(), entity.getNaOrg()));
         entity.setIdDoctor(firstNonBlank(request.getDoctorId(), entity.getIdDoctor()));
         entity.setNaDoctor(firstNonBlank(request.getDoctorName(), entity.getNaDoctor()));

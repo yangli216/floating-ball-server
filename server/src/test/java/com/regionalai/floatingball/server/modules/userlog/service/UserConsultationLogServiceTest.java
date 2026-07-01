@@ -73,6 +73,7 @@ class UserConsultationLogServiceTest {
         request.setDoctorId("D001");
         request.setDoctorName("张医生");
         request.setOrgCode("HIS-ORG-001");
+        request.setHisOrgId("HIS-ORG-ID-001");
         request.setOrgName("区域中心医院");
         request.setFirstSnapshot(firstSnapshot);
 
@@ -88,7 +89,7 @@ class UserConsultationLogServiceTest {
         assertEquals("voice", saved.getConsultationType());
         assertEquals("DEV001", saved.getIdDevice());
         assertEquals("ORG001", saved.getIdOrg());
-        assertEquals("HIS-ORG-001", saved.getHisOrgId());
+        assertEquals("HIS-ORG-ID-001", saved.getHisOrgId());
         assertEquals("区域中心医院", saved.getNaOrg());
         assertEquals("D001", saved.getIdDoctor());
         assertEquals("张医生", saved.getNaDoctor());
@@ -122,7 +123,7 @@ class UserConsultationLogServiceTest {
     }
 
     @Test
-    void saveShouldUseOrgCodeAsLegacyHisOrgFallback() {
+    void saveShouldNotUseOrgCodeAsHisOrgFallback() {
         when(mapper.selectOne(any())).thenReturn(null);
         AiDevice device = new AiDevice();
         device.setIdDevice("DEV001");
@@ -141,7 +142,7 @@ class UserConsultationLogServiceTest {
 
         AiUserConsultationLog saved = captor.getValue();
         assertEquals("SERVER-ORG-001", saved.getIdOrg());
-        assertEquals("HIS-ORG-LEGACY", saved.getHisOrgId());
+        assertEquals(null, saved.getHisOrgId());
     }
 
     @Test
