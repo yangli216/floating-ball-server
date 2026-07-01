@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.symptom.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -279,15 +281,37 @@ class SymptomTemplateServiceTest {
     void invalidateShouldRecordDeleteChangeLog() {
         AiSymptomTemplate existing = buildTemplate("T1", "fever", "发热", "western", null, null, 1, LocalDateTime.now());
         when(aiSymptomTemplateMapper.selectById("T1")).thenReturn(existing);
+        when(aiSymptomTemplateMapper.update(org.mockito.ArgumentMatchers.isNull(), any(LambdaUpdateWrapper.class)))
+            .thenReturn(Integer.valueOf(1));
 
         symptomTemplateService.invalidate("T1");
 
-        assertEquals("0", existing.getFgActive());
+        ArgumentCaptor<LambdaUpdateWrapper<AiSymptomTemplate>> wrapperCaptor = ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+        verify(aiSymptomTemplateMapper).update(org.mockito.ArgumentMatchers.isNull(), wrapperCaptor.capture());
+        assertTrue(wrapperCaptor.getValue().getSqlSet().contains("fg_active"));
+        assertTrue(wrapperCaptor.getValue().getSqlSegment().contains("id_template"));
         verify(changeLogService).record(
             org.mockito.ArgumentMatchers.eq(SymptomTemplateChangeLogService.OPERATION_DELETE),
             any(SymptomTemplateVO.class),
             org.mockito.ArgumentMatchers.isNull(),
             org.mockito.ArgumentMatchers.isNull()
+        );
+    }
+
+    @Test
+    void invalidateShouldFailWhenSoftDeleteDoesNotAffectRows() {
+        AiSymptomTemplate existing = buildTemplate("T1", "fever", "发热", "western", null, null, 1, LocalDateTime.now());
+        when(aiSymptomTemplateMapper.selectById("T1")).thenReturn(existing);
+        when(aiSymptomTemplateMapper.update(isNull(), any(LambdaUpdateWrapper.class))).thenReturn(Integer.valueOf(0));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> symptomTemplateService.invalidate("T1"));
+
+        assertEquals("症状模板不存在", ex.getMessage());
+        verify(changeLogService, never()).record(
+            org.mockito.ArgumentMatchers.anyString(),
+            any(SymptomTemplateVO.class),
+            any(SymptomTemplateVO.class),
+            org.mockito.ArgumentMatchers.any()
         );
     }
 

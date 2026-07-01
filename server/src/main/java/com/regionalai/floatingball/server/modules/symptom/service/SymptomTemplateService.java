@@ -1,6 +1,7 @@
 package com.regionalai.floatingball.server.modules.symptom.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -157,8 +158,14 @@ public class SymptomTemplateService {
     public void invalidate(String idTemplate) {
         AiSymptomTemplate existing = requireActiveTemplate(idTemplate);
         SymptomTemplateVO before = toView(existing);
-        existing.setFgActive(ACTIVE_DISABLED);
-        aiSymptomTemplateMapper.updateById(existing);
+        int affected = aiSymptomTemplateMapper.update(null, new LambdaUpdateWrapper<AiSymptomTemplate>()
+            .eq(AiSymptomTemplate::getIdTemplate, idTemplate)
+            .eq(AiSymptomTemplate::getFgActive, ACTIVE_ENABLED)
+            .set(AiSymptomTemplate::getFgActive, ACTIVE_DISABLED)
+            .set(AiSymptomTemplate::getUpdateTime, LocalDateTime.now()));
+        if (affected <= 0) {
+            throw new BusinessException("症状模板不存在");
+        }
         recordChange(SymptomTemplateChangeLogService.OPERATION_DELETE, before, null);
         log.info("symptom template invalidated. idTemplate={}", idTemplate);
     }
