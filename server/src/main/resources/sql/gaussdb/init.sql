@@ -177,10 +177,10 @@ COMMENT ON COLUMN c_ai_config.model_name IS '模型名称';
 COMMENT ON COLUMN c_ai_config.fast_model_name IS 'chatFast 独立模型名称';
 COMMENT ON COLUMN c_ai_config.enable_thinking IS '是否启用思考模式';
 COMMENT ON COLUMN c_ai_config.audio_api_key_encrypted IS '加密后的语音接口密钥，为空时复用主模型密钥';
-COMMENT ON COLUMN c_ai_config.audio_base_url IS '语音接口基础地址';
+COMMENT ON COLUMN c_ai_config.audio_base_url IS '语音批量转写 HTTP(S) 基础地址';
 COMMENT ON COLUMN c_ai_config.audio_model IS '语音模型名称';
 COMMENT ON COLUMN c_ai_config.speech_provider IS '语音服务提供商';
-COMMENT ON COLUMN c_ai_config.speech_model IS '语音服务模型';
+COMMENT ON COLUMN c_ai_config.speech_model IS '实时语音识别模型';
 COMMENT ON COLUMN c_ai_config.knowledge_base_enabled IS '知识库开关';
 COMMENT ON COLUMN c_ai_config.knowledge_base_base_url IS '知识库服务地址';
 COMMENT ON COLUMN c_ai_config.pmphai_enabled IS '人卫知识库开关';
@@ -1135,6 +1135,7 @@ INSERT INTO c_ai_config (
     model_name,
     fast_model_name,
     enable_thinking,
+    audio_base_url,
     audio_model,
     speech_provider,
     speech_model,
@@ -1156,9 +1157,10 @@ INSERT INTO c_ai_config (
     'gpt-4o-mini',
     'gpt-4o-mini',
     '0',
-    'whisper-1',
-    'openai-compatible',
-    'whisper-1',
+    'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    'qwen3-asr-flash',
+    'aliyun-dashscope',
+    'paraformer-realtime-v2',
     '0',
     '0',
     '0',
