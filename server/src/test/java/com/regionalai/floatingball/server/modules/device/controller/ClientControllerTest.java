@@ -127,9 +127,11 @@ class ClientControllerTest {
 
         BootstrapVO bootstrap = new BootstrapVO();
         BootstrapVO.LlmConfig llm = new BootstrapVO.LlmConfig();
-        llm.setBaseUrl("https://llm.example.com");
         llm.setModel("deepseek-chat");
         bootstrap.setLlm(llm);
+        BootstrapVO.KnowledgeBaseConfig knowledgeBase = new BootstrapVO.KnowledgeBaseConfig();
+        knowledgeBase.setEnabled(true);
+        bootstrap.setKnowledgeBase(knowledgeBase);
         bootstrap.setPromptVersion("prompt-2026");
         when(configService.buildBootstrap(device)).thenReturn(bootstrap);
 
@@ -138,7 +140,11 @@ class ClientControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("0"))
             .andExpect(jsonPath("$.requestId").value("RID-client-bootstrap"))
-            .andExpect(jsonPath("$.data.llm.baseUrl").value("https://llm.example.com"))
+            .andExpect(jsonPath("$.data.llm.baseUrl").doesNotExist())
+            .andExpect(jsonPath("$.data.llm.audioBaseUrl").doesNotExist())
+            .andExpect(jsonPath("$.data.llm.model").value("deepseek-chat"))
+            .andExpect(jsonPath("$.data.knowledgeBase.enabled").value(true))
+            .andExpect(jsonPath("$.data.knowledgeBase.baseUrl").doesNotExist())
             .andExpect(jsonPath("$.data.promptVersion").value("prompt-2026"));
 
         verify(configService).buildBootstrap(device);

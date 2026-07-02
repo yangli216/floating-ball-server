@@ -48,7 +48,7 @@
         <logger name="com.regionalai.floatingball.server" level="DEBUG"/>
     </springProfile>
 
-    <springProfile name="xiaoshan">
+    <springProfile name="xiaoshan | xiaoshan-test">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="FILE"/>

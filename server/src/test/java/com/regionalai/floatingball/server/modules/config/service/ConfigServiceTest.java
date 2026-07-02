@@ -122,10 +122,8 @@ class ConfigServiceTest {
 
         BootstrapVO bootstrap = configService.buildBootstrap(device);
 
-        assertEquals("https://llm.example.com", bootstrap.getLlm().getBaseUrl());
         assertEquals("deepseek-chat-lite", bootstrap.getLlm().getFastModel());
         assertTrue(Boolean.TRUE.equals(bootstrap.getLlm().getEnableThinking()));
-        assertEquals("https://llm.example.com", bootstrap.getLlm().getAudioBaseUrl());
         assertEquals("qwen3-asr-flash", bootstrap.getLlm().getAudioModel());
         assertEquals("aliyun-dashscope", bootstrap.getSpeech().getProvider());
         assertEquals("paraformer-realtime-v2", bootstrap.getSpeech().getModel());

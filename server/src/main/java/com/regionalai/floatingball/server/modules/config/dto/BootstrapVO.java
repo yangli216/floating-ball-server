@@ -19,11 +19,9 @@ public class BootstrapVO {
 
     @Data
     public static class LlmConfig {
-        private String baseUrl;
         private String model;
         private String fastModel;
         private Boolean enableThinking;
-        private String audioBaseUrl;
         private String audioModel;
     }
 
@@ -36,7 +34,6 @@ public class BootstrapVO {
     @Data
     public static class KnowledgeBaseConfig {
         private Boolean enabled;
-        private String baseUrl;
     }
 
     @Data

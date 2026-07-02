@@ -66,11 +66,9 @@ public class ConfigService {
         BootstrapVO vo = new BootstrapVO();
 
         BootstrapVO.LlmConfig llm = new BootstrapVO.LlmConfig();
-        llm.setBaseUrl(resolved.getBaseUrl());
         llm.setModel(resolved.getModel());
         llm.setFastModel(resolved.getFastModel());
         llm.setEnableThinking(Boolean.TRUE.equals(resolved.getEnableThinking()));
-        llm.setAudioBaseUrl(resolved.getAudioBaseUrl());
         llm.setAudioModel(resolved.getAudioModel());
         vo.setLlm(llm);
 
@@ -81,7 +79,6 @@ public class ConfigService {
 
         BootstrapVO.KnowledgeBaseConfig knowledgeBase = new BootstrapVO.KnowledgeBaseConfig();
         knowledgeBase.setEnabled(Boolean.TRUE.equals(resolved.getKnowledgeBaseEnabled()));
-        knowledgeBase.setBaseUrl(resolved.getKnowledgeBaseBaseUrl());
         vo.setKnowledgeBase(knowledgeBase);
 
         BootstrapVO.PmphaiConfig pmphai = new BootstrapVO.PmphaiConfig();

@@ -1,10 +1,10 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-06-26
+> 更新日期：2026-07-01
 
 ## 1. 项目定位
 
-`floating-ball-server` 是 `floating-ball` 的配套后台，承担两类职责：
+`floating-ball-server` 是 `floating-ball` 当前唯一的远程业务后端。桌面端已取消本地/区域双模式，AI、语音、知识库、配置、审计和统计能力固定经本服务，第三方凭据不下发客户端。服务端承担三类职责：
 
 1. 面向桌面端的远端客户端能力：设备注册、配置引导、Prompt / 数据包增量下发、AI 代理、审计上报
 2. 面向管理员的后台管理能力：区域、机构、令牌、AI 配置、Prompt、症状模板、检验检查结果手工回写、客户端版本发布、日志、推荐偏好观测
@@ -235,12 +235,12 @@ floating-ball-server/
 3. `enableThinking` 作为当前 AI 配置的一部分统一作用于主模型 / fast / reviewer 代理请求，最终映射为上游 OpenAI 兼容载荷中的 `enable_thinking`
 4. `bootstrap` 仅向桌面端暴露 `llm.model`、`llm.fastModel`、`llm.enableThinking`、`reviewer.enabled`、`reviewer.model`、`reviewer.checkExaminationEnabled` 等非敏感字段，不返回密钥
 5. `reviewer.checkExaminationEnabled` 只控制桌面端是否触发 `check_examination` 场景的独立审查，不影响诊断、用药、病历一致性等其他 reviewer 场景；默认开启以兼容旧配置
-6. 区域化模式下，`/v1/ai/chat` 与 `/v1/client/bootstrap` 的实际生效模型、thinking 开关和检查项目独立审查开关以服务端当前解析到的配置为准；桌面端不应再依赖本地缓存的 `model` 回传覆盖服务端配置，确保后台修改后下一次请求立即生效
+6. `/v1/ai/chat` 与 `/v1/client/bootstrap` 的实际生效模型、thinking 开关和检查项目独立审查开关以服务端当前解析到的配置为准；桌面端不应依赖本地缓存的 `model` 回传覆盖服务端配置，确保后台修改后下一次请求立即生效
 7. `/v1/ai/chat` 非流式、流式和 `configProfile=reviewer/fast/default` 都必须先通过出站安全门；流式 SSE 使用有界线程池转发上游事件，线程数与队列大小由 `floating-ball.ai.stream.*` 控制，线程池满时返回 SSE 错误帧而不是继续创建线程。
 
 语音代理补充约束：
 
-1. `floating-ball` 区域化模式下，聊天录音与语音兜底批量转写通过 `/v1/ai/speech/transcribe`、`/v1/ai/speech/realtime` 上传 base64 录音内容；DashScope 实时语音通过 `/v1/ai/speech/realtime/ws` WebSocket 逐帧代理 PCM 音频
+1. `floating-ball` 的聊天录音与语音兜底批量转写通过 `/v1/ai/speech/transcribe`、`/v1/ai/speech/realtime` 上传 base64 录音内容；DashScope 实时语音通过 `/v1/ai/speech/realtime/ws` WebSocket 逐帧代理 PCM 音频
 2. 服务端必须先把 base64 录音解码为真实字节数组，再按 `speech_provider` 选择上游协议：`openai-compatible` 组装为 `multipart/form-data` 调用 `/audio/transcriptions`，`aliyun-dashscope` 组装为 DashScope 兼容模式 chat completion 音频请求
 3. 对原始 PCM 录音，服务端先补 WAV 头后再上游转发，避免不同语音供应商对裸 PCM 兼容不一致
 4. 服务端应保留录音元数据（`mimeType`、`format`、`fileName`、`scene`）用于排障和审计，但不在日志中落原始音频内容
@@ -282,7 +282,7 @@ floating-ball-server/
 
 ### 5.5 用户反馈链路
 
-1. 桌面端区域化模式下，医生可提交“评分 + 说明 + 截图”反馈。
+1. 桌面端医生可提交“评分 + 说明 + 截图”反馈。
 2. 反馈请求携带最近一次 AI 代理调用的 `traceId`、会话 ID、来源模块、请求/响应摘要等链路上下文。
 3. 服务端保存反馈主体与截图数据，并按 `traceId` 优先、`sessionId + 时间窗口` 兜底聚合相关 `c_ai_op_log`。
 4. 服务端对带有 `chainContext.feedbackScopeKey` 的反馈采用“保留历史修订 + 最新版标记”策略：同一设备、同一问诊槽位的新反馈会保留旧记录，但旧记录转为历史版本，仅最新版本参与默认列表与统计。
@@ -291,12 +291,11 @@ floating-ball-server/
 ### 5.6 运维用户日志链路
 
 1. 用户日志是面向运维人员的问诊聚合视图，独立于 `modules/audit` 的原始操作日志，不复用 `/admin/api/logs` 与 `c_ai_op_log`。
-2. 桌面端区域化模式下，语音问诊停止录音后先上报 `speechText` 与录音 base64；服务端将录音文件落到 `floating-ball.audit.speech-file-dir`，表内仅保存 `audio_file_path`、原文件名、MIME 和大小，避免把原始音频写入 JSON。
-3. 桌面端区域化模式下，在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交或放弃时上报 `finalSnapshot`、`selectionSnapshot` 与结束状态。
-4. 服务端按客户端生成的 `consultationRoundId` 只聚合同一轮尚未结束的问诊日志；记录进入 `completed` 或 `abandoned` 后，同一就诊再次发起智能问诊/语音问诊必须使用新的 `consultationRoundId` 创建新记录，保证“同一病人多次问诊多条记录”，且不记录医生每次中间编辑。
-5. 问诊日志中的 `id_org` 只记录设备鉴权解析出的后台机构 ID，用于后台配置、统计和权限范围；桌面端从 HIS 握手传入的机构 ID 单独记录到 `id_his_org`，避免把 HIS 机构 ID 与后台机构主键混用。
-6. 服务端在写入最终快照时同步计算 `change_summary_json` 与 `total_changes`，供统计分析计算诊断符合率与用户日志变更筛选使用。
-7. 管理端新增“用户日志”模块，列表列为机构、HIS 机构 ID、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
+2. 桌面端语音问诊停止录音后先上报 `speechText` 与录音 base64；服务端将录音文件落到 `floating-ball.audit.speech-file-dir`，表内仅保存 `audio_file_path`、原文件名、MIME 和大小，避免把原始音频写入 JSON。
+3. 桌面端在智能问诊、语音问诊产生首版 AI 内容时上报 `firstSnapshot`；医生最终完成回写/提交或放弃时上报 `finalSnapshot`、`selectionSnapshot` 与结束状态。
+4. 服务端按 `consultationId + consultationType + idDevice` 只聚合同一轮尚未结束的问诊日志；记录进入 `completed` 或 `abandoned` 后，同一就诊再次发起智能问诊/语音问诊必须创建新记录，保证“同一病人多次问诊多条记录”，且不记录医生每次中间编辑。
+5. 服务端在写入最终快照时同步计算 `change_summary_json` 与 `total_changes`，供统计分析计算诊断符合率与用户日志变更筛选使用。
+6. 管理端新增“用户日志”模块，列表列为机构、医生、问诊时间、问诊病人、问诊类型、操作；详情对比展示首版生成内容与最终修改内容，最终内容中发生变化的字段按 diff 样式显示为“原文字删除线 + 修改后文字”，包含主诉、现病史、诊断、用药、检查、检验、处置和用药/项目选中状态，并支持播放语音问诊录音与查看 ASR 识别文字。
 
 ### 5.7 安全拒绝日志链路
 
@@ -320,7 +319,7 @@ floating-ball-server/
 
 ### 5.4 PMPHAI 知识库代理链路
 
-1. 区域化模式下，桌面端调用 `/v1/knowledge/pmphai/*`
+1. 桌面端调用 `/v1/knowledge/pmphai/*`
 2. 服务端按设备所属机构/区域解析当前可见 AI 配置
 3. 服务端使用配置中的 PMPHAI `appKey/appSecret/baseUrl` 向上游申请 token 或生成签名 URL
 4. 服务端把搜索结果、详情内容、列表浏览结果或页面 URL 返回给桌面端
@@ -328,7 +327,7 @@ floating-ball-server/
 约束：
 
 1. PMPHAI 的 `appKey/appSecret` 只保留在服务端数据库或环境中，不能下发到桌面端
-2. 区域化模式下，桌面端不再依赖 `src-tauri/src/http_server.rs` 的本地 `/api/pmphai/*` 代理
+2. 桌面端不再包含 `src-tauri/src/http_server.rs` 的本地 `/api/pmphai/*` 代理；服务端是 PMPHAI 的唯一生产出口
 3. PMPHAI `baseUrl` 生成页面跳转 URL 前也要经过出站安全门校验，搜索、详情、列表、token 申请等真实出站请求还要命中限流和熔断；配置为私网、localhost、未允许 host 或非安全协议时直接拒绝。
 
 ## 6. MVP 范围

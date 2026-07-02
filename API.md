@@ -1,7 +1,7 @@
 # floating-ball-server API 说明
 
-> 更新日期：2026-06-03
-> 范围：`floating-ball` 区域化模式下调用的远端 `/v1/*` 接口
+> 更新日期：2026-07-01
+> 范围：`floating-ball` 当前唯一远程业务契约 `/v1/*`；桌面端已取消本地/区域双模式
 
 ## 1. 约束说明
 
@@ -532,18 +532,16 @@ Content-Type: application/json
 约束：
 
 1. 只返回桌面端需要感知的非敏感配置
-2. `apiKey`、审查模型密钥、PMPHAI `appKey/appSecret` 不得出现在响应中
+2. `baseUrl/audioBaseUrl`、`apiKey`、审查模型地址/密钥、知识库地址、PMPHAI `appKey/appSecret` 不得出现在响应中；上游连接信息只保留在服务端
 
 响应 `data` 结构必须兼容 `regionalClient.ts`：
 
 ```json
 {
   "llm": {
-    "baseUrl": "https://example.com/v1",
     "model": "deepseek-chat",
     "fastModel": "deepseek-chat-lite",
     "enableThinking": true,
-    "audioBaseUrl": "https://example.com/v1",
     "audioModel": "whisper-1"
   },
   "speech": {
@@ -551,8 +549,7 @@ Content-Type: application/json
     "model": "whisper-1"
   },
   "knowledgeBase": {
-    "enabled": true,
-    "baseUrl": "https://pmphai.example.com"
+    "enabled": true
   },
   "pmphai": {
     "enabled": true
@@ -575,14 +572,13 @@ Content-Type: application/json
 
 语音配置字段说明：
 
-- `llm.fastModel`：区域化模式下供 `floating-ball/src/services/llm.ts` 的 `chatFast()` 使用的独立快速模型；未单独配置时回退 `llm.model`
-- `llm.enableThinking`：区域化模式下由服务端统一托管的思考模式开关；`floating-ball` 本地只读消费该值，`/v1/ai/chat` 代理转发时会据此决定是否向上游传 `enable_thinking`
-- `reviewer.checkExaminationEnabled`：区域化模式下控制是否启用 `check_examination` 独立审查；未显式配置时默认开启，保证旧配置行为不变
-- `llm.audioBaseUrl`：服务端实际转发 `/v1/ai/speech/*` 时使用的上游语音转写地址；未单独配置时回退 `llm.baseUrl`
+- `llm.fastModel`：供 `floating-ball/src/services/llm.ts` 的 `chatFast()` 使用的独立快速模型；未单独配置时回退 `llm.model`
+- `llm.enableThinking`：由服务端统一托管的思考模式开关；`floating-ball` 只读消费该值，`/v1/ai/chat` 代理转发时会据此决定是否向上游传 `enable_thinking`
+- `reviewer.checkExaminationEnabled`：控制是否启用 `check_examination` 独立审查；未显式配置时默认开启，保证旧配置行为不变
 - `llm.audioModel`：服务端实际提交给上游的语音模型；`openai-compatible` 默认 `whisper-1`，`aliyun-dashscope` 默认 `qwen3-asr-flash`
 - `speech.provider`：下发给 `floating-ball` 的语音提供方标识，当前兼容 `openai-compatible`、`aliyun-dashscope`
 - `speech.model`：下发给 `floating-ball` 的实时语音模型标识；`aliyun-dashscope` 默认 `paraformer-realtime-v2`，也可配置 DashScope `/api-ws/v1/inference` 协议下的 Fun-ASR / Gummy / Paraformer realtime 模型，用于 `/v1/ai/speech/realtime/ws`
-- `apiKey`、`audioApiKey` 均不下发给桌面端；区域化模式下主模型和语音上游密钥由 `floating-ball-server` 统一托管
+- 上游 `baseUrl`、`audioBaseUrl`、知识库地址、`apiKey`、`audioApiKey` 均不下发给桌面端，由 `floating-ball-server` 统一托管
 
 配置优先级：机构级 > 区域级 > 全局级。
 
@@ -690,7 +686,7 @@ Content-Type: application/json
 2. 未命中时，服务端保存请求中的 `templateId`、`templateName`、原生 `htmlContent`、内容 hash 与完整 `fields`；`fieldCount` 表示缓存字段总数。
 3. 响应给桌面端时，若请求携带了字段列表，服务端以本次字段列表为基线合并已缓存字段的 AI 生成类型、提示词和生成规则，避免丢失页眉、姓名、床号等 HIS/系统字段；若请求未携带字段列表，则返回缓存中的完整字段。
 4. 管理端维护的字段提示词覆盖会写入 `fields[*].rule.prompt`，桌面端生成住院病历时优先使用该提示词；未维护自定义提示词时，服务端返回的默认提示词会包含模板名称、记录类型、字段名称、所属段落和字段含义。管理端手动调整的 AI 生成类型会写入 `fields[*].aiSuitable` 与 `fields[*].rule.source`。
-4. 本接口为区域化能力；桌面端非区域化模式可继续使用本地解析作为离线兜底。
+4. 本接口是桌面端模板缓存的唯一远程契约；后端不可用或未返回字段时，桌面端仅做确定性模板解析兜底，未知字段分类仍走服务端 LLM，不恢复第三方直连。
 
 ### 3.6 GET `/v1/client/mappings/delta`
 
@@ -1106,7 +1102,7 @@ AI 调用类 `operation` 事件补充约束：
 
 1. 服务端按设备所属机构 / 区域解析当前生效 AI 配置
 2. 当 `stream=true` 时，先完成配置校验，再按 OpenAI 风格 `data: ...` SSE 帧逐段转发上游模型输出，而不是把完整结果一次性封装后再返回
-3. 区域化模式下，实际生效的主模型 / 快速模型 / 审查模型与 `enableThinking` 开关以服务端当前配置解析结果为准；客户端不应依赖缓存的 `model` 值覆盖服务端配置
+3. 实际生效的主模型 / 快速模型 / 审查模型与 `enableThinking` 开关以服务端当前配置解析结果为准；客户端不应依赖缓存的 `model` 值覆盖服务端配置
 4. 若上游模型服务返回 4xx / 5xx，服务端应尽量提取上游响应体中的可读错误消息，并作为当前接口错误消息返回，避免只暴露 WebClient 堆栈
 5. 实际访问上游前必须通过出站 host allowlist、私网拦截、限流与熔断校验；流式 SSE 由服务端有界线程池转发，上游或线程池拥塞时返回错误帧并结束流。
 
@@ -1189,11 +1185,11 @@ AI 调用类 `operation` 事件补充约束：
 
 ### 4.3 POST `/v1/ai/speech/realtime`
 
-用途：区域化模式下的实时语音识别批量兜底代理。桌面端实时流式优先使用 `4.3.1` WebSocket 通道；若 WebSocket 不可用，再在录音结束后调用本接口上传整段录音。
+用途：实时语音识别批量兜底代理。桌面端实时流式优先使用 `4.3.1` WebSocket 通道；若 WebSocket 不可用，再在录音结束后调用本接口上传整段录音。
 
 ### 4.3.1 WebSocket `/v1/ai/speech/realtime/ws`
 
-用途：区域化模式下的 DashScope Paraformer 实时语音识别代理。
+用途：DashScope Paraformer 实时语音识别代理。
 
 连接：
 
@@ -1232,7 +1228,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 4.4 POST `/v1/knowledge/pmphai/search`
 
-用途：区域化模式下的人卫 Inside 智能检索代理。
+用途：人卫 Inside 智能检索代理。
 
 请求：
 
@@ -1264,7 +1260,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 4.6 POST `/v1/knowledge/pmphai/list`
 
-用途：区域化模式下的文档浏览 / 传统列表搜索。
+用途：文档浏览 / 传统列表搜索。
 
 请求：
 
@@ -1340,7 +1336,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 说明：
 
-1. `floating-ball` 当前在区域化模式下会在语音录制结束后批量上传整段录音，而不是逐帧 WebSocket 透传。
+1. `floating-ball` 当前会在语音录制结束后批量上传整段录音，而不是逐帧 WebSocket 透传。
 2. 服务端处理方式与 `/v1/ai/speech/transcribe` 一致：先接收 base64 录音，再解码为真实文件后转发给上游语音转写接口。
 3. 对 `pcm` 原始录音，服务端会补 WAV 头后再上传，兼容常见 OpenAI 兼容转写服务。
 4. `format` 主要用于标记原始采样格式，当前常见值为 `pcm`。
