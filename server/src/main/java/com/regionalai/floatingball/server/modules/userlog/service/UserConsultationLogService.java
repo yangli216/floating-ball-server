@@ -194,7 +194,7 @@ public class UserConsultationLogService {
 
         try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
             org.apache.poi.xssf.usermodel.XSSFSheet sheet = workbook.createSheet("用户日志");
-            String[] headers = {"机构", "后台机构ID", "HIS机构ID", "医生", "问诊时间", "患者", "性别", "年龄", "问诊类型", "问诊结果", "修改数", "问诊ID"};
+            String[] headers = {"机构", "后台机构ID", "HIS机构ID", "医生", "业务时间", "患者", "性别", "年龄", "场景类型", "处理结果", "修改数", "业务ID"};
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
             org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
             org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
@@ -218,7 +218,7 @@ public class UserConsultationLogService {
                 row.createCell(6).setCellValue(safe(record.getPatientGender()));
                 row.createCell(7).setCellValue(safe(record.getPatientAge()));
                 row.createCell(8).setCellValue(resolveConsultationTypeLabel(record.getConsultationType()));
-                row.createCell(9).setCellValue(resolveStatusLabel(record.getStatus()));
+                row.createCell(9).setCellValue(resolveStatusLabel(record.getStatus(), record.getConsultationType()));
                 row.createCell(10).setCellValue(record.getTotalChanges() != null ? record.getTotalChanges() : 0);
                 row.createCell(11).setCellValue(safe(record.getConsultationId()));
             }
@@ -298,11 +298,16 @@ public class UserConsultationLogService {
     private String resolveConsultationTypeLabel(String type) {
         if ("voice".equals(type)) return "语音问诊";
         if ("smart".equals(type)) return "智能问诊";
+        if ("chronic_refill".equals(type)) return "慢病配药";
+        if ("report_consultation".equals(type)) return "报告会诊";
+        if ("report_interpretation".equals(type)) return "报告解读";
         return type != null ? type : "";
     }
 
-    private String resolveStatusLabel(String status) {
-        if (STATUS_COMPLETED.equals(status)) return "一键回写";
+    private String resolveStatusLabel(String status, String consultationType) {
+        if (STATUS_COMPLETED.equals(status)) {
+            return "report_interpretation".equals(consultationType) ? "已完成" : "一键回写";
+        }
         if (STATUS_ABANDONED.equals(status)) return "放弃";
         if (STATUS_GENERATED.equals(status)) return "已生成";
         return status != null ? status : "";
@@ -511,7 +516,11 @@ public class UserConsultationLogService {
             throw new BusinessException("问诊类型不能为空");
         }
         String normalized = text.toLowerCase();
-        if (!"voice".equals(normalized) && !"smart".equals(normalized)) {
+        if (!"voice".equals(normalized)
+            && !"smart".equals(normalized)
+            && !"chronic_refill".equals(normalized)
+            && !"report_consultation".equals(normalized)
+            && !"report_interpretation".equals(normalized)) {
             throw new BusinessException("问诊类型非法");
         }
         return normalized;

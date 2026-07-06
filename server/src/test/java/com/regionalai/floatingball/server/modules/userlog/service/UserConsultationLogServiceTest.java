@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -370,6 +371,27 @@ class UserConsultationLogServiceTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> service.save(null, request));
 
         assertEquals("问诊类型非法", ex.getMessage());
+    }
+
+    @Test
+    void saveShouldAcceptNewClinicalScenarioTypes() {
+        when(mapper.selectOne(any())).thenReturn(null);
+        String[] types = {"chronic_refill", "report_consultation", "report_interpretation"};
+
+        for (int i = 0; i < types.length; i++) {
+            UserConsultationLogRequest request = new UserConsultationLogRequest();
+            request.setConsultationId("CONSULT-" + i);
+            request.setConsultationRoundId("ROUND-" + i);
+            request.setConsultationType(types[i]);
+            request.setFirstSnapshot(Collections.singletonMap("scene", types[i]));
+            service.save(null, request);
+        }
+
+        ArgumentCaptor<AiUserConsultationLog> captor = ArgumentCaptor.forClass(AiUserConsultationLog.class);
+        verify(mapper, times(3)).insert(captor.capture());
+        assertEquals("chronic_refill", captor.getAllValues().get(0).getConsultationType());
+        assertEquals("report_consultation", captor.getAllValues().get(1).getConsultationType());
+        assertEquals("report_interpretation", captor.getAllValues().get(2).getConsultationType());
     }
 
     @Test

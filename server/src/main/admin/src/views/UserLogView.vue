@@ -6,11 +6,11 @@
         <el-input
           v-model.trim="filters.keyword"
           clearable
-          placeholder="搜索机构、医生、患者、问诊 ID…"
+          placeholder="搜索机构、医生、患者、业务 ID…"
           class="search-input"
           @keyup.enter.native="handleSearch"
         />
-        <el-select v-model="filters.consultationType" clearable placeholder="问诊类型" class="filter-select">
+        <el-select v-model="filters.consultationType" clearable placeholder="场景类型" class="filter-select">
           <el-option
             v-for="item in consultationTypeOptions"
             :key="item.value"
@@ -18,7 +18,7 @@
             :value="item.value"
           />
         </el-select>
-        <el-select v-model="filters.status" clearable placeholder="问诊结果" class="filter-select">
+        <el-select v-model="filters.status" clearable placeholder="处理结果" class="filter-select">
           <el-option
             v-for="item in statusOptions"
             :key="item.value"
@@ -64,10 +64,10 @@
       <el-table-column label="医生" min-width="120" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ displayText(row.naDoctor || row.idDoctor) }}</template>
       </el-table-column>
-      <el-table-column label="问诊时间" width="168">
+      <el-table-column label="业务时间" width="168">
         <template slot-scope="{ row }">{{ formatDateTime(row.consultationTime) }}</template>
       </el-table-column>
-      <el-table-column label="问诊病人" min-width="150" show-overflow-tooltip>
+      <el-table-column label="患者" min-width="150" show-overflow-tooltip>
         <template slot-scope="{ row }">
           <span>{{ displayText(row.patientName || row.patientId) }}</span>
           <span v-if="row.patientGender || row.patientAge" class="patient-meta">
@@ -75,7 +75,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="问诊类型" width="120">
+      <el-table-column label="场景类型" width="120">
         <template slot-scope="{ row }">
           <el-tag size="mini" :type="consultationTypeMeta(row.consultationType).type">
             {{ consultationTypeMeta(row.consultationType).label }}
@@ -89,10 +89,10 @@
           <span v-if="!row.hasAudio && !row.hasSpeechText" class="empty-inline">--</span>
         </template>
       </el-table-column>
-      <el-table-column label="问诊结果" width="110">
+      <el-table-column label="处理结果" width="110">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="statusMeta(row.status).type">
-            {{ statusMeta(row.status).label }}
+          <el-tag size="mini" :type="statusMeta(row.status, row.consultationType).type">
+            {{ statusMeta(row.status, row.consultationType).label }}
           </el-tag>
         </template>
       </el-table-column>
@@ -137,15 +137,15 @@
             <div class="detail-card__value">{{ displayText(detailRecord.naDoctor || detailRecord.idDoctor) }}</div>
           </div>
           <div class="detail-card">
-            <div class="detail-card__label">问诊时间</div>
+            <div class="detail-card__label">业务时间</div>
             <div class="detail-card__value">{{ formatDateTime(detailRecord.consultationTime) }}</div>
           </div>
           <div class="detail-card">
-            <div class="detail-card__label">问诊类型</div>
+            <div class="detail-card__label">场景类型</div>
             <div class="detail-card__value">{{ consultationTypeMeta(detailRecord.consultationType).label }}</div>
           </div>
           <div class="detail-card">
-            <div class="detail-card__label">问诊病人</div>
+            <div class="detail-card__label">患者</div>
             <div class="detail-card__value">
               {{ displayText(detailRecord.patientName || detailRecord.patientId) }}
               <span v-if="detailRecord.patientGender || detailRecord.patientAge" class="patient-meta">
@@ -154,7 +154,7 @@
             </div>
           </div>
           <div class="detail-card">
-            <div class="detail-card__label">问诊ID</div>
+            <div class="detail-card__label">业务ID</div>
             <div class="detail-card__value mono">{{ displayText(detailRecord.consultationId) }}</div>
           </div>
         </div>
@@ -182,7 +182,7 @@
           </div>
         </div>
 
-        <div class="snapshot-compare">
+        <div v-if="!isReportInterpretationDetail" class="snapshot-compare">
           <div class="snapshot-panel">
             <div class="snapshot-panel__title">首次生成内容</div>
             <div class="record-field">
@@ -253,7 +253,40 @@
           </div>
         </div>
 
-        <div class="selection-section">
+        <div v-else class="snapshot-panel report-interpretation-detail">
+          <div class="snapshot-panel__title">报告解读内容</div>
+          <div class="detail-grid">
+            <div class="detail-card">
+              <div class="detail-card__label">报告类型</div>
+              <div class="detail-card__value">{{ displayText(reportScenarioSnapshot.reportKindLabel) }}</div>
+            </div>
+            <div class="detail-card">
+              <div class="detail-card__label">报告项目</div>
+              <div class="detail-card__value">{{ displayText(reportScenarioSnapshot.reportTitle || reportScenarioSnapshot.reportItem) }}</div>
+            </div>
+            <div class="detail-card">
+              <div class="detail-card__label">报告日期</div>
+              <div class="detail-card__value">{{ displayText(reportScenarioSnapshot.reportDate) }}</div>
+            </div>
+          </div>
+          <div class="record-field">
+            <div class="record-field__label">报告原文</div>
+            <div class="record-field__value multiline">{{ displayText(reportScenarioSnapshot.sourceText) }}</div>
+          </div>
+          <div class="record-field">
+            <div class="record-field__label">解读摘要</div>
+            <div class="record-field__value multiline">{{ displayText(reportScenarioSnapshot.summary) }}</div>
+          </div>
+          <div class="record-field">
+            <div class="record-field__label">综合结论</div>
+            <div class="record-field__value multiline">{{ displayText(reportScenarioSnapshot.conclusion) }}</div>
+          </div>
+          <SnapshotList title="异常项目" :items="reportAbnormalItems" />
+          <SnapshotList title="解读要点" :items="reportKeyPoints" />
+          <SnapshotList title="处理建议" :items="reportRecommendations" />
+        </div>
+
+        <div v-if="!isReportInterpretationDetail" class="selection-section">
           <div class="snapshot-panel__title">最终选中状态</div>
           <div class="selection-grid">
             <div class="selection-card">
@@ -280,7 +313,7 @@
         </div>
 
         <div v-if="timelineItems.length" class="timeline-section">
-          <div class="snapshot-panel__title">问诊流程</div>
+          <div class="snapshot-panel__title">业务流程</div>
           <el-timeline>
             <el-timeline-item
               v-for="(item, index) in timelineItems"
@@ -511,11 +544,14 @@ export default {
       audioLoadError: '',
       consultationTypeOptions: [
         { value: 'voice', label: '语音问诊', type: 'success' },
-        { value: 'smart', label: '智能问诊', type: 'primary' }
+        { value: 'smart', label: '智能问诊', type: 'primary' },
+        { value: 'chronic_refill', label: '慢病配药', type: 'warning' },
+        { value: 'report_consultation', label: '报告会诊', type: 'primary' },
+        { value: 'report_interpretation', label: '报告解读', type: 'info' }
       ],
       statusOptions: [
         { value: 'generated', label: '已生成' },
-        { value: 'completed', label: '一键回写' },
+        { value: 'completed', label: '已完成/回写' },
         { value: 'abandoned', label: '放弃' }
       ],
       datePickerOptions: {
@@ -537,6 +573,34 @@ export default {
     },
     selectionSnapshot() {
       return this.parsePayload(this.detailRecord && this.detailRecord.selectionJson)
+    },
+    isReportInterpretationDetail() {
+      return this.normalizeText(this.detailRecord && this.detailRecord.consultationType) === 'report_interpretation'
+    },
+    reportScenarioSnapshot() {
+      return (this.finalSnapshot && this.finalSnapshot.scenario) ||
+        (this.firstSnapshot && this.firstSnapshot.scenario) || {}
+    },
+    reportAbnormalItems() {
+      const items = this.reportScenarioSnapshot.abnormalItems
+      if (!Array.isArray(items)) return []
+      return items.map(item => ({
+        name: item && item.name,
+        code: [item && item.result, item && item.direction, item && item.referenceRange].filter(Boolean).join(' / ')
+      }))
+    },
+    reportKeyPoints() {
+      const items = this.reportScenarioSnapshot.keyPoints
+      if (!Array.isArray(items)) return []
+      return items.map(item => ({ name: item && item.title, code: item && item.detail }))
+    },
+    reportRecommendations() {
+      const recommendations = this.reportScenarioSnapshot.recommendations
+      const cautions = this.reportScenarioSnapshot.cautions
+      return [
+        ...(Array.isArray(recommendations) ? recommendations : []),
+        ...(Array.isArray(cautions) ? cautions.map(item => `注意：${item}`) : [])
+      ]
     }
   },
   mounted() {
@@ -678,9 +742,14 @@ export default {
       if (matched) return matched
       return { label: text || '--', type: 'info' }
     },
-    statusMeta(value) {
+    statusMeta(value, consultationType) {
       const text = this.normalizeText(value)
-      if (text === 'completed') return { label: '一键回写', type: 'success' }
+      if (text === 'completed') {
+        return {
+          label: this.normalizeText(consultationType) === 'report_interpretation' ? '已完成' : '一键回写',
+          type: 'success'
+        }
+      }
       if (text === 'abandoned') return { label: '放弃', type: 'danger' }
       if (text === 'generated') return { label: '已生成', type: 'info' }
       return { label: text || '--', type: 'info' }
