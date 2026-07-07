@@ -62,6 +62,10 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE TABLE c_ai_rec_pref_agg");
         assertContains(initSql, "CREATE TABLE c_security_rejection_log");
         assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory_obs");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory_fact");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory_audit");
 
         assertContains(initSql, "op_action            VARCHAR2(256)");
         assertContains(initSql, "op_title             VARCHAR2(500)");
@@ -98,6 +102,10 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_code_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_role_code_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_user_role_active");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_patient_memory_scope");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_patient_memory_obs_idem");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_patient_memory_fact_key");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_patient_memory_audit_time");
 
         assertContains(initSql, "CREATE INDEX idx_c_security_rej_time");
         assertContains(initSql, "CREATE INDEX idx_c_security_rej_type");
@@ -139,6 +147,14 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "id_his_org           VARCHAR(64)");
         assertContains(initSql, "total_changes        NUMERIC(5)");
         assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory_obs");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory_fact");
+        assertContains(initSql, "CREATE TABLE c_ai_patient_memory_audit");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_patient_memory_scope");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_patient_memory_obs_idem");
+        assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_patient_memory_fact_key");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_patient_memory_audit_time");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_org_code_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_device_code_org_active");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope");

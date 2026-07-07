@@ -546,7 +546,7 @@ export default {
         { value: 'voice', label: '语音问诊', type: 'success' },
         { value: 'smart', label: '智能问诊', type: 'primary' },
         { value: 'chronic_refill', label: '慢病配药', type: 'warning' },
-        { value: 'report_consultation', label: '报告会诊', type: 'primary' },
+        { value: 'report_consultation', label: '报告回诊', type: 'primary' },
         { value: 'report_interpretation', label: '报告解读', type: 'info' }
       ],
       statusOptions: [

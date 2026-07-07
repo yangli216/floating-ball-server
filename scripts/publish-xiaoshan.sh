@@ -6,17 +6,118 @@ SERVER_DIR="${PROJECT_ROOT}/server"
 
 TARGET_HOST="${TARGET_HOST:-192.168.204.122}"
 TARGET_USER="${TARGET_USER:-root}"
-TARGET_DIR="${TARGET_DIR:-/data}"
-REMOTE_JAR="${TARGET_DIR}/floating-ball-server.jar"
-REMOTE_START_SCRIPT="${TARGET_DIR}/start-floating-ball-server.sh"
-REMOTE_LOG_DIR="${TARGET_DIR}/floating-ball-server/logs"
-RUN_TESTS="${RUN_TESTS:-0}"
-START_AFTER_UPLOAD="${START_AFTER_UPLOAD:-0}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
+SKIP_TESTS="${SKIP_TESTS:-0}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-90}"
 
-if [[ "${RUN_TESTS}" == "1" ]]; then
-  MAVEN_ARGS=(clean package)
-else
-  MAVEN_ARGS=(clean package -DskipTests)
+ENVIRONMENT=""
+CONFIRM_PRODUCTION=0
+DRY_RUN=0
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./scripts/publish-xiaoshan.sh testing
+  ./scripts/publish-xiaoshan.sh production --confirm-production
+
+Options:
+  --confirm-production  Required for an actual production deployment.
+  --dry-run             Print the immutable environment mapping and exit.
+  -h, --help            Show this help.
+
+Optional environment variables:
+  TARGET_HOST, TARGET_USER, SSH_PASS, SKIP_BUILD=1, SKIP_TESTS=1,
+  HEALTH_TIMEOUT_SECONDS=90
+USAGE
+}
+
+for arg in "$@"; do
+  case "${arg}" in
+    testing|production)
+      if [[ -n "${ENVIRONMENT}" ]]; then
+        echo "Only one environment may be specified." >&2
+        usage >&2
+        exit 2
+      fi
+      ENVIRONMENT="${arg}"
+      ;;
+    --confirm-production)
+      CONFIRM_PRODUCTION=1
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: ${arg}" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "${ENVIRONMENT}" ]]; then
+  echo "An environment is required: testing or production." >&2
+  usage >&2
+  exit 2
+fi
+
+case "${ENVIRONMENT}" in
+  testing)
+    APP_NAME="floating-ball-server-testing"
+    DEPLOY_DIR="/data/floating-ball-server-testing"
+    JAR_FILE="${DEPLOY_DIR}/floating-ball-server.jar"
+    START_SCRIPT="${DEPLOY_DIR}/start.sh"
+    PID_FILE="${DEPLOY_DIR}/${APP_NAME}.pid"
+    LOG_DIR="${DEPLOY_DIR}/logs"
+    RELEASE_DIR="${DEPLOY_DIR}/releases"
+    SPEECH_DIR="${DEPLOY_DIR}/speech-files"
+    SPRING_PROFILE="xiaoshan-test"
+    SERVER_PORT="9090"
+    OTHER_PID_FILE="/data/floating-ball-server.pid"
+    ;;
+  production)
+    APP_NAME="floating-ball-server"
+    DEPLOY_DIR="/data"
+    JAR_FILE="/data/floating-ball-server.jar"
+    START_SCRIPT="/data/start-floating-ball-server.sh"
+    PID_FILE="/data/floating-ball-server.pid"
+    LOG_DIR="/data/floating-ball-server/logs"
+    RELEASE_DIR="/tmp/floating-ball-server/releases"
+    SPEECH_DIR="/data/floating-ball/speech-files"
+    SPRING_PROFILE="xiaoshan"
+    SERVER_PORT="8080"
+    OTHER_PID_FILE="/data/floating-ball-server-testing/floating-ball-server-testing.pid"
+    ;;
+esac
+
+print_plan() {
+  cat <<PLAN
+Environment : ${ENVIRONMENT}
+Remote      : ${TARGET_USER}@${TARGET_HOST}
+Jar         : ${JAR_FILE}
+Start script: ${START_SCRIPT}
+PID file    : ${PID_FILE}
+Profile     : ${SPRING_PROFILE}
+Port        : ${SERVER_PORT}
+Logs        : ${LOG_DIR}
+Releases    : ${RELEASE_DIR}
+Speech files: ${SPEECH_DIR}
+PLAN
+}
+
+print_plan
+
+if [[ "${DRY_RUN}" == "1" ]]; then
+  exit 0
+fi
+
+if [[ "${ENVIRONMENT}" == "production" && "${CONFIRM_PRODUCTION}" != "1" ]]; then
+  echo "Production deployment refused: add --confirm-production." >&2
+  exit 2
 fi
 
 need_cmd() {
@@ -26,11 +127,15 @@ need_cmd() {
   fi
 }
 
-SSH_BASE_OPTIONS=(-o StrictHostKeyChecking=accept-new)
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
-need_cmd mvn
-need_cmd ssh
-need_cmd scp
+SSH_BASE_OPTIONS=(-o StrictHostKeyChecking=accept-new)
 
 run_ssh() {
   local remote_cmd="$1"
@@ -39,7 +144,7 @@ run_ssh() {
     if command -v sshpass >/dev/null 2>&1; then
       SSHPASS="${SSH_PASS}" sshpass -e ssh "${SSH_BASE_OPTIONS[@]}" "${TARGET_USER}@${TARGET_HOST}" "${remote_cmd}"
     elif command -v expect >/dev/null 2>&1; then
-      TARGET="${TARGET_USER}@${TARGET_HOST}" REMOTE_CMD="${remote_cmd}" expect <<'EXPECT'
+      SSH_PASS="${SSH_PASS}" TARGET="${TARGET_USER}@${TARGET_HOST}" REMOTE_CMD="${remote_cmd}" expect <<'EXPECT'
 set timeout -1
 spawn ssh -o StrictHostKeyChecking=accept-new $env(TARGET) $env(REMOTE_CMD)
 expect {
@@ -69,7 +174,7 @@ run_scp() {
     if command -v sshpass >/dev/null 2>&1; then
       SSHPASS="${SSH_PASS}" sshpass -e scp "${SSH_BASE_OPTIONS[@]}" "${local_path}" "${TARGET_USER}@${TARGET_HOST}:${remote_path}"
     elif command -v expect >/dev/null 2>&1; then
-      LOCAL_PATH="${local_path}" REMOTE_TARGET="${TARGET_USER}@${TARGET_HOST}:${remote_path}" expect <<'EXPECT'
+      SSH_PASS="${SSH_PASS}" LOCAL_PATH="${local_path}" REMOTE_TARGET="${TARGET_USER}@${TARGET_HOST}:${remote_path}" expect <<'EXPECT'
 set timeout -1
 spawn scp -o StrictHostKeyChecking=accept-new $env(LOCAL_PATH) $env(REMOTE_TARGET)
 expect {
@@ -93,56 +198,95 @@ EXPECT
 
 build_start_script() {
   local output="$1"
-  cat > "${output}" <<'REMOTE_SCRIPT'
-#!/usr/bin/env bash
-set -Eeuo pipefail
 
-APP_NAME="floating-ball-server"
-BASE_DIR="/data"
-JAR_FILE="${BASE_DIR}/floating-ball-server.jar"
-PID_FILE="${BASE_DIR}/${APP_NAME}.pid"
-LOG_DIR="${BASE_DIR}/${APP_NAME}/logs"
+  {
+    printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' ''
+    printf 'APP_NAME="%s"\n' "${APP_NAME}"
+    printf 'BASE_DIR="%s"\n' "${DEPLOY_DIR}"
+    printf 'JAR_FILE="%s"\n' "${JAR_FILE}"
+    printf 'PID_FILE="%s"\n' "${PID_FILE}"
+    printf 'LOG_DIR="%s"\n' "${LOG_DIR}"
+    printf 'RELEASE_DIR="%s"\n' "${RELEASE_DIR}"
+    printf 'SPEECH_DIR="%s"\n' "${SPEECH_DIR}"
+    printf 'SERVER_PORT="%s"\n' "${SERVER_PORT}"
+    printf 'SPRING_PROFILES_ACTIVE="%s"\n' "${SPRING_PROFILE}"
+    cat <<'REMOTE_START'
 CONSOLE_LOG="${LOG_DIR}/console.log"
 
 JAVA_BIN="${JAVA_BIN:-java}"
 JAVA_OPTS="${JAVA_OPTS:--Xms512m -Xmx1024m}"
-SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-xiaoshan}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
-mkdir -p "${LOG_DIR}"
+export FB_LOG_PATH="${LOG_DIR}"
+export FB_RELEASE_STORAGE_DIR="${RELEASE_DIR}"
+export FB_AUDIT_SPEECH_FILE_DIR="${SPEECH_DIR}"
 
-is_running() {
+mkdir -p "${LOG_DIR}" "${RELEASE_DIR}" "${SPEECH_DIR}"
+
+pid_is_alive() {
   [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" >/dev/null 2>&1
 }
 
+pid_matches_service() {
+  local pid cmdline
+  pid="$(cat "${PID_FILE}")"
+  [[ -r "/proc/${pid}/cmdline" ]] || return 1
+  cmdline="$(tr '\000' ' ' < "/proc/${pid}/cmdline")"
+  [[ "${cmdline}" == *"-jar ${JAR_FILE}"* ]]
+}
+
+is_running() {
+  pid_is_alive && pid_matches_service
+}
+
 start() {
-  if is_running; then
-    echo "${APP_NAME} is already running, pid=$(cat "${PID_FILE}")"
-    return 0
+  if pid_is_alive; then
+    if pid_matches_service; then
+      echo "${APP_NAME} is already running, pid=$(cat "${PID_FILE}"), port=${SERVER_PORT}, profile=${SPRING_PROFILES_ACTIVE}"
+      return 0
+    fi
+    echo "Refusing to start: ${PID_FILE} belongs to another process." >&2
+    exit 1
   fi
+
+  rm -f "${PID_FILE}"
   if [[ ! -f "${JAR_FILE}" ]]; then
     echo "Jar file not found: ${JAR_FILE}" >&2
     exit 1
   fi
 
+  cd "${BASE_DIR}"
   nohup "${JAVA_BIN}" ${JAVA_OPTS} \
     -Dspring.profiles.active="${SPRING_PROFILES_ACTIVE}" \
     -DLOG_PATH="${LOG_DIR}" \
     -jar "${JAR_FILE}" \
+    --server.port="${SERVER_PORT}" \
     --logging.file.path="${LOG_DIR}" \
     ${EXTRA_ARGS} >> "${CONSOLE_LOG}" 2>&1 &
 
   echo $! > "${PID_FILE}"
-  echo "${APP_NAME} started, pid=$(cat "${PID_FILE}")"
+  sleep 5
+  if ! is_running; then
+    rm -f "${PID_FILE}"
+    echo "${APP_NAME} failed to start. Recent console log:" >&2
+    tail -n 80 "${CONSOLE_LOG}" >&2 || true
+    exit 1
+  fi
+
+  echo "${APP_NAME} started, pid=$(cat "${PID_FILE}"), port=${SERVER_PORT}, profile=${SPRING_PROFILES_ACTIVE}"
   echo "Log file: ${LOG_DIR}/floating-ball-server.log"
   echo "Console log: ${CONSOLE_LOG}"
 }
 
 stop() {
-  if ! is_running; then
+  if ! pid_is_alive; then
     echo "${APP_NAME} is not running"
     rm -f "${PID_FILE}"
     return 0
+  fi
+  if ! pid_matches_service; then
+    echo "Refusing to stop: ${PID_FILE} belongs to another process." >&2
+    exit 1
   fi
 
   local pid
@@ -164,9 +308,13 @@ stop() {
 
 status() {
   if is_running; then
-    echo "${APP_NAME} is running, pid=$(cat "${PID_FILE}")"
+    echo "${APP_NAME} is running, pid=$(cat "${PID_FILE}"), port=${SERVER_PORT}, profile=${SPRING_PROFILES_ACTIVE}"
+  elif pid_is_alive; then
+    echo "${APP_NAME} PID file belongs to another process: ${PID_FILE}" >&2
+    return 1
   else
-    echo "${APP_NAME} is not running"
+    echo "${APP_NAME} is not running, port=${SERVER_PORT}, profile=${SPRING_PROFILES_ACTIVE}"
+    return 1
   fi
 }
 
@@ -180,57 +328,291 @@ logs() {
 }
 
 case "${1:-start}" in
-  start)
-    start
-    ;;
-  stop)
-    stop
-    ;;
-  restart)
-    stop
-    start
-    ;;
-  status)
-    status
-    ;;
-  logs)
-    logs
-    ;;
-  *)
-    echo "Usage: $0 {start|stop|restart|status|logs}" >&2
-    exit 1
-    ;;
+  start) start ;;
+  stop) stop ;;
+  restart) stop; start ;;
+  status) status ;;
+  logs) logs ;;
+  *) echo "Usage: $0 {start|stop|restart|status|logs}" >&2; exit 1 ;;
 esac
-REMOTE_SCRIPT
+REMOTE_START
+  } > "${output}"
 }
 
-echo "Building server with Maven: mvn -f ${SERVER_DIR}/pom.xml ${MAVEN_ARGS[*]}"
-mvn -f "${SERVER_DIR}/pom.xml" "${MAVEN_ARGS[@]}"
+build_remote_deployer() {
+  local output="$1"
+  local release_id="$2"
+  local expected_sha256="$3"
+  local upload_jar="$4"
+  local upload_start="$5"
 
-JAR_FILE="$(find "${SERVER_DIR}/target" -maxdepth 1 -type f -name '*.jar' ! -name '*sources.jar' ! -name '*javadoc.jar' | sort | tail -n 1)"
-if [[ -z "${JAR_FILE}" || ! -f "${JAR_FILE}" ]]; then
-  echo "Packaged jar not found under ${SERVER_DIR}/target" >&2
+  {
+    printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' ''
+    printf 'APP_NAME="%s"\n' "${APP_NAME}"
+    printf 'JAR_FILE="%s"\n' "${JAR_FILE}"
+    printf 'START_SCRIPT="%s"\n' "${START_SCRIPT}"
+    printf 'PID_FILE="%s"\n' "${PID_FILE}"
+    printf 'LOG_DIR="%s"\n' "${LOG_DIR}"
+    printf 'SPRING_PROFILE="%s"\n' "${SPRING_PROFILE}"
+    printf 'SERVER_PORT="%s"\n' "${SERVER_PORT}"
+    printf 'OTHER_PID_FILE="%s"\n' "${OTHER_PID_FILE}"
+    printf 'RELEASE_ID="%s"\n' "${release_id}"
+    printf 'EXPECTED_SHA256="%s"\n' "${expected_sha256}"
+    printf 'UPLOAD_JAR="%s"\n' "${upload_jar}"
+    printf 'UPLOAD_START="%s"\n' "${upload_start}"
+    printf 'HEALTH_TIMEOUT_SECONDS="%s"\n' "${HEALTH_TIMEOUT_SECONDS}"
+    cat <<'REMOTE_DEPLOY'
+
+JAR_BACKUP="${JAR_FILE}.backup-${RELEASE_ID}"
+SCRIPT_BACKUP="${START_SCRIPT}.backup-${RELEASE_ID}"
+LOG_ARCHIVE="${LOG_DIR}/archive/${RELEASE_ID}"
+ORIGINAL_RUNNING=0
+OTHER_PID_BEFORE=""
+MUTATION_STARTED=0
+DEPLOY_SUCCEEDED=0
+
+cleanup() {
+  rm -f "${UPLOAD_JAR}" "${UPLOAD_START}" "$0"
+}
+
+rollback() {
+  local exit_code="$?"
+  trap - ERR
+  set +e
+
+  if [[ "${MUTATION_STARTED}" == "1" && "${DEPLOY_SUCCEEDED}" != "1" ]]; then
+    echo "Deployment failed; rolling back ${APP_NAME}." >&2
+    if [[ -x "${START_SCRIPT}" ]]; then
+      "${START_SCRIPT}" stop >/dev/null 2>&1 || true
+    fi
+    if [[ -f "${JAR_BACKUP}" ]]; then
+      cp -p "${JAR_BACKUP}" "${JAR_FILE}"
+    else
+      rm -f "${JAR_FILE}"
+    fi
+    if [[ -f "${SCRIPT_BACKUP}" ]]; then
+      cp -p "${SCRIPT_BACKUP}" "${START_SCRIPT}"
+      chmod +x "${START_SCRIPT}"
+    else
+      rm -f "${START_SCRIPT}"
+    fi
+    if [[ "${ORIGINAL_RUNNING}" == "1" && -x "${START_SCRIPT}" ]]; then
+      "${START_SCRIPT}" start || true
+    fi
+  fi
+
+  cleanup
+  exit "${exit_code}"
+}
+
+trap cleanup EXIT
+trap rollback ERR
+
+if command -v jar >/dev/null 2>&1; then
+  JAR_TOOL="$(command -v jar)"
+elif [[ -x /usr/local/jdk8/bin/jar ]]; then
+  JAR_TOOL="/usr/local/jdk8/bin/jar"
+else
+  echo "Remote jar command not found." >&2
   exit 1
 fi
 
-TMP_START_SCRIPT="$(mktemp)"
-trap 'rm -f "${TMP_START_SCRIPT}"' EXIT
-build_start_script "${TMP_START_SCRIPT}"
-chmod +x "${TMP_START_SCRIPT}"
-
-echo "Preparing remote directory ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}"
-run_ssh "mkdir -p '${TARGET_DIR}' '${REMOTE_LOG_DIR}'"
-
-echo "Uploading jar: ${JAR_FILE} -> ${TARGET_USER}@${TARGET_HOST}:${REMOTE_JAR}"
-run_scp "${JAR_FILE}" "${REMOTE_JAR}"
-
-echo "Uploading start script -> ${TARGET_USER}@${TARGET_HOST}:${REMOTE_START_SCRIPT}"
-run_scp "${TMP_START_SCRIPT}" "${REMOTE_START_SCRIPT}"
-run_ssh "chmod +x '${REMOTE_START_SCRIPT}' && ls -lh '${REMOTE_JAR}' '${REMOTE_START_SCRIPT}'"
-
-if [[ "${START_AFTER_UPLOAD}" == "1" ]]; then
-  echo "Restarting remote service"
-  run_ssh "'${REMOTE_START_SCRIPT}' restart"
-else
-  echo "Upload complete. Start with: ssh ${TARGET_USER}@${TARGET_HOST} '${REMOTE_START_SCRIPT} start'"
+actual_sha256="$(sha256sum "${UPLOAD_JAR}" | awk '{print $1}')"
+if [[ "${actual_sha256}" != "${EXPECTED_SHA256}" ]]; then
+  echo "Uploaded jar checksum mismatch." >&2
+  exit 1
 fi
+
+jar_entries="$("${JAR_TOOL}" tf "${UPLOAD_JAR}")"
+grep -Fqx "BOOT-INF/classes/application-${SPRING_PROFILE}.yml" <<< "${jar_entries}"
+grep -Fqx 'BOOT-INF/classes/logback-spring.xml' <<< "${jar_entries}"
+bash -n "${UPLOAD_START}"
+grep -Fqx "APP_NAME=\"${APP_NAME}\"" "${UPLOAD_START}"
+grep -Fqx "JAR_FILE=\"${JAR_FILE}\"" "${UPLOAD_START}"
+grep -Fqx "PID_FILE=\"${PID_FILE}\"" "${UPLOAD_START}"
+grep -Fqx "SERVER_PORT=\"${SERVER_PORT}\"" "${UPLOAD_START}"
+grep -Fqx "SPRING_PROFILES_ACTIVE=\"${SPRING_PROFILE}\"" "${UPLOAD_START}"
+
+current_pid=""
+if [[ -f "${PID_FILE}" ]]; then
+  current_pid="$(cat "${PID_FILE}")"
+  if kill -0 "${current_pid}" >/dev/null 2>&1; then
+    current_cmdline="$(tr '\000' ' ' < "/proc/${current_pid}/cmdline")"
+    if [[ "${current_cmdline}" != *"-jar ${JAR_FILE}"* || "${current_cmdline}" != *"spring.profiles.active=${SPRING_PROFILE}"* ]]; then
+      echo "Target PID does not belong to ${APP_NAME}; refusing deployment." >&2
+      exit 1
+    fi
+    ORIGINAL_RUNNING=1
+  else
+    current_pid=""
+  fi
+fi
+
+listener="$(ss -ltnp 2>/dev/null | grep -E ":${SERVER_PORT}[[:space:]]" || true)"
+if [[ -n "${listener}" ]]; then
+  if [[ -z "${current_pid}" || "${listener}" != *"pid=${current_pid},"* ]]; then
+    echo "Port ${SERVER_PORT} is owned by another process; refusing deployment." >&2
+    exit 1
+  fi
+fi
+
+if [[ -f "${OTHER_PID_FILE}" ]]; then
+  other_pid="$(cat "${OTHER_PID_FILE}")"
+  if kill -0 "${other_pid}" >/dev/null 2>&1; then
+    OTHER_PID_BEFORE="${other_pid}"
+  fi
+fi
+
+if [[ -f "${JAR_FILE}" ]]; then
+  cp -p "${JAR_FILE}" "${JAR_BACKUP}"
+fi
+if [[ -f "${START_SCRIPT}" ]]; then
+  cp -p "${START_SCRIPT}" "${SCRIPT_BACKUP}"
+fi
+
+MUTATION_STARTED=1
+if [[ "${ORIGINAL_RUNNING}" == "1" ]]; then
+  "${START_SCRIPT}" stop
+fi
+
+if ss -ltnp 2>/dev/null | grep -qE ":${SERVER_PORT}[[:space:]]"; then
+  echo "Port ${SERVER_PORT} is still occupied after stopping ${APP_NAME}." >&2
+  exit 1
+fi
+
+mkdir -p "${LOG_ARCHIVE}"
+for log_file in "${LOG_DIR}/console.log" "${LOG_DIR}/floating-ball-server.log"; do
+  if [[ -f "${log_file}" ]]; then
+    mv "${log_file}" "${LOG_ARCHIVE}/"
+  fi
+done
+
+mv -f "${UPLOAD_JAR}" "${JAR_FILE}"
+mv -f "${UPLOAD_START}" "${START_SCRIPT}"
+chmod +x "${START_SCRIPT}"
+"${START_SCRIPT}" start
+
+ready=0
+for _ in $(seq 1 "${HEALTH_TIMEOUT_SECONDS}"); do
+  if curl -fsS --max-time 2 "http://127.0.0.1:${SERVER_PORT}/admin/" >/dev/null; then
+    ready=1
+    break
+  fi
+  if ! "${START_SCRIPT}" status >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if [[ "${ready}" != "1" ]]; then
+  echo "Health check timed out for ${APP_NAME}." >&2
+  exit 1
+fi
+
+new_pid="$(cat "${PID_FILE}")"
+new_cmdline="$(tr '\000' ' ' < "/proc/${new_pid}/cmdline")"
+[[ "${new_cmdline}" == *"-jar ${JAR_FILE}"* ]]
+[[ "${new_cmdline}" == *"spring.profiles.active=${SPRING_PROFILE}"* ]]
+[[ "${new_cmdline}" == *"--server.port=${SERVER_PORT}"* ]]
+
+profile_log="$(grep -h "profile is active: \"${SPRING_PROFILE}\"" "${LOG_DIR}/console.log" "${LOG_DIR}/floating-ball-server.log" 2>/dev/null | tail -n 1 || true)"
+if [[ -z "${profile_log}" ]]; then
+  echo "Active profile was not confirmed in the new logs." >&2
+  exit 1
+fi
+
+if [[ -n "${OTHER_PID_BEFORE}" ]]; then
+  if ! kill -0 "${OTHER_PID_BEFORE}" >/dev/null 2>&1; then
+    echo "The other environment process changed during deployment." >&2
+    exit 1
+  fi
+  other_pid_after="$(cat "${OTHER_PID_FILE}")"
+  if [[ "${other_pid_after}" != "${OTHER_PID_BEFORE}" ]]; then
+    echo "The other environment PID changed during deployment." >&2
+    exit 1
+  fi
+fi
+
+final_sha256="$(sha256sum "${JAR_FILE}" | awk '{print $1}')"
+[[ "${final_sha256}" == "${EXPECTED_SHA256}" ]]
+
+DEPLOY_SUCCEEDED=1
+echo "Deployment succeeded."
+echo "environment=${APP_NAME}"
+echo "pid=${new_pid}"
+echo "profile=${SPRING_PROFILE}"
+echo "port=${SERVER_PORT}"
+echo "sha256=${final_sha256}"
+echo "profile_log=${profile_log}"
+echo "jar_backup=${JAR_BACKUP}"
+echo "script_backup=${SCRIPT_BACKUP}"
+echo "log_archive=${LOG_ARCHIVE}"
+if [[ -n "${OTHER_PID_BEFORE}" ]]; then
+  echo "other_environment_pid=${OTHER_PID_BEFORE} (unchanged)"
+fi
+REMOTE_DEPLOY
+  } > "${output}"
+}
+
+need_cmd mvn
+need_cmd ssh
+need_cmd scp
+need_cmd jar
+need_cmd curl
+
+if [[ "${SKIP_BUILD}" != "1" ]]; then
+  MAVEN_ARGS=(clean package)
+  if [[ "${SKIP_TESTS}" == "1" ]]; then
+    MAVEN_ARGS+=(-DskipTests)
+  fi
+  echo "Building server: mvn -f ${SERVER_DIR}/pom.xml ${MAVEN_ARGS[*]}"
+  mvn -f "${SERVER_DIR}/pom.xml" "${MAVEN_ARGS[@]}"
+else
+  echo "Skipping local build because SKIP_BUILD=1."
+fi
+
+JAR_FILES=()
+while IFS= read -r packaged_jar; do
+  JAR_FILES+=("${packaged_jar}")
+done < <(find "${SERVER_DIR}/target" -maxdepth 1 -type f -name 'floating-ball-server-*.jar' ! -name '*.original' | sort)
+
+if [[ "${#JAR_FILES[@]}" -ne 1 ]]; then
+  echo "Expected exactly one packaged jar under ${SERVER_DIR}/target; found ${#JAR_FILES[@]}." >&2
+  exit 1
+fi
+
+LOCAL_JAR="${JAR_FILES[0]}"
+LOCAL_JAR_ENTRIES="$(jar tf "${LOCAL_JAR}")"
+grep -Fqx "BOOT-INF/classes/application-${SPRING_PROFILE}.yml" <<< "${LOCAL_JAR_ENTRIES}"
+grep -Fqx 'BOOT-INF/classes/logback-spring.xml' <<< "${LOCAL_JAR_ENTRIES}"
+LOCAL_SHA256="$(sha256_file "${LOCAL_JAR}")"
+RELEASE_ID="$(date +%Y%m%d%H%M%S)-$$"
+REMOTE_UPLOAD_JAR="${JAR_FILE}.upload-${RELEASE_ID}"
+REMOTE_UPLOAD_START="${START_SCRIPT}.upload-${RELEASE_ID}"
+REMOTE_DEPLOYER="${DEPLOY_DIR}/.publish-xiaoshan-${ENVIRONMENT}-${RELEASE_ID}.sh"
+
+TMP_START_SCRIPT="$(mktemp)"
+TMP_REMOTE_DEPLOYER="$(mktemp)"
+trap 'rm -f "${TMP_START_SCRIPT}" "${TMP_REMOTE_DEPLOYER}"' EXIT
+
+build_start_script "${TMP_START_SCRIPT}"
+build_remote_deployer "${TMP_REMOTE_DEPLOYER}" "${RELEASE_ID}" "${LOCAL_SHA256}" "${REMOTE_UPLOAD_JAR}" "${REMOTE_UPLOAD_START}"
+chmod +x "${TMP_START_SCRIPT}" "${TMP_REMOTE_DEPLOYER}"
+bash -n "${TMP_START_SCRIPT}"
+bash -n "${TMP_REMOTE_DEPLOYER}"
+
+echo "Preparing remote directories."
+run_ssh "mkdir -p '${DEPLOY_DIR}' '${LOG_DIR}' '${RELEASE_DIR}' '${SPEECH_DIR}'"
+
+echo "Uploading jar to temporary path: ${REMOTE_UPLOAD_JAR}"
+run_scp "${LOCAL_JAR}" "${REMOTE_UPLOAD_JAR}"
+echo "Uploading start script to temporary path: ${REMOTE_UPLOAD_START}"
+run_scp "${TMP_START_SCRIPT}" "${REMOTE_UPLOAD_START}"
+echo "Uploading guarded remote deployer."
+run_scp "${TMP_REMOTE_DEPLOYER}" "${REMOTE_DEPLOYER}"
+
+echo "Deploying ${ENVIRONMENT}; only ${JAR_FILE} and ${START_SCRIPT} may be replaced."
+run_ssh "chmod +x '${REMOTE_DEPLOYER}' && bash '${REMOTE_DEPLOYER}'"
+
+echo "Verifying external admin endpoint."
+curl -fsS --max-time 10 "http://${TARGET_HOST}:${SERVER_PORT}/admin/" >/dev/null
+echo "Publish complete: http://${TARGET_HOST}:${SERVER_PORT}/admin/"

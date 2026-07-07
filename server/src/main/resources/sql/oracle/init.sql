@@ -845,6 +845,157 @@ CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope ON c_ai_feedback (
 );
 
 
+CREATE TABLE c_ai_patient_memory (
+    id_memory            VARCHAR2(32) PRIMARY KEY,
+    id_org               VARCHAR2(32) NOT NULL,
+    id_region            VARCHAR2(32),
+    id_his_org           VARCHAR2(64) NOT NULL,
+    patient_id           VARCHAR2(128) NOT NULL,
+    patient_name         VARCHAR2(128),
+    patient_gender       VARCHAR2(16),
+    patient_age          VARCHAR2(32),
+    patient_birth_date   VARCHAR2(32),
+    memory_version       NUMBER(19) DEFAULT 0 NOT NULL,
+    summary_json         CLOB,
+    conflict_count       NUMBER(10) DEFAULT 0 NOT NULL,
+    quality_status       VARCHAR2(16) DEFAULT 'partial' NOT NULL,
+    last_sync_time       TIMESTAMP,
+    last_source_time     TIMESTAMP,
+    sd_status            VARCHAR2(16) DEFAULT 'active' NOT NULL,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_patient_memory IS '患者纵向记忆聚合根表';
+COMMENT ON COLUMN c_ai_patient_memory.id_memory IS '患者记忆主键ID';
+COMMENT ON COLUMN c_ai_patient_memory.id_org IS '后台机构ID，来自设备鉴权';
+COMMENT ON COLUMN c_ai_patient_memory.id_his_org IS 'HIS机构ID，患者标识的机构作用域';
+COMMENT ON COLUMN c_ai_patient_memory.patient_id IS 'HIS患者主键，不跨机构合并';
+COMMENT ON COLUMN c_ai_patient_memory.memory_version IS '患者记忆单调递增版本';
+COMMENT ON COLUMN c_ai_patient_memory.summary_json IS '当前患者记忆摘要快照JSON';
+COMMENT ON COLUMN c_ai_patient_memory.conflict_count IS '尚未消解的事实冲突数量';
+COMMENT ON COLUMN c_ai_patient_memory.quality_status IS '记忆质量状态：fresh/partial/conflicted';
+COMMENT ON COLUMN c_ai_patient_memory.last_sync_time IS '桌面端最近一次同步时间';
+COMMENT ON COLUMN c_ai_patient_memory.last_source_time IS '当前已接收来源中的最近业务时间';
+
+CREATE INDEX idx_c_ai_patient_memory_sync ON c_ai_patient_memory (id_org, last_sync_time, fg_active);
+CREATE INDEX idx_c_ai_patient_memory_patient ON c_ai_patient_memory (id_org, patient_id, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_patient_memory_scope ON c_ai_patient_memory (
+    (CASE WHEN fg_active = '1' THEN id_org END),
+    (CASE WHEN fg_active = '1' THEN id_his_org END),
+    (CASE WHEN fg_active = '1' THEN patient_id END)
+);
+
+
+CREATE TABLE c_ai_patient_memory_obs (
+    id_observation       VARCHAR2(32) PRIMARY KEY,
+    id_memory            VARCHAR2(32) NOT NULL,
+    id_device            VARCHAR2(32),
+    source_key           VARCHAR2(256) NOT NULL,
+    source_key_hash      VARCHAR2(64) NOT NULL,
+    source_type          VARCHAR2(32) NOT NULL,
+    source_version       VARCHAR2(128),
+    operation_code       VARCHAR2(16) DEFAULT 'upsert' NOT NULL,
+    payload_hash         VARCHAR2(64) NOT NULL,
+    visit_id             VARCHAR2(128),
+    occurred_time        TIMESTAMP,
+    payload_json         CLOB,
+    facts_json           CLOB,
+    fg_latest            CHAR(1) DEFAULT '1' NOT NULL,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_patient_memory_obs IS '患者记忆来源观察版本表';
+COMMENT ON COLUMN c_ai_patient_memory_obs.source_key IS '来源稳定键，例如一次就诊或一份报告';
+COMMENT ON COLUMN c_ai_patient_memory_obs.source_key_hash IS '来源稳定键SHA-256，用于跨数据库索引';
+COMMENT ON COLUMN c_ai_patient_memory_obs.source_type IS 'patient_profile/allergy_snapshot/visit_summary/outpatient_record/lab_report/exam_report/doctor_confirmation';
+COMMENT ON COLUMN c_ai_patient_memory_obs.source_version IS '上游来源版本或内容版本';
+COMMENT ON COLUMN c_ai_patient_memory_obs.operation_code IS '增量操作：upsert/tombstone';
+COMMENT ON COLUMN c_ai_patient_memory_obs.payload_hash IS '规范化观察内容SHA-256，用于幂等去重';
+COMMENT ON COLUMN c_ai_patient_memory_obs.fg_latest IS '同一来源稳定键的最新版本标记';
+
+CREATE INDEX idx_c_ai_patient_memory_obs_time ON c_ai_patient_memory_obs (id_memory, occurred_time, fg_active);
+CREATE INDEX idx_c_ai_patient_memory_obs_latest ON c_ai_patient_memory_obs (id_memory, source_key_hash, fg_latest, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_patient_memory_obs_idem ON c_ai_patient_memory_obs (
+    (CASE WHEN fg_active = '1' THEN id_memory END),
+    (CASE WHEN fg_active = '1' THEN source_key_hash END),
+    (CASE WHEN fg_active = '1' THEN payload_hash END)
+);
+
+
+CREATE TABLE c_ai_patient_memory_fact (
+    id_fact              VARCHAR2(32) PRIMARY KEY,
+    id_memory            VARCHAR2(32) NOT NULL,
+    fact_key             VARCHAR2(256) NOT NULL,
+    fact_key_hash        VARCHAR2(64) NOT NULL,
+    fact_type            VARCHAR2(32) NOT NULL,
+    fact_code            VARCHAR2(128),
+    fact_name            VARCHAR2(256),
+    value_text           VARCHAR2(1000),
+    fact_status          VARCHAR2(32) DEFAULT 'historical' NOT NULL,
+    confidence_level     VARCHAR2(32) DEFAULT 'structured' NOT NULL,
+    evidence_text        VARCHAR2(1000),
+    source_type          VARCHAR2(32),
+    source_key           VARCHAR2(256),
+    latest_observation_id VARCHAR2(32),
+    origin_code          VARCHAR2(32) DEFAULT 'his' NOT NULL,
+    fg_suppressed        CHAR(1) DEFAULT '0' NOT NULL,
+    revision_no          NUMBER(10) DEFAULT 1 NOT NULL,
+    first_observed_time  TIMESTAMP,
+    last_observed_time   TIMESTAMP,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_patient_memory_fact IS '患者记忆当前临床事实投影表';
+COMMENT ON COLUMN c_ai_patient_memory_fact.fact_key IS '临床事实稳定键';
+COMMENT ON COLUMN c_ai_patient_memory_fact.fact_type IS 'allergy/chronic_condition/diagnosis/medication/procedure/lab_result/exam_result/vital/history/reminder';
+COMMENT ON COLUMN c_ai_patient_memory_fact.fact_status IS 'active/historical/inactive/unknown/disputed';
+COMMENT ON COLUMN c_ai_patient_memory_fact.confidence_level IS 'confirmed/structured/extracted/low';
+COMMENT ON COLUMN c_ai_patient_memory_fact.origin_code IS '事实当前权威来源：his/doctor/admin';
+COMMENT ON COLUMN c_ai_patient_memory_fact.fg_suppressed IS '管理员屏蔽标记，屏蔽后不进入医生摘要';
+COMMENT ON COLUMN c_ai_patient_memory_fact.revision_no IS '事实投影修订版本';
+
+CREATE INDEX idx_c_ai_patient_memory_fact_type ON c_ai_patient_memory_fact (id_memory, fact_type, last_observed_time, fg_active);
+CREATE INDEX idx_c_ai_patient_memory_fact_status ON c_ai_patient_memory_fact (id_memory, fact_status, fg_suppressed, fg_active);
+CREATE UNIQUE INDEX uk_c_ai_patient_memory_fact_key ON c_ai_patient_memory_fact (
+    (CASE WHEN fg_active = '1' THEN id_memory END),
+    (CASE WHEN fg_active = '1' THEN fact_key_hash END)
+);
+
+
+CREATE TABLE c_ai_patient_memory_audit (
+    id_audit             VARCHAR2(32) PRIMARY KEY,
+    id_memory            VARCHAR2(32) NOT NULL,
+    id_fact              VARCHAR2(32),
+    action_code          VARCHAR2(32) NOT NULL,
+    before_json          CLOB,
+    after_json           CLOB,
+    note_text            VARCHAR2(1000),
+    id_operator          VARCHAR2(32),
+    na_operator          VARCHAR2(128),
+    operation_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fg_active            CHAR(1) DEFAULT '1' NOT NULL,
+    insert_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE c_ai_patient_memory_audit IS '患者记忆人工治理审计表';
+COMMENT ON COLUMN c_ai_patient_memory_audit.action_code IS '治理动作：correct/suppress/restore';
+COMMENT ON COLUMN c_ai_patient_memory_audit.before_json IS '治理前事实快照JSON';
+COMMENT ON COLUMN c_ai_patient_memory_audit.after_json IS '治理后事实快照JSON';
+COMMENT ON COLUMN c_ai_patient_memory_audit.note_text IS '治理原因';
+COMMENT ON COLUMN c_ai_patient_memory_audit.id_operator IS '后台操作人ID';
+COMMENT ON COLUMN c_ai_patient_memory_audit.operation_time IS '治理操作时间';
+
+CREATE INDEX idx_c_ai_patient_memory_audit_time ON c_ai_patient_memory_audit (id_memory, operation_time, fg_active);
+CREATE INDEX idx_c_ai_patient_memory_audit_fact ON c_ai_patient_memory_audit (id_fact, operation_time, fg_active);
+
+
 CREATE TABLE c_ai_user (
     id_user              VARCHAR2(32) PRIMARY KEY,
     cd_user              VARCHAR2(64) NOT NULL,

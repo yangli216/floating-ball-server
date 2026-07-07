@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-07-01
+> 更新日期：2026-07-06
 
 ## 1. 项目定位
 
@@ -98,6 +98,10 @@ floating-ball-server/
 7. 出站安全门按 host 做本地限流和熔断；上游失败达到阈值后短暂拒绝同 host 后续出站，防止 AI / 语音 / PMPHAI 配置异常拖垮后台线程与连接资源。
 8. 连接使用 `ZHS16GBK` 等 Oracle 非 UTF 字符集的医院库时，发布包内必须包含与 `ojdbc8` 同版本的 `orai18n` 运行时依赖；否则服务可能在启动期读取初始化数据时因 `Non supported character set` 退出，导致 8080 端口未监听。
 9. 小山现场并行部署时，正式环境使用 `xiaoshan` profile，测试环境使用 `xiaoshan-test` profile；两者配置保持一致，测试环境仅把服务端口调整为 `9090`。
+10. 小山现场统一使用 `scripts/publish-xiaoshan.sh` 发布，命令必须显式指定 `testing` 或 `production`；脚本内固定环境目录、profile 和端口，不允许通过环境变量覆盖这些映射。
+11. 测试环境固定发布到 `/data/floating-ball-server-testing`，使用 `xiaoshan-test` profile 和 `9090` 端口；正式环境沿用当前运行目录 `/data`，使用 `/data/floating-ball-server.jar`、`/data/start-floating-ball-server.sh`、`xiaoshan` profile 和 `8080` 端口。未运行的 `/data/floating-ball-server-production` 不作为正式发布目标。
+12. 发布脚本先构建并校验 JAR，再上传到目标环境的临时文件；远端校验摘要、profile 配置、当前进程归属和端口归属后才停止目标服务。切换失败或健康检查失败时自动恢复该环境的上一版 JAR 和启动脚本，不得操作另一环境的 PID、JAR 或启动脚本。
+13. 测试环境一键发布使用 `./scripts/publish-xiaoshan.sh testing`；正式环境使用 `./scripts/publish-xiaoshan.sh production --confirm-production`，必须携带显式正式发布确认参数。
 
 ### 3.2 客户端安全基线
 

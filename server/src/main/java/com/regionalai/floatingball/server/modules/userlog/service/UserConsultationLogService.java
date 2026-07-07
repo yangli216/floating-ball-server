@@ -299,7 +299,7 @@ public class UserConsultationLogService {
         if ("voice".equals(type)) return "语音问诊";
         if ("smart".equals(type)) return "智能问诊";
         if ("chronic_refill".equals(type)) return "慢病配药";
-        if ("report_consultation".equals(type)) return "报告会诊";
+        if ("report_consultation".equals(type)) return "报告回诊";
         if ("report_interpretation".equals(type)) return "报告解读";
         return type != null ? type : "";
     }
