@@ -1,12 +1,14 @@
 package com.regionalai.floatingball.server.modules.release.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseBatchUploadRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseDownloadItem;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseHistoryView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyUpdateRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseRollbackRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseUploadRequest;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseView;
 import com.regionalai.floatingball.server.modules.release.dto.TauriLatestJson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -103,6 +106,60 @@ class ReleaseServiceTest {
         assertTrue(macItem.getFileSize() > 0);
     }
 
+    @Test
+    void uploadBatchShouldPublishMultipleChannelsAndInferTargetsFromPackageFiles() {
+        ReleaseBatchUploadRequest request = new ReleaseBatchUploadRequest();
+        request.setChannels(Arrays.asList("testing", "production"));
+        request.setForceUpdate(true);
+        request.setMetadataFile(new MockMultipartFile(
+            "metadataFile",
+            "latest.json",
+            "application/json",
+            buildLatestJson(
+                "1.3.0",
+                "darwin-aarch64",
+                "MedHermes_1.3.0_aarch64.app.tar.gz",
+                "windows-x86_64",
+                "MedHermes_1.3.0_x64-setup.nsis.zip"
+            ).getBytes(StandardCharsets.UTF_8)
+        ));
+        request.setFiles(Arrays.asList(
+            new MockMultipartFile(
+                "files",
+                "MedHermes_1.3.0_x64-setup.nsis.zip",
+                "application/octet-stream",
+                "package-win".getBytes(StandardCharsets.UTF_8)
+            ),
+            new MockMultipartFile(
+                "files",
+                "MedHermes_1.3.0_aarch64.app.tar.gz",
+                "application/octet-stream",
+                "package-mac".getBytes(StandardCharsets.UTF_8)
+            )
+        ));
+
+        List<ReleaseView> views = releaseService.uploadBatch(request);
+
+        assertEquals(2, views.size());
+        for (String channel : Arrays.asList("testing", "production")) {
+            TauriLatestJson latestJson = releaseService.getLatestJson(channel);
+            ReleasePolicyView policy = releaseService.getPolicy(channel);
+            assertEquals("1.3.0", latestJson.getVersion());
+            assertEquals(2, latestJson.getPlatforms().size());
+            assertTrue(latestJson.getPlatforms().containsKey("darwin-aarch64"));
+            assertTrue(latestJson.getPlatforms().containsKey("windows-x86_64"));
+            assertTrue(latestJson.getPlatforms().get("windows-x86_64").getUrl().contains("/windows-x86_64/"));
+            assertTrue(Boolean.TRUE.equals(policy.getForceUpdate()));
+            assertEquals("1.3.0", policy.getMinSupportedVersion());
+        }
+
+        ReleaseView productionView = views.stream()
+            .filter(item -> "production".equals(item.getChannel()))
+            .findFirst()
+            .orElseThrow(AssertionError::new);
+        assertEquals(2, productionView.getPlatforms().size());
+    }
+
     private void upload(String version, String target, String fileName, boolean forceUpdate) {
         ReleaseUploadRequest request = new ReleaseUploadRequest();
         request.setChannel("production");
@@ -131,6 +188,28 @@ class ReleaseServiceTest {
             + "\"" + target + "\":{"
             + "\"signature\":\"signature-" + version + "\","
             + "\"url\":\"https://example.com/" + fileName + "\""
+            + "}"
+            + "}"
+            + "}";
+    }
+
+    private String buildLatestJson(String version,
+                                   String firstTarget,
+                                   String firstFileName,
+                                   String secondTarget,
+                                   String secondFileName) {
+        return "{"
+            + "\"version\":\"" + version + "\","
+            + "\"notes\":\"release " + version + "\","
+            + "\"pub_date\":\"2026-04-24T10:00:00Z\","
+            + "\"platforms\":{"
+            + "\"" + firstTarget + "\":{"
+            + "\"signature\":\"signature-" + firstTarget + "\","
+            + "\"url\":\"https://example.com/" + firstFileName + "\""
+            + "},"
+            + "\"" + secondTarget + "\":{"
+            + "\"signature\":\"signature-" + secondTarget + "\","
+            + "\"url\":\"https://example.com/" + secondFileName + "\""
             + "}"
             + "}"
             + "}";

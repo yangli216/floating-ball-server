@@ -2,6 +2,9 @@ package com.regionalai.floatingball.server.modules.release.dto;
 
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 public class ReleaseView {
 
@@ -18,4 +21,5 @@ public class ReleaseView {
     private Boolean forceUpdate;
     private String minSupportedVersion;
     private Long updatedAt;
+    private List<ReleasePlatformView> platforms = new ArrayList<ReleasePlatformView>();
 }

@@ -28,6 +28,9 @@ Options:
 Optional environment variables:
   TARGET_HOST, TARGET_USER, SSH_PASS, SKIP_BUILD=1, SKIP_TESTS=1,
   HEALTH_TIMEOUT_SECONDS=90
+
+The script reuses a per-run SSH control connection. If password authentication
+is used, the remote password should normally be requested only once.
 USAGE
 }
 
@@ -135,7 +138,33 @@ sha256_file() {
   fi
 }
 
-SSH_BASE_OPTIONS=(-o StrictHostKeyChecking=accept-new)
+TMP_START_SCRIPT=""
+TMP_REMOTE_DEPLOYER=""
+SSH_CONTROL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/floating-ball-publish-ssh.XXXXXX")"
+SSH_CONTROL_PATH="${SSH_CONTROL_DIR}/control-%C"
+SSH_BASE_OPTIONS=(
+  -o StrictHostKeyChecking=accept-new
+  -o ControlMaster=auto
+  -o ControlPersist=10m
+  -o ControlPath="${SSH_CONTROL_PATH}"
+)
+
+cleanup_local() {
+  local exit_code="$?"
+  set +e
+
+  rm -f "${TMP_START_SCRIPT:-}" "${TMP_REMOTE_DEPLOYER:-}"
+  if [[ -n "${SSH_CONTROL_DIR:-}" && -d "${SSH_CONTROL_DIR}" ]]; then
+    if command -v ssh >/dev/null 2>&1; then
+      ssh "${SSH_BASE_OPTIONS[@]}" -O exit "${TARGET_USER}@${TARGET_HOST}" >/dev/null 2>&1 || true
+    fi
+    rm -rf "${SSH_CONTROL_DIR}"
+  fi
+
+  exit "${exit_code}"
+}
+
+trap cleanup_local EXIT
 
 run_ssh() {
   local remote_cmd="$1"
@@ -592,7 +621,6 @@ REMOTE_DEPLOYER="${DEPLOY_DIR}/.publish-xiaoshan-${ENVIRONMENT}-${RELEASE_ID}.sh
 
 TMP_START_SCRIPT="$(mktemp)"
 TMP_REMOTE_DEPLOYER="$(mktemp)"
-trap 'rm -f "${TMP_START_SCRIPT}" "${TMP_REMOTE_DEPLOYER}"' EXIT
 
 build_start_script "${TMP_START_SCRIPT}"
 build_remote_deployer "${TMP_REMOTE_DEPLOYER}" "${RELEASE_ID}" "${LOCAL_SHA256}" "${REMOTE_UPLOAD_JAR}" "${REMOTE_UPLOAD_START}"
@@ -600,6 +628,7 @@ chmod +x "${TMP_START_SCRIPT}" "${TMP_REMOTE_DEPLOYER}"
 bash -n "${TMP_START_SCRIPT}"
 bash -n "${TMP_REMOTE_DEPLOYER}"
 
+echo "Remote SSH connection will be reused for this publish; password authentication should prompt at most once."
 echo "Preparing remote directories."
 run_ssh "mkdir -p '${DEPLOY_DIR}' '${LOG_DIR}' '${RELEASE_DIR}' '${SPEECH_DIR}'"
 

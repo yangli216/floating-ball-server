@@ -2,8 +2,10 @@ package com.regionalai.floatingball.server.modules.release.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseBatchUploadRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseDownloadItem;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseHistoryView;
+import com.regionalai.floatingball.server.modules.release.dto.ReleasePlatformView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyUpdateRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseRollbackRequest;
@@ -38,6 +40,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Enumeration;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -234,6 +237,163 @@ public class ReleaseService {
         }
     }
 
+    public synchronized List<ReleaseView> uploadBatch(ReleaseBatchUploadRequest request) {
+        if (request == null) {
+            throw new BusinessException("请求体不能为空");
+        }
+        List<String> channels = normalizeChannels(request);
+        List<MultipartFile> files = normalizeUploadFiles(request);
+        TauriLatestJson uploadedLatestJson = readUploadedLatestJson(request.getMetadataFile());
+        if (uploadedLatestJson == null || uploadedLatestJson.getPlatforms() == null || uploadedLatestJson.getPlatforms().isEmpty()) {
+            throw new BusinessException("批量发布必须上传包含 platforms 的 latest.json");
+        }
+
+        List<ReleasePackage> packages = resolveReleasePackages(request, uploadedLatestJson, files);
+        ReleaseMetadata releaseMetadata = packages.get(0).metadata;
+        List<ReleaseView> views = new ArrayList<ReleaseView>();
+        try {
+            for (String channel : channels) {
+                applyReleasePackages(channel, releaseMetadata, packages, request.getForceUpdate());
+                views.add(readReleaseView(channel));
+            }
+            return views;
+        } catch (IOException ex) {
+            throw new BusinessException("RELEASE-IO", "保存发布文件失败: " + ex.getMessage());
+        }
+    }
+
+    private List<String> normalizeChannels(ReleaseBatchUploadRequest request) {
+        LinkedHashSet<String> values = new LinkedHashSet<String>();
+        if (request.getChannels() != null) {
+            for (String channel : request.getChannels()) {
+                if (StringUtils.hasText(channel)) {
+                    values.add(normalizeChannel(channel));
+                }
+            }
+        }
+        if (StringUtils.hasText(request.getChannel())) {
+            values.add(normalizeChannel(request.getChannel()));
+        }
+        if (values.isEmpty()) {
+            throw new BusinessException("发布通道不能为空");
+        }
+        return new ArrayList<String>(values);
+    }
+
+    private List<MultipartFile> normalizeUploadFiles(ReleaseBatchUploadRequest request) {
+        List<MultipartFile> values = new ArrayList<MultipartFile>();
+        if (request.getFiles() != null) {
+            for (MultipartFile file : request.getFiles()) {
+                if (file != null && !file.isEmpty()) {
+                    values.add(file);
+                }
+            }
+        }
+        if (request.getFile() != null && !request.getFile().isEmpty()) {
+            values.add(request.getFile());
+        }
+        if (values.isEmpty()) {
+            throw new BusinessException("安装包文件不能为空");
+        }
+        return values;
+    }
+
+    private List<ReleasePackage> resolveReleasePackages(ReleaseBatchUploadRequest request,
+                                                        TauriLatestJson uploadedLatestJson,
+                                                        List<MultipartFile> files) {
+        List<ReleasePackage> packages = new ArrayList<ReleasePackage>();
+        Set<String> targets = new HashSet<String>();
+        Set<String> fileNames = new HashSet<String>();
+        String version = null;
+        for (MultipartFile file : files) {
+            String originalFileName = safeFileName(file.getOriginalFilename());
+            if (!fileNames.add(originalFileName)) {
+                throw new BusinessException("同一次发布中存在重复安装包文件名: " + originalFileName);
+            }
+            ReleaseMetadata metadata = resolveBatchReleaseMetadata(request, uploadedLatestJson, originalFileName);
+            validatePackageMatchesMetadata(uploadedLatestJson, originalFileName, metadata);
+            if (version == null) {
+                version = metadata.version;
+            } else if (!version.equals(metadata.version)) {
+                throw new BusinessException("同一次批量发布中的安装包版本必须一致");
+            }
+            if (!targets.add(metadata.target)) {
+                throw new BusinessException("同一次发布中存在重复平台 target: " + metadata.target);
+            }
+
+            ReleasePackage releasePackage = new ReleasePackage();
+            releasePackage.file = file;
+            releasePackage.fileName = originalFileName;
+            releasePackage.metadata = metadata;
+            packages.add(releasePackage);
+        }
+        return packages;
+    }
+
+    private ReleaseMetadata resolveBatchReleaseMetadata(ReleaseBatchUploadRequest request,
+                                                        TauriLatestJson uploadedLatestJson,
+                                                        String originalFileName) {
+        String version = trimToNull(request.getVersion());
+        String notes = trimToNull(request.getNotes());
+        String pubDate = trimToNull(request.getPubDate());
+
+        version = firstText(version, uploadedLatestJson.getVersion());
+        notes = firstText(notes, uploadedLatestJson.getNotes());
+        pubDate = firstText(pubDate, uploadedLatestJson.getPubDate());
+
+        PlatformMatch platformMatch = findPlatformMatch(uploadedLatestJson, originalFileName, null);
+        if (platformMatch == null || platformMatch.platformInfo == null) {
+            throw new BusinessException("无法根据安装包文件名识别平台 target: " + originalFileName);
+        }
+
+        ReleaseMetadata metadata = new ReleaseMetadata();
+        metadata.version = requireSafeText(version, "版本号不能为空，请上传 latest.json 或手工填写版本号", "版本号只能包含字母、数字、点、下划线和短横线");
+        metadata.target = requireSafeText(platformMatch.target, "平台 target 不能为空", "平台 target 只能包含字母、数字、点、下划线和短横线");
+        metadata.signature = requireText(platformMatch.platformInfo.getSignature(), "latest.json 缺少 " + metadata.target + " 的签名");
+        metadata.notes = notes;
+        metadata.pubDate = normalizePubDate(pubDate);
+        return metadata;
+    }
+
+    private void applyReleasePackages(String channel,
+                                      ReleaseMetadata releaseMetadata,
+                                      List<ReleasePackage> packages,
+                                      Boolean forceUpdate) throws IOException {
+        TauriLatestJson currentLatestJson = readLatestJson(channel);
+        TauriLatestJson latestJson = currentLatestJson;
+        if (StringUtils.hasText(currentLatestJson.getVersion()) && !releaseMetadata.version.equals(currentLatestJson.getVersion())) {
+            writeHistorySnapshot(channel, currentLatestJson, readPolicy(channel));
+            latestJson = new TauriLatestJson();
+        }
+
+        latestJson.setVersion(releaseMetadata.version);
+        latestJson.setNotes(releaseMetadata.notes);
+        latestJson.setPubDate(releaseMetadata.pubDate);
+
+        for (ReleasePackage releasePackage : packages) {
+            ReleaseMetadata metadata = releasePackage.metadata;
+            Path targetDirectory = storageRoot.resolve(channel).resolve(metadata.target).normalize();
+            ensureInsideStorage(targetDirectory);
+            Files.createDirectories(targetDirectory);
+            Path targetPath = targetDirectory.resolve(releasePackage.fileName).normalize();
+            ensureInsideStorage(targetPath);
+            try (InputStream inputStream = releasePackage.file.getInputStream()) {
+                Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            TauriLatestJson.PlatformInfo platformInfo = new TauriLatestJson.PlatformInfo();
+            platformInfo.setSignature(metadata.signature);
+            platformInfo.setUrl(buildFileUrl(channel, metadata.target, releasePackage.fileName));
+            latestJson.getPlatforms().put(metadata.target, platformInfo);
+            log.info("release file uploaded. channel={}, version={}, target={}, fileName={}", channel, metadata.version, metadata.target, releasePackage.fileName);
+        }
+
+        writeLatestJson(channel, latestJson);
+        ReleasePolicyView policy = updateReleasePolicy(channel, releaseMetadata.version, releaseMetadata.pubDate, releaseMetadata.notes, forceUpdate);
+        writeHistorySnapshot(channel, latestJson, policy);
+        log.info("release batch uploaded. channel={}, version={}, packageCount={}", channel, releaseMetadata.version, packages.size());
+    }
+
     private TauriLatestJson readUploadedLatestJson(MultipartFile metadataFile) {
         if (metadataFile == null || metadataFile.isEmpty()) {
             return null;
@@ -411,14 +571,39 @@ public class ReleaseService {
             return empty;
         }
 
-        String target = latestJson.getPlatforms().keySet().iterator().next();
-        TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
-        String fileName = extractFileName(platformInfo.getUrl());
-        Long fileSize = null;
-        if (StringUtils.hasText(fileName)) {
-            fileSize = resolveFileSize(channel, target, fileName);
+        List<ReleasePlatformView> platforms = buildPlatformViews(channel, latestJson);
+        ReleasePlatformView firstPlatform = platforms.isEmpty() ? new ReleasePlatformView() : platforms.get(0);
+        ReleaseView view = toReleaseView(
+            channel,
+            latestJson.getVersion(),
+            firstPlatform.getTarget(),
+            firstPlatform.getFileName(),
+            firstPlatform.getFileSize(),
+            firstPlatform.getDownloadUrl(),
+            latestJson.getPubDate(),
+            latestJson.getNotes(),
+            readPolicy(channel)
+        );
+        view.setPlatforms(platforms);
+        return view;
+    }
+
+    private List<ReleasePlatformView> buildPlatformViews(String channel, TauriLatestJson latestJson) {
+        if (latestJson == null || latestJson.getPlatforms() == null || latestJson.getPlatforms().isEmpty()) {
+            return Collections.emptyList();
         }
-        return toReleaseView(channel, latestJson.getVersion(), target, fileName, fileSize, platformInfo.getUrl(), latestJson.getPubDate(), latestJson.getNotes(), readPolicy(channel));
+        List<ReleasePlatformView> platforms = new ArrayList<ReleasePlatformView>();
+        for (String target : latestJson.getPlatforms().keySet()) {
+            TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
+            String fileName = platformInfo == null ? "" : extractFileName(platformInfo.getUrl());
+            ReleasePlatformView platform = new ReleasePlatformView();
+            platform.setTarget(target);
+            platform.setFileName(fileName);
+            platform.setFileSize(resolveFileSize(channel, target, fileName));
+            platform.setDownloadUrl(platformInfo == null ? "" : platformInfo.getUrl());
+            platforms.add(platform);
+        }
+        return platforms;
     }
 
     private Long resolveFileSize(String channel, String target, String fileName) {
@@ -772,6 +957,14 @@ public class ReleaseService {
         view.setForceUpdate(Boolean.TRUE.equals(policy.getForceUpdate()));
         view.setMinSupportedVersion(policy.getMinSupportedVersion());
         view.setUpdatedAt(policy.getUpdatedAt() == null ? System.currentTimeMillis() : policy.getUpdatedAt());
+        if (StringUtils.hasText(target)) {
+            ReleasePlatformView platform = new ReleasePlatformView();
+            platform.setTarget(target);
+            platform.setFileName(fileName);
+            platform.setFileSize(fileSize);
+            platform.setDownloadUrl(downloadUrl);
+            view.getPlatforms().add(platform);
+        }
         return view;
     }
 
@@ -1085,6 +1278,12 @@ public class ReleaseService {
         private String signature;
         private String notes;
         private String pubDate;
+    }
+
+    private static class ReleasePackage {
+        private MultipartFile file;
+        private String fileName;
+        private ReleaseMetadata metadata;
     }
 
     private static class PlatformMatch {
