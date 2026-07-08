@@ -39,22 +39,34 @@
         <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
           <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
         </el-table-column>
-        <el-table-column prop="target" label="平台" width="160">
-          <template slot-scope="{ row }"><code-tag :value="row.target" /></template>
-        </el-table-column>
-        <el-table-column prop="fileName" label="安装包" min-width="220">
+        <el-table-column label="平台" min-width="220">
           <template slot-scope="{ row }">
-            <span>{{ row.fileName || '暂无上传文件' }}</span>
-            <span v-if="row.fileSize" class="muted">（{{ formatFileSize(row.fileSize) }}）</span>
+            <div v-if="releasePlatforms(row).length" class="release-platform-list">
+              <code-tag v-for="item in releasePlatforms(row)" :key="item.target" :value="item.target" />
+            </div>
+            <span v-else class="muted">暂无平台</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="安装包" min-width="280">
+          <template slot-scope="{ row }">
+            <div v-if="releasePlatforms(row).length" class="release-file-list">
+              <div v-for="item in releasePlatforms(row)" :key="item.target" class="release-file-list__item">
+                <span>{{ item.fileName || '暂无上传文件' }}</span>
+                <span v-if="item.fileSize" class="muted">（{{ formatFileSize(item.fileSize) }}）</span>
+              </div>
+            </div>
+            <span v-else class="muted">暂无上传文件</span>
           </template>
         </el-table-column>
         <el-table-column label="客户端下载" min-width="320">
           <template slot-scope="{ row }">
-            <template v-if="row.downloadUrl">
-              <code-tag :value="row.downloadUrl" />
-              <div class="release-link-actions">
-                <table-action @click="copy(row.downloadUrl, '客户端下载链接')">复制</table-action>
-                <table-action @click="openUrl(row.downloadUrl)">打开</table-action>
+            <template v-if="downloadPlatforms(row).length">
+              <div v-for="item in downloadPlatforms(row)" :key="item.target" class="release-download-item">
+                <code-tag :value="item.downloadUrl" />
+                <div class="release-link-actions">
+                  <table-action @click="copy(item.downloadUrl, `${item.target || '客户端'}下载链接`)">复制</table-action>
+                  <table-action @click="openUrl(item.downloadUrl)">打开</table-action>
+                </div>
               </div>
             </template>
             <span v-else class="muted">暂无下载链接</span>
@@ -125,25 +137,26 @@
       </el-table>
     </section>
 
-    <el-dialog v-if="dialogVisible" title="上传客户端版本" :visible.sync="dialogVisible" width="680px" @closed="resetForm">
+    <el-dialog v-if="dialogVisible" title="批量上传客户端版本" :visible.sync="dialogVisible" width="760px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-grid">
-          <el-form-item label="发布通道" prop="channel">
-            <el-select v-model="form.channel" placeholder="请选择通道…">
+          <el-form-item label="发布环境" prop="channels">
+            <el-select v-model="form.channels" multiple collapse-tags placeholder="请选择环境…">
               <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="Tauri latest.json" prop="metadataFile" class="form-span-2">
             <input ref="metadataInput" type="file" accept=".json,application/json" @change="handleMetadataChange" />
-            <div class="muted upload-hint">选择 Tauri 发布产物中的 latest.json，系统会自动解析版本号、target 和签名。</div>
+            <div class="muted upload-hint">选择 Tauri 发布产物中的 latest.json，系统会自动解析版本号、平台 target 和签名。</div>
           </el-form-item>
           <el-form-item label="版本号">
             <el-input v-model.trim="form.version" placeholder="默认从 latest.json 读取…" />
           </el-form-item>
-          <el-form-item label="平台 target">
-            <el-select v-model="form.target" filterable allow-create default-first-option placeholder="请选择或输入 target…">
-              <el-option v-for="item in targetOptions" :key="item" :label="item" :value="item" />
-            </el-select>
+          <el-form-item label="识别到的平台">
+            <div class="detected-targets">
+              <code-tag v-for="item in detectedTargets" :key="item" :value="item" />
+              <span v-if="!detectedTargets.length" class="muted">待解析</span>
+            </div>
           </el-form-item>
           <el-form-item label="发布时间">
             <el-input v-model.trim="form.pubDate" placeholder="留空由服务端生成…" />
@@ -161,15 +174,28 @@
           <el-form-item label="更新说明" class="form-span-2">
             <el-input v-model="form.notes" type="textarea" :rows="4" placeholder="可选，展示在桌面端更新内容中…" />
           </el-form-item>
-          <el-form-item label="安装包文件" prop="file" class="form-span-2">
-            <input ref="fileInput" type="file" @change="handleFileChange" />
-            <div class="muted upload-hint">必须选择 latest.json 中对应 target.url 指向的同名文件；例如签名指向 app.tar.gz 时不能上传 dmg。</div>
+          <el-form-item label="安装包文件" prop="files" class="form-span-2">
+            <input ref="fileInput" type="file" multiple @change="handleFileChange" />
+            <div class="muted upload-hint">可一次选择多个平台包；服务端会按文件名匹配 latest.json 中对应 target.url 自动识别平台。</div>
+            <div v-if="form.files.length" class="selected-files">
+              <div v-for="(file, index) in form.files" :key="fileKey(file)" class="selected-file">
+                <code-tag :value="file.name" />
+                <button
+                  type="button"
+                  class="selected-file__remove"
+                  :aria-label="`移除 ${file.name}`"
+                  @click="removeSelectedFile(index)"
+                >
+                  <i class="el-icon-close" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
           </el-form-item>
         </div>
       </el-form>
       <span slot="footer">
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">上传发布</el-button>
+        <el-button type="primary" :loading="saving" @click="submitForm">批量发布</el-button>
       </span>
     </el-dialog>
   </div>
@@ -184,18 +210,15 @@ const channelOptions = [
   { value: 'testing', label: '测试内网' }
 ]
 
-const targetOptions = ['darwin-aarch64', 'darwin-x86_64', 'windows-x86_64', 'linux-x86_64']
-
 function createDefaultForm() {
   return {
-    channel: 'production',
+    channels: ['production'],
     version: '',
-    target: '',
     notes: '',
     pubDate: '',
     forceUpdate: false,
     metadataFile: null,
-    file: null
+    files: []
   }
 }
 
@@ -209,7 +232,7 @@ export default {
   data() {
     return {
       channelOptions,
-      targetOptions,
+      detectedTargets: [],
       loading: false,
       historyLoading: false,
       policySavingKey: '',
@@ -222,9 +245,9 @@ export default {
       },
       form: createDefaultForm(),
       rules: {
-        channel: [{ required: true, message: '请选择发布通道', trigger: 'change' }],
+        channels: [{ required: true, type: 'array', min: 1, message: '请选择发布环境', trigger: 'change' }],
         metadataFile: [{ required: true, message: '请选择 latest.json', trigger: 'change' }],
-        file: [{ required: true, message: '请选择安装包文件', trigger: 'change' }]
+        files: [{ required: true, type: 'array', min: 1, message: '请选择安装包文件', trigger: 'change' }]
       }
     }
   },
@@ -262,6 +285,23 @@ export default {
     formatList(value) {
       return Array.isArray(value) ? value.filter(Boolean).join('、') : ''
     },
+    releasePlatforms(row) {
+      if (Array.isArray(row.platforms) && row.platforms.length) {
+        return row.platforms
+      }
+      if (row.target || row.fileName || row.downloadUrl) {
+        return [{
+          target: row.target,
+          fileName: row.fileName,
+          fileSize: row.fileSize,
+          downloadUrl: row.downloadUrl
+        }]
+      }
+      return []
+    },
+    downloadPlatforms(row) {
+      return this.releasePlatforms(row).filter(item => item.downloadUrl)
+    },
     formatTimestamp(value) {
       const timestamp = Number(value || 0)
       if (!timestamp) {
@@ -281,8 +321,9 @@ export default {
     },
     openUpload() {
       this.form = createDefaultForm()
+      this.detectedTargets = []
       if (this.filters.channel) {
-        this.form.channel = this.filters.channel
+        this.form.channels = [this.filters.channel]
       }
       this.dialogVisible = true
     },
@@ -298,6 +339,7 @@ export default {
     },
     resetForm() {
       this.form = createDefaultForm()
+      this.detectedTargets = []
       if (this.$refs.fileInput) {
         this.$refs.fileInput.value = ''
       }
@@ -333,10 +375,9 @@ export default {
             this.form.notes = metadata.notes
           }
           const targets = metadata.platforms ? Object.keys(metadata.platforms) : []
-          if (!this.form.target && targets.length === 1) {
-            this.form.target = targets[0]
-          }
+          this.detectedTargets = targets
         } catch (error) {
+          this.detectedTargets = []
           this.$message.warning('latest.json 预览失败，上传时将由服务端再次校验')
         }
       }
@@ -344,10 +385,33 @@ export default {
     },
     handleFileChange(event) {
       const files = event.target.files
-      this.form.file = files && files.length > 0 ? files[0] : null
+      const nextFiles = files && files.length > 0 ? Array.from(files) : []
+      const mergedFiles = [...this.form.files]
+      const existingKeys = new Set(mergedFiles.map(file => this.fileKey(file)))
+      nextFiles.forEach(file => {
+        const key = this.fileKey(file)
+        if (!existingKeys.has(key)) {
+          existingKeys.add(key)
+          mergedFiles.push(file)
+        }
+      })
+      this.form.files = mergedFiles
+      event.target.value = ''
       if (this.$refs.formRef) {
-        this.$refs.formRef.validateField('file')
+        this.$refs.formRef.validateField('files')
       }
+    },
+    removeSelectedFile(index) {
+      this.form.files.splice(index, 1)
+      if (this.$refs.formRef) {
+        this.$refs.formRef.validateField('files')
+      }
+    },
+    fileKey(file) {
+      if (!file) {
+        return ''
+      }
+      return `${file.name || ''}:${file.size || 0}:${file.lastModified || 0}`
     },
     submitForm() {
       this.$refs.formRef.validate(async valid => {
@@ -357,19 +421,18 @@ export default {
         this.saving = true
         try {
           const formData = new FormData()
-          formData.append('channel', this.form.channel)
+          this.form.channels.forEach(channel => formData.append('channels', channel))
           formData.append('version', this.form.version)
-          formData.append('target', this.form.target)
           formData.append('notes', this.form.notes || '')
           formData.append('pubDate', this.form.pubDate || '')
           formData.append('forceUpdate', this.form.forceUpdate ? 'true' : 'false')
           formData.append('metadataFile', this.form.metadataFile)
-          formData.append('file', this.form.file)
-          await http.post('/admin/api/releases/upload', formData, {
+          this.form.files.forEach(file => formData.append('files', file))
+          await http.post('/admin/api/releases/upload/batch', formData, {
             timeout: 120000,
             headers: { 'Content-Type': 'multipart/form-data' }
           })
-          this.$message.success('版本发布成功')
+          this.$message.success('版本批量发布成功')
           this.dialogVisible = false
           this.loadData()
         } catch (error) {
@@ -470,6 +533,64 @@ export default {
   gap: 10px;
   align-items: center;
   margin-top: 8px;
+}
+
+.release-download-item + .release-download-item {
+  margin-top: 10px;
+}
+
+.release-platform-list,
+.release-file-list,
+.selected-files,
+.detected-targets {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.release-file-list {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.release-file-list__item {
+  max-width: 100%;
+  word-break: break-all;
+}
+
+.selected-files {
+  margin-top: 8px;
+}
+
+.selected-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.selected-file__remove {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  line-height: 20px;
+  padding: 0;
+}
+
+.selected-file__remove:hover,
+.selected-file__remove:focus-visible {
+  border-color: #d95c5c;
+  color: #c23b3b;
+}
+
+.selected-file__remove:focus-visible {
+  outline: 2px solid rgba(29, 158, 117, 0.28);
+  outline-offset: 2px;
 }
 
 .history-header {

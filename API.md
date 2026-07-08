@@ -249,11 +249,75 @@ BODY_SHA256
 
 ## 3. 客户端版本发布与内网更新
 
-### 3.1 管理端上传客户端版本
+### 3.1 管理端批量上传客户端版本
+
+`POST /admin/api/releases/upload/batch`
+
+用途：管理员一次选择多个发布通道和多个 Tauri 平台安装包，用同一份 `latest.json` 同步发布测试/正式等内网环境的桌面端更新。
+
+鉴权：`Authorization: Bearer {adminToken}`
+
+请求类型：`multipart/form-data`
+
+字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| channels | string[] | 是 | 可重复字段，发布通道集合：`production` 正式内网，`testing` 测试内网 |
+| metadataFile | file | 是 | Tauri 发布产物中的 `latest.json`，服务端从中解析 `version`、`platforms.{target}.signature`、`notes`、`pub_date` |
+| version | string | 否 | 客户端版本号；默认从 `metadataFile.version` 读取，手工填写时覆盖文件值 |
+| notes | string | 否 | 更新说明；默认从 `metadataFile.notes` 读取，手工填写时覆盖文件值 |
+| pubDate | string | 否 | 发布时间，ISO-8601；默认从 `metadataFile.pub_date` 读取，均为空时由服务端生成 |
+| forceUpdate | boolean | 否 | 是否对所有目标通道开启强制更新；为 `true` 时，低于本次发布版本的客户端只能访问更新检查和安装包下载 |
+| files | file[] | 是 | 一个或多个安装包/更新包文件；服务端按文件名匹配 `latest.json.platforms.{target}.url` 自动识别 target 和签名 |
+
+说明：
+
+1. 批量发布适合一次性把同一客户端版本发布到测试、正式等多个通道，并同时上传 macOS / Windows 等多个平台包。
+2. 平台 target 不需要管理员手工填写；服务端按上传安装包文件名匹配 `latest.json.platforms.{target}.url` 中的文件名，自动取得 target 和签名。
+3. 安装包文件名必须与对应 `latest.json` 平台 URL 指向的文件名一致，否则 Tauri updater 会签名校验失败。
+4. 同一次批量发布内的所有安装包必须解析为同一个版本号；不同版本应拆成多次发布。
+5. 若目标通道当前版本与本次版本不同，服务端会先保存该通道当前快照，再用本次安装包集合生成新的 `latest.json`；若版本相同，则合并或覆盖对应平台。
+6. 勾选强制更新前，必须确认本次目标通道的所有实际部署平台安装包均已上传，否则旧客户端会被禁止使用但无法下载对应平台更新。
+
+响应 `data`：目标通道的当前发布列表，每条结构同 `GET /admin/api/releases` 的 `ReleaseView`。
+
+```json
+[
+  {
+    "channel": "production",
+    "version": "1.2.13",
+    "platforms": [
+      {
+        "target": "darwin-aarch64",
+        "fileName": "MedHermes_1.2.13_aarch64.app.tar.gz",
+        "fileSize": 12345678,
+        "downloadUrl": "http://127.0.0.1:8080/v1/client/releases/production/files/darwin-aarch64/MedHermes_1.2.13_aarch64.app.tar.gz"
+      },
+      {
+        "target": "windows-x86_64",
+        "fileName": "MedHermes_1.2.13_x64-setup.nsis.zip",
+        "fileSize": 23456789,
+        "downloadUrl": "http://127.0.0.1:8080/v1/client/releases/production/files/windows-x86_64/MedHermes_1.2.13_x64-setup.nsis.zip"
+      }
+    ],
+    "target": "darwin-aarch64",
+    "fileName": "MedHermes_1.2.13_aarch64.app.tar.gz",
+    "downloadUrl": "http://127.0.0.1:8080/v1/client/releases/production/files/darwin-aarch64/MedHermes_1.2.13_aarch64.app.tar.gz",
+    "latestJsonUrl": "http://127.0.0.1:8080/v1/client/releases/production/latest.json",
+    "policyUrl": "http://127.0.0.1:8080/v1/client/releases/production/policy.json",
+    "pubDate": "2026-04-24T10:00:00Z",
+    "forceUpdate": true,
+    "minSupportedVersion": "1.2.13"
+  }
+]
+```
+
+### 3.2 管理端兼容上传单个客户端安装包
 
 `POST /admin/api/releases/upload`
 
-用途：管理员上传 Tauri updater 可识别的客户端安装包、签名和版本元数据，用于内网环境发布桌面端更新。
+用途：兼容旧管理端或联调脚本，上传单个通道、单个平台的 Tauri updater 安装包、签名和版本元数据。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -297,15 +361,15 @@ BODY_SHA256
 }
 ```
 
-### 3.2 管理端查询发布状态
+### 3.3 管理端查询发布状态
 
 `GET /admin/api/releases?channel=production`
 
 用途：返回指定通道当前可见版本；`channel` 为空时返回所有通道。
 
-返回的 `downloadUrl` 为当前版本当前平台安装包的公开下载地址，可用于首次安装分发；`latestJsonUrl` 仍用于 Tauri updater 自动更新。
+返回的 `platforms` 为当前版本下所有平台安装包；兼容字段 `target/fileName/downloadUrl` 指向首个平台安装包，可用于旧页面展示。`latestJsonUrl` 仍用于 Tauri updater 自动更新。
 
-### 3.3 管理端切换强制更新策略
+### 3.4 管理端切换强制更新策略
 
 `POST /admin/api/releases/policy`
 
@@ -328,7 +392,7 @@ BODY_SHA256
 2. 关闭强制更新时，`minSupportedVersion` 清空，旧客户端不再因版本低被业务接口拦截。
 3. 切换策略会同步更新当前版本的历史快照，确保后续回滚能恢复该版本当时的策略状态。
 
-### 3.4 管理端查询历史版本
+### 3.5 管理端查询历史版本
 
 `GET /admin/api/releases/history?channel=production`
 
@@ -353,7 +417,7 @@ BODY_SHA256
 ]
 ```
 
-### 3.5 管理端回滚到历史版本
+### 3.6 管理端回滚到历史版本
 
 `POST /admin/api/releases/rollback`
 
@@ -376,7 +440,7 @@ BODY_SHA256
 2. 如果当前发布目录中没有历史快照，服务端会把当前 `latest.json` 作为兼容历史记录展示；但只有已写入快照的版本才能执行回滚。
 3. 从一个版本切换到另一个版本时，服务端会先保存当前版本快照，确保刚发错的新版本也能被再次回滚回来。
 
-### 3.6 公开首次安装下载页
+### 3.7 公开首次安装下载页
 
 `GET /client-download?channel=production`
 
@@ -394,7 +458,7 @@ BODY_SHA256
 2. 若当前通道尚未上传安装包，页面展示“暂无可下载客户端”，并保留正式/测试通道切换入口。
 3. 下载按钮指向同一套公开文件接口：`/v1/client/releases/{channel}/files/{target}/{fileName}`。
 
-### 3.7 客户端检查更新策略
+### 3.8 客户端检查更新策略
 
 `GET /v1/client/releases/{channel}/policy.json`
 
@@ -437,7 +501,7 @@ Content-Type: application/json
 }
 ```
 
-### 3.8 客户端检查更新元数据
+### 3.9 客户端检查更新元数据
 
 `GET /v1/client/releases/{channel}/latest.json`
 
@@ -461,7 +525,7 @@ Content-Type: application/json
 }
 ```
 
-### 3.9 客户端下载安装包
+### 3.10 客户端下载安装包
 
 `GET /v1/client/releases/{channel}/files/{target}/{fileName}`
 

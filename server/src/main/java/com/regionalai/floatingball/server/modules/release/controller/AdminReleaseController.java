@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.release.controller;
 
 import com.regionalai.floatingball.server.common.api.ApiResponse;
 import com.regionalai.floatingball.server.common.util.RequestIdUtils;
+import com.regionalai.floatingball.server.modules.release.dto.ReleaseBatchUploadRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseHistoryView;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyUpdateRequest;
 import com.regionalai.floatingball.server.modules.release.dto.ReleaseRollbackRequest;
@@ -45,6 +46,12 @@ public class AdminReleaseController {
     public ApiResponse<ReleaseView> upload(@ModelAttribute ReleaseUploadRequest uploadRequest,
                                            HttpServletRequest request) {
         return ApiResponse.success(releaseService.upload(uploadRequest), RequestIdUtils.resolve(request));
+    }
+
+    @PostMapping("/upload/batch")
+    public ApiResponse<List<ReleaseView>> uploadBatch(@ModelAttribute ReleaseBatchUploadRequest uploadRequest,
+                                                      HttpServletRequest request) {
+        return ApiResponse.success(releaseService.uploadBatch(uploadRequest), RequestIdUtils.resolve(request));
     }
 
     @PostMapping("/policy")

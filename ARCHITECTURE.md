@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-07-01
+> 更新日期：2026-07-06
 
 ## 1. 项目定位
 
@@ -98,6 +98,10 @@ floating-ball-server/
 7. 出站安全门按 host 做本地限流和熔断；上游失败达到阈值后短暂拒绝同 host 后续出站，防止 AI / 语音 / PMPHAI 配置异常拖垮后台线程与连接资源。
 8. 连接使用 `ZHS16GBK` 等 Oracle 非 UTF 字符集的医院库时，发布包内必须包含与 `ojdbc8` 同版本的 `orai18n` 运行时依赖；否则服务可能在启动期读取初始化数据时因 `Non supported character set` 退出，导致 8080 端口未监听。
 9. 小山现场并行部署时，正式环境使用 `xiaoshan` profile，测试环境使用 `xiaoshan-test` profile；两者配置保持一致，测试环境仅把服务端口调整为 `9090`。
+10. 小山现场统一使用 `scripts/publish-xiaoshan.sh` 发布，命令必须显式指定 `testing` 或 `production`；脚本内固定环境目录、profile 和端口，不允许通过环境变量覆盖这些映射。
+11. 测试环境固定发布到 `/data/floating-ball-server-testing`，使用 `xiaoshan-test` profile 和 `9090` 端口；正式环境沿用当前运行目录 `/data`，使用 `/data/floating-ball-server.jar`、`/data/start-floating-ball-server.sh`、`xiaoshan` profile 和 `8080` 端口。未运行的 `/data/floating-ball-server-production` 不作为正式发布目标。
+12. 发布脚本先构建并校验 JAR，再上传到目标环境的临时文件；远端校验摘要、profile 配置、当前进程归属和端口归属后才停止目标服务。切换失败或健康检查失败时自动恢复该环境的上一版 JAR 和启动脚本，不得操作另一环境的 PID、JAR 或启动脚本。
+13. 测试环境一键发布使用 `./scripts/publish-xiaoshan.sh testing`；正式环境使用 `./scripts/publish-xiaoshan.sh production --confirm-production`，必须携带显式正式发布确认参数；脚本会为单次发布复用临时 SSH 控制连接，密码认证场景正常只需输入一次远程服务器密码，已配置 SSH key 时无需输入密码。
 
 ### 3.2 客户端安全基线
 
@@ -136,11 +140,11 @@ floating-ball-server/
 - 存储根目录由 `FB_RELEASE_STORAGE_DIR` / `floating-ball.release.storage-dir` 配置，默认 `${java.io.tmpdir}/floating-ball-server/releases`
 - 对外更新源地址可通过 `FB_RELEASE_PUBLIC_BASE_URL` / `floating-ball.release.public-base-url` 固定指定；为空时若请求 Host 为 `localhost` / `127.0.0.1`，服务端会尽量自动替换为本机局域网 IPv4
 - 上传大小由 `FB_RELEASE_MAX_FILE_SIZE` / `FB_RELEASE_MAX_REQUEST_SIZE` 控制，默认 `2048MB`
-- 管理端通过 `/admin/api/releases` 查看当前发布，通过 `/admin/api/releases/upload` 上传 Tauri `latest.json` 与安装包；服务端自动解析版本号、平台 target、签名和更新说明，并重写为内网下载地址；上传时可勾选强制更新，服务端会把当前发布版本写入 `policy.json` 的 `minSupportedVersion`
+- 管理端通过 `/admin/api/releases` 查看当前发布，通过 `/admin/api/releases/upload/batch` 一次选择多个发布通道和多个 Tauri 安装包；服务端基于同一份 `latest.json` 自动解析版本号、平台 target、签名和更新说明，并分别重写为各通道内网下载地址。平台 target 不再要求运维手工填写，服务端按上传安装包文件名匹配 `latest.json.platforms.{target}.url` 自动识别；`/admin/api/releases/upload` 保留单通道单安装包兼容入口。上传时可勾选强制更新，服务端会把每个目标通道的当前发布版本写入对应 `policy.json` 的 `minSupportedVersion`
 - 管理端“版本发布”列表展示当前安装包的公开下载地址，支持复制链接和浏览器直接打开；首次部署新客户端时可直接访问 `/client-download?channel=production` 选择平台下载安装包，无需 U 盘拷贝
 - 管理端通过 `/admin/api/releases/policy` 独立开启或关闭当前通道强制更新，不需要重新上传安装包；开启时最低可用版本固定为当前通道 `latestVersion`，关闭时清空 `minSupportedVersion`
 - 管理端通过 `/admin/api/releases/history` 查看历史发布快照，通过 `/admin/api/releases/rollback` 回滚到历史版本；回滚只恢复当前通道的 `latest.json` 与 `policy.json`，不会重新上传安装包
-- 每次上传新版本前，服务端会先把当前发布保存为历史快照；上传后也保存新版本快照。若同一版本分平台多次上传，服务端会合并同版本平台；若版本号变化，则重新开始该版本的 `platforms` 集合，避免把上一版本平台误混入新版本 `latest.json`
+- 每次上传新版本前，服务端会先把目标通道当前发布保存为历史快照；上传后也保存新版本快照。若同一版本分平台多次上传或批量上传，服务端会合并同版本平台；若版本号变化，则每个目标通道都重新开始该版本的 `platforms` 集合，避免把上一版本平台误混入新版本 `latest.json`
 - 客户端更新检测与策略查询不走设备鉴权，避免 Tauri updater 无法附带 `Authorization`；仅暴露静态安装包、Tauri 兼容元数据和强制更新策略，不暴露管理能力
 - 未上传版本的通道在访问 `/v1/client/releases/{channel}/latest.json` 时返回 `204 No Content`，作为 Tauri updater 可识别的“无可用更新”状态，不走业务异常日志
 - 设备业务接口通过 `DeviceAuthFilter` 统一执行强制更新拦截：`/v1/client/releases/**` 始终放行，其他 `/v1/*` 在 `forceUpdate=true` 且客户端版本低于 `minSupportedVersion` 时返回 `426 / UPDATE-REQUIRED`

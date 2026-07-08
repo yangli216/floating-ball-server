@@ -22,6 +22,7 @@ const UserLogView = () => import('../views/UserLogView.vue')
 const BusinessWorkflowDebugView = () => import('../views/BusinessWorkflowDebugView.vue')
 const FeedbackView = () => import('../views/FeedbackView.vue')
 const RecommendationPreferenceView = () => import('../views/RecommendationPreferenceView.vue')
+const PatientMemoryView = () => import('../views/PatientMemoryView.vue')
 const AnalyticsView = () => import('../views/AnalyticsView.vue')
 const FunctionUsageView = () => import('../views/FunctionUsageView.vue')
 const UserActivityView = () => import('../views/UserActivityView.vue')
@@ -55,6 +56,7 @@ const router = new Router({
     { path: '/business-workflow-debug', component: BusinessWorkflowDebugView, meta: { title: '业务调试' } },
     { path: '/feedbacks', component: FeedbackView, meta: { title: '反馈管理' } },
     { path: '/recommendation-preferences', component: RecommendationPreferenceView, meta: { title: '推荐偏好' } },
+    { path: '/patient-memories', component: PatientMemoryView, meta: { title: '患者记忆' } },
     { path: '/analytics', component: AnalyticsView, meta: { title: '统计分析' } },
     { path: '/function-usage', component: FunctionUsageView, meta: { title: '辅诊功能' } },
     { path: '/user-activity', component: UserActivityView, meta: { title: '用户活跃度' } },

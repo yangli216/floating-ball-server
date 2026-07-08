@@ -97,6 +97,7 @@ const menuItems = [
   { path: '/business-workflow-debug', label: '业务调试', icon: 'el-icon-connection' },
   { path: '/feedbacks', label: '反馈', icon: 'el-icon-chat-dot-square' },
   { path: '/recommendation-preferences', label: '推荐偏好', icon: 'el-icon-sort' },
+  { path: '/patient-memories', label: '患者记忆', icon: 'el-icon-collection' },
   { path: '/analytics', label: '统计分析', icon: 'el-icon-data-analysis' },
   { path: '/function-usage', label: '辅诊功能', icon: 'el-icon-s-data' },
   { path: '/user-activity', label: '用户活跃度', icon: 'el-icon-data-line' },
