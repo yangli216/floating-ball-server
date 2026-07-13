@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +39,10 @@ public class ConfigService {
     private static final String DEFAULT_AUDIO_MODEL = "whisper-1";
     private static final String DEFAULT_DASHSCOPE_AUDIO_MODEL = "qwen3-asr-flash";
     private static final String DEFAULT_DASHSCOPE_REALTIME_MODEL = "paraformer-realtime-v2";
+    private static final String DEFAULT_FUNASR_REALTIME_MODEL = "funasr-2pass";
     private static final String DEFAULT_SPEECH_PROVIDER = "openai-compatible";
     private static final String ALIYUN_SPEECH_PROVIDER = "aliyun-dashscope";
+    private static final String FUNASR_SPEECH_PROVIDER = "funasr-websocket";
 
     private final AiConfigMapper aiConfigMapper;
     private final AesUtils aesUtils;
@@ -169,6 +173,7 @@ public class ConfigService {
         String audioModel = resolveAudioModel(speechProvider, request.getAudioModel());
         target.setAudioModel(audioModel);
         target.setSpeechProvider(speechProvider);
+        target.setSpeechRealtimeUrl(normalizeOptionalUrl(request.getSpeechRealtimeUrl()));
         target.setSpeechModel(resolveSpeechModel(speechProvider, request.getSpeechModel(), audioModel));
         target.setKnowledgeBaseEnabled(Boolean.TRUE.equals(request.getKnowledgeBaseEnabled()) ? "1" : "0");
         target.setKnowledgeBaseBaseUrl(request.getKnowledgeBaseBaseUrl());
@@ -230,7 +235,14 @@ public class ConfigService {
             }
         }
         if (StringUtils.hasText(request.getSpeechProvider()) && normalizeSpeechProviderOrNull(request.getSpeechProvider()) == null) {
-            throw new BusinessException("语音服务提供方必须是 openai-compatible 或 aliyun-dashscope");
+            throw new BusinessException("语音服务提供方必须是 openai-compatible、aliyun-dashscope 或 funasr-websocket");
+        }
+        String speechProvider = normalizeSpeechProvider(request.getSpeechProvider());
+        if (FUNASR_SPEECH_PROVIDER.equals(speechProvider) && !StringUtils.hasText(request.getSpeechRealtimeUrl())) {
+            throw new BusinessException("FunASR 实时识别地址不能为空");
+        }
+        if (StringUtils.hasText(request.getSpeechRealtimeUrl())) {
+            validateWebSocketUrl(request.getSpeechRealtimeUrl());
         }
     }
 
@@ -276,6 +288,7 @@ public class ConfigService {
         String audioModel = resolveAudioModel(speechProvider, config.getAudioModel());
         resolved.setAudioModel(audioModel);
         resolved.setSpeechProvider(speechProvider);
+        resolved.setSpeechRealtimeUrl(normalizeOptionalUrl(config.getSpeechRealtimeUrl()));
         resolved.setSpeechModel(resolveSpeechModel(speechProvider, config.getSpeechModel(), audioModel));
         resolved.setKnowledgeBaseEnabled("1".equals(config.getKnowledgeBaseEnabled()));
         resolved.setKnowledgeBaseBaseUrl(config.getKnowledgeBaseBaseUrl());
@@ -320,6 +333,7 @@ public class ConfigService {
         String audioModel = resolveAudioModel(speechProvider, config.getAudioModel());
         view.setAudioModel(audioModel);
         view.setSpeechProvider(speechProvider);
+        view.setSpeechRealtimeUrl(config.getSpeechRealtimeUrl());
         view.setSpeechModel(resolveSpeechModel(speechProvider, config.getSpeechModel(), audioModel));
         view.setKnowledgeBaseEnabled(config.getKnowledgeBaseEnabled());
         view.setKnowledgeBaseBaseUrl(config.getKnowledgeBaseBaseUrl());
@@ -344,6 +358,22 @@ public class ConfigService {
             return value;
         }
         return value.replaceAll("/+$", "");
+    }
+
+    private String normalizeOptionalUrl(String value) {
+        return StringUtils.hasText(value) ? trimRightSlash(value.trim()) : null;
+    }
+
+    private void validateWebSocketUrl(String value) {
+        try {
+            URI uri = new URI(value.trim());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+            if (!("ws".equals(scheme) || "wss".equals(scheme)) || !StringUtils.hasText(uri.getHost())) {
+                throw new BusinessException("实时语音地址必须是有效的 ws:// 或 wss:// 地址");
+            }
+        } catch (URISyntaxException ex) {
+            throw new BusinessException("实时语音地址必须是有效的 ws:// 或 wss:// 地址");
+        }
     }
 
     private String resolveAudioModel(String speechProvider, String value) {
@@ -372,6 +402,9 @@ public class ConfigService {
         if (ALIYUN_SPEECH_PROVIDER.equals(speechProvider)) {
             return DEFAULT_DASHSCOPE_REALTIME_MODEL;
         }
+        if (FUNASR_SPEECH_PROVIDER.equals(speechProvider)) {
+            return DEFAULT_FUNASR_REALTIME_MODEL;
+        }
         return resolveAudioModel(speechProvider, audioModel);
     }
 
@@ -397,6 +430,9 @@ public class ConfigService {
         }
         if (ALIYUN_SPEECH_PROVIDER.equals(normalized) || "aliyun".equals(normalized) || "dashscope".equals(normalized)) {
             return ALIYUN_SPEECH_PROVIDER;
+        }
+        if (FUNASR_SPEECH_PROVIDER.equals(normalized) || "funasr".equals(normalized)) {
+            return FUNASR_SPEECH_PROVIDER;
         }
         return null;
     }

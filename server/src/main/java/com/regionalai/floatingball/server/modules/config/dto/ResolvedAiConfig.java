@@ -16,6 +16,7 @@ public class ResolvedAiConfig {
     private String audioBaseUrl;
     private String audioModel;
     private String speechProvider;
+    private String speechRealtimeUrl;
     private String speechModel;
     private Boolean knowledgeBaseEnabled;
     private String knowledgeBaseBaseUrl;

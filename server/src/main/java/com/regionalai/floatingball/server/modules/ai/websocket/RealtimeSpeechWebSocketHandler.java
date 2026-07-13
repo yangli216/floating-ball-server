@@ -36,6 +36,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(RealtimeSpeechWebSocketHandler.class);
 
     private static final String ALIYUN_SPEECH_PROVIDER = "aliyun-dashscope";
+    private static final String FUNASR_SPEECH_PROVIDER = "funasr-websocket";
     private static final String DEFAULT_REALTIME_MODEL = "paraformer-realtime-v2";
     private static final String DEFAULT_DASHSCOPE_WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference";
 
@@ -63,16 +64,21 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         }
 
         ResolvedAiConfig config = configService.resolveByDevice(device);
-        if (!ALIYUN_SPEECH_PROVIDER.equalsIgnoreCase(config.getSpeechProvider())) {
-            log.warn("realtime speech ws: connection rejected, speech provider not dashscope. deviceId={}, provider={}", device.getIdDevice(), config.getSpeechProvider());
-            sendErrorAndClose(session, "当前语音提供方未启用 DashScope 实时识别");
+        if (!isRealtimeProvider(config.getSpeechProvider())) {
+            log.warn("realtime speech ws: connection rejected, provider does not support realtime. deviceId={}, provider={}", device.getIdDevice(), config.getSpeechProvider());
+            sendErrorAndClose(session, "当前语音提供方未启用实时识别");
             return;
         }
 
-        String apiKey = resolveAudioApiKey(config);
-        if (!StringUtils.hasText(apiKey)) {
+        String apiKey = isDashScope(config) ? resolveAudioApiKey(config) : null;
+        if (isDashScope(config) && !StringUtils.hasText(apiKey)) {
             log.warn("realtime speech ws: connection rejected, no audio api key. deviceId={}", device.getIdDevice());
             sendErrorAndClose(session, "未配置语音服务密钥");
+            return;
+        }
+        if (isFunAsr(config) && !StringUtils.hasText(config.getSpeechRealtimeUrl())) {
+            log.warn("realtime speech ws: connection rejected, no FunASR realtime URL. deviceId={}", device.getIdDevice());
+            sendErrorAndClose(session, "未配置 FunASR 实时识别地址");
             return;
         }
 
@@ -116,7 +122,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         log.info("realtime speech ws: connection closed. sessionId={}, status={}", session.getId(), status);
         RealtimeProxySession proxySession = resolveProxySession(session);
         if (proxySession != null) {
-            proxySession.closeDashScope();
+            proxySession.closeUpstream();
         }
     }
 
@@ -126,7 +132,7 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         RealtimeProxySession proxySession = resolveProxySession(session);
         if (proxySession != null) {
             proxySession.sendError("实时语音连接异常：" + exception.getMessage());
-            proxySession.closeDashScope();
+            proxySession.closeUpstream();
         }
     }
 
@@ -138,8 +144,23 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         return StringUtils.hasText(config.getAudioApiKey()) ? config.getAudioApiKey() : config.getApiKey();
     }
 
+    private boolean isRealtimeProvider(String provider) {
+        return ALIYUN_SPEECH_PROVIDER.equalsIgnoreCase(provider) || FUNASR_SPEECH_PROVIDER.equalsIgnoreCase(provider);
+    }
+
+    private boolean isDashScope(ResolvedAiConfig config) {
+        return ALIYUN_SPEECH_PROVIDER.equalsIgnoreCase(config.getSpeechProvider());
+    }
+
+    private boolean isFunAsr(ResolvedAiConfig config) {
+        return FUNASR_SPEECH_PROVIDER.equalsIgnoreCase(config.getSpeechProvider());
+    }
+
     private String resolveRealtimeModel(ResolvedAiConfig config) {
         String model = StringUtils.hasText(config.getSpeechModel()) ? config.getSpeechModel().trim() : DEFAULT_REALTIME_MODEL;
+        if (isFunAsr(config)) {
+            return model;
+        }
         String lowerModel = model.toLowerCase();
         if ((lowerModel.startsWith("fun-asr") && lowerModel.contains("realtime"))
             || lowerModel.startsWith("paraformer-realtime")
@@ -150,10 +171,9 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         return DEFAULT_REALTIME_MODEL;
     }
 
-    private String resolveDashScopeWsUrl(ResolvedAiConfig config) {
-        String baseUrl = config.getAudioBaseUrl();
-        if (StringUtils.hasText(baseUrl) && baseUrl.trim().toLowerCase().startsWith("wss://")) {
-            return baseUrl.trim().replaceAll("/+$", "");
+    private String resolveRealtimeWsUrl(ResolvedAiConfig config) {
+        if (StringUtils.hasText(config.getSpeechRealtimeUrl())) {
+            return config.getSpeechRealtimeUrl().trim().replaceAll("/+$", "");
         }
         return DEFAULT_DASHSCOPE_WS_URL;
     }
@@ -189,87 +209,104 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         private final String taskId;
         private final List<byte[]> audioBuffer = new ArrayList<byte[]>();
         private final StringBuilder fullText = new StringBuilder();
+        private final FunAsrRealtimeProtocol funAsrProtocol;
         private OutboundCall outboundCall;
-        private WebSocketSession dashScopeSession;
+        private WebSocketSession upstreamSession;
         private boolean taskStarted;
         private boolean finishRequested;
+        private boolean finalSent;
         private boolean closed;
 
         private RealtimeProxySession(WebSocketSession clientSession, ResolvedAiConfig config) {
             this.clientSession = clientSession;
             this.config = config;
             this.taskId = UUID.randomUUID().toString().replace("-", "");
+            this.funAsrProtocol = isFunAsr(config) ? new FunAsrRealtimeProtocol() : null;
         }
 
         private void connect(String apiKey) {
             try {
                 WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
-                headers.setBearerAuth(apiKey);
-                String endpoint = resolveDashScopeWsUrl(config);
+                if (isDashScope(config)) {
+                    headers.setBearerAuth(apiKey);
+                }
+                String endpoint = resolveRealtimeWsUrl(config);
                 outboundCall = outboundSecurityService.acquireWebSocket(endpoint, "speech-realtime-ws");
-                WebSocketHandler dashScopeHandler = new DashScopeWebSocketHandler(this);
-                webSocketClient.doHandshake(dashScopeHandler, headers, outboundCall.getUri())
-                    .addCallback(this::onDashScopeConnected, this::onDashScopeConnectFailed);
+                WebSocketHandler upstreamHandler = new UpstreamWebSocketHandler(this);
+                webSocketClient.doHandshake(upstreamHandler, headers, outboundCall.getUri())
+                    .addCallback(this::onUpstreamConnected, this::onUpstreamConnectFailed);
             } catch (RuntimeException ex) {
                 markOutboundFailure(ex);
-                sendError("DashScope 实时语音连接创建失败：" + ex.getMessage());
+                sendError("实时语音连接创建失败：" + ex.getMessage());
             }
         }
 
-        private synchronized void onDashScopeConnected(WebSocketSession session) {
-            this.dashScopeSession = session;
+        private synchronized void onUpstreamConnected(WebSocketSession session) {
+            this.upstreamSession = session;
             markOutboundSuccess();
             try {
-                sendRunTask();
+                sendStartMessage();
             } catch (IOException ex) {
-                sendError("DashScope run-task 发送失败：" + ex.getMessage());
+                sendError("实时语音初始化消息发送失败：" + ex.getMessage());
             }
         }
 
-        private void onDashScopeConnectFailed(Throwable error) {
+        private void onUpstreamConnectFailed(Throwable error) {
             markOutboundFailure(error);
-            sendError("DashScope 实时语音连接失败：" + error.getMessage());
+            sendError("实时语音连接失败：" + error.getMessage());
         }
 
         private synchronized void forwardAudio(byte[] bytes) {
             if (closed) {
                 return;
             }
-            if (!taskStarted || dashScopeSession == null || !dashScopeSession.isOpen()) {
+            if (!taskStarted || upstreamSession == null || !upstreamSession.isOpen()) {
                 audioBuffer.add(bytes);
                 return;
             }
-            sendDashScopeBinary(bytes);
+            sendUpstreamBinary(bytes);
         }
 
         private synchronized void finish() {
             finishRequested = true;
-            if (taskStarted && dashScopeSession != null && dashScopeSession.isOpen()) {
-                sendFinishTask();
+            if (taskStarted && upstreamSession != null && upstreamSession.isOpen()) {
+                sendFinishMessage();
             }
         }
 
-        private synchronized void closeDashScope() {
+        private synchronized void closeUpstream() {
             closed = true;
-            if (dashScopeSession != null && dashScopeSession.isOpen()) {
+            if (upstreamSession != null && upstreamSession.isOpen()) {
                 try {
-                    dashScopeSession.close();
+                    upstreamSession.close();
                 } catch (IOException ex) {
-                    log.debug("realtime speech ws: failed to close dashscope session. error={}", ex.getMessage());
+                    log.debug("realtime speech ws: failed to close upstream session. error={}", ex.getMessage());
                 }
             }
         }
 
-        private synchronized void onDashScopeMessage(String payload) {
+        private synchronized void onUpstreamMessage(String payload) {
             try {
                 JsonNode root = objectMapper.readTree(payload);
+                if (isFunAsr(config)) {
+                    onFunAsrMessage(root);
+                    return;
+                }
+                onDashScopeMessage(root);
+            } catch (Exception ex) {
+                sendError("实时语音响应解析失败：" + ex.getMessage());
+            }
+        }
+
+        private void onDashScopeMessage(JsonNode root) {
+            try {
                 JsonNode header = root.path("header");
                 String event = header.path("event").asText();
                 if ("task-started".equals(event)) {
                     taskStarted = true;
                     flushAudioBuffer();
                     if (finishRequested) {
-                        sendFinishTask();
+                        sendFinishMessage();
                     }
                     return;
                 }
@@ -285,23 +322,52 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
                 }
                 if ("task-finished".equals(event)) {
                     sendFinal();
-                    closeDashScope();
+                    closeUpstream();
                     return;
                 }
                 if ("task-failed".equals(event)) {
                     String message = header.path("error_message").asText(header.path("message").asText("DashScope 实时语音识别失败"));
                     sendError(message);
-                    closeDashScope();
+                    closeUpstream();
                 }
             } catch (Exception ex) {
                 sendError("DashScope 实时语音响应解析失败：" + ex.getMessage());
             }
         }
 
-        private void onDashScopeClosed() {
-            if (!closed && clientSession.isOpen()) {
+        private void onFunAsrMessage(JsonNode root) {
+            FunAsrRealtimeProtocol.Result result = funAsrProtocol.accept(root);
+            if (StringUtils.hasText(result.getErrorMessage())) {
+                sendError(result.getErrorMessage());
+                closeUpstream();
+                return;
+            }
+            if (StringUtils.hasText(result.getText())) {
+                sendText(result.getText(), result.isSentenceEnd());
+            }
+            if (result.isFinalSignal()) {
+                sendFinal();
+                closeUpstream();
+            }
+        }
+
+        private void onUpstreamClosed() {
+            if (!finalSent && clientSession.isOpen()) {
                 sendFinal();
             }
+        }
+
+        private void sendStartMessage() throws IOException {
+            if (isFunAsr(config)) {
+                upstreamSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(funAsrProtocol.startPayload())));
+                taskStarted = true;
+                flushAudioBuffer();
+                if (finishRequested) {
+                    sendFinishMessage();
+                }
+                return;
+            }
+            sendRunTask();
         }
 
         private void sendRunTask() throws IOException {
@@ -325,11 +391,15 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
             Map<String, Object> message = new LinkedHashMap<String, Object>();
             message.put("header", header);
             message.put("payload", body);
-            dashScopeSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
+            upstreamSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
         }
 
-        private void sendFinishTask() {
+        private void sendFinishMessage() {
             try {
+                if (isFunAsr(config)) {
+                    upstreamSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(funAsrProtocol.finishPayload())));
+                    return;
+                }
                 Map<String, Object> header = new LinkedHashMap<String, Object>();
                 header.put("action", "finish-task");
                 header.put("task_id", taskId);
@@ -341,24 +411,24 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
                 Map<String, Object> message = new LinkedHashMap<String, Object>();
                 message.put("header", header);
                 message.put("payload", body);
-                dashScopeSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
+                upstreamSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
             } catch (IOException ex) {
-                sendError("DashScope finish-task 发送失败：" + ex.getMessage());
+                sendError("实时语音结束消息发送失败：" + ex.getMessage());
             }
         }
 
         private void flushAudioBuffer() {
             for (byte[] bytes : audioBuffer) {
-                sendDashScopeBinary(bytes);
+                sendUpstreamBinary(bytes);
             }
             audioBuffer.clear();
         }
 
-        private void sendDashScopeBinary(byte[] bytes) {
+        private void sendUpstreamBinary(byte[] bytes) {
             try {
-                dashScopeSession.sendMessage(new BinaryMessage(bytes));
+                upstreamSession.sendMessage(new BinaryMessage(bytes));
             } catch (IOException ex) {
-                sendError("DashScope 音频帧发送失败：" + ex.getMessage());
+                sendError("实时语音音频帧发送失败：" + ex.getMessage());
             }
         }
 
@@ -371,9 +441,13 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         }
 
         private void sendFinal() {
+            if (finalSent) {
+                return;
+            }
+            finalSent = true;
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("type", "final");
-            payload.put("text", fullText.toString());
+            payload.put("text", funAsrProtocol == null ? fullText.toString() : funAsrProtocol.getFullText());
             sendClient(payload);
         }
 
@@ -402,30 +476,30 @@ public class RealtimeSpeechWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
-    private final class DashScopeWebSocketHandler extends AbstractWebSocketHandler {
+    private final class UpstreamWebSocketHandler extends AbstractWebSocketHandler {
 
         private final RealtimeProxySession proxySession;
 
-        private DashScopeWebSocketHandler(RealtimeProxySession proxySession) {
+        private UpstreamWebSocketHandler(RealtimeProxySession proxySession) {
             this.proxySession = proxySession;
         }
 
         @Override
         public void handleMessage(WebSocketSession session, WebSocketMessage<?> message) {
             if (message instanceof TextMessage) {
-                proxySession.onDashScopeMessage(((TextMessage) message).getPayload());
+                proxySession.onUpstreamMessage(((TextMessage) message).getPayload());
             }
         }
 
         @Override
         public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-            proxySession.onDashScopeClosed();
+            proxySession.onUpstreamClosed();
         }
 
         @Override
         public void handleTransportError(WebSocketSession session, Throwable exception) {
             proxySession.markOutboundFailure(exception);
-            proxySession.sendError("DashScope 实时语音连接异常：" + exception.getMessage());
+            proxySession.sendError("实时语音连接异常：" + exception.getMessage());
         }
     }
 }

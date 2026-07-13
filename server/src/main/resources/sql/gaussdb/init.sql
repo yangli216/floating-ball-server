@@ -145,6 +145,7 @@ CREATE TABLE c_ai_config (
     audio_base_url           VARCHAR(500),
     audio_model              VARCHAR(128),
     speech_provider          VARCHAR(64),
+    speech_realtime_url      VARCHAR(500),
     speech_model             VARCHAR(128),
     knowledge_base_enabled   CHAR(1) DEFAULT '0' NOT NULL,
     knowledge_base_base_url  VARCHAR(500),
@@ -180,6 +181,7 @@ COMMENT ON COLUMN c_ai_config.audio_api_key_encrypted IS '加密后的语音接�
 COMMENT ON COLUMN c_ai_config.audio_base_url IS '语音批量转写 HTTP(S) 基础地址';
 COMMENT ON COLUMN c_ai_config.audio_model IS '语音模型名称';
 COMMENT ON COLUMN c_ai_config.speech_provider IS '语音服务提供商';
+COMMENT ON COLUMN c_ai_config.speech_realtime_url IS '实时语音识别 WebSocket 上游地址';
 COMMENT ON COLUMN c_ai_config.speech_model IS '实时语音识别模型';
 COMMENT ON COLUMN c_ai_config.knowledge_base_enabled IS '知识库开关';
 COMMENT ON COLUMN c_ai_config.knowledge_base_base_url IS '知识库服务地址';

@@ -68,13 +68,13 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 6. 默认区域 `REGION001`
 7. 默认机构 `ORG001`；`c_ai_org.cd_org` 必填，并通过 `uk_c_ai_org_code_active` 保证激活机构编码唯一
 8. 默认管理员 `admin`
-9. 默认 AI 配置 `CFG001`
+9. 默认 AI 配置 `CFG001`；实时语音 WebSocket 上游独立保存在 `speech_realtime_url`，自建 FunASR 使用 `speech_provider=funasr-websocket`
 10. 脚本末尾显式 `COMMIT`
 
 说明：
 
 1. 默认 AI 配置仅用于打通 `register -> bootstrap -> audit` 的启动联调链路
-2. 真正的上游 AI 地址、密钥、模型请在删库重建后再通过管理端修改
+2. 真正的上游 AI 地址、密钥、模型请在删库重建后再通过管理端修改；HTTP 批量转写地址与 `speech_realtime_url` 实时 WebSocket 地址必须分开配置
 3. 当前工程交付采用“目标 schema 初始化/重建 + 重跑 `init.sql`”，不再在仓库中保留常驻增量补丁脚本
 4. 执行 `init.sql` 前请确认当前登录 schema 就是 `RBMH_AI`；脚本本身不再依赖 SQL*Plus 变量做前置校验
 5. 区域与机构的 `sd_status` 是启用/停用状态；`fg_active` 只表示逻辑删除/无效记录。管理端统计筛选只统计 `fg_active='1' AND sd_status='1'` 的区域和机构。

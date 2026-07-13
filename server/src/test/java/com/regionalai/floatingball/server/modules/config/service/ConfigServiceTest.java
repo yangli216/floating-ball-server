@@ -89,6 +89,7 @@ class ConfigServiceTest {
         assertEquals("https://org.example.com", resolved.getAudioBaseUrl());
         assertEquals("whisper-1", resolved.getAudioModel());
         assertEquals("openai-compatible", resolved.getSpeechProvider());
+        assertEquals(null, resolved.getSpeechRealtimeUrl());
         assertEquals("whisper-1", resolved.getSpeechModel());
         assertTrue(Boolean.TRUE.equals(resolved.getReviewerCheckExaminationEnabled()));
         assertTrue(resolved.getFeatures().get("voice"));
@@ -206,7 +207,58 @@ class ConfigServiceTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> configService.save(request));
 
-        assertEquals("语音服务提供方必须是 openai-compatible 或 aliyun-dashscope", ex.getMessage());
+        assertEquals("语音服务提供方必须是 openai-compatible、aliyun-dashscope 或 funasr-websocket", ex.getMessage());
+        verify(aiConfigMapper, never()).insert(any(AiConfig.class));
+    }
+
+    @Test
+    void saveShouldPersistFunAsrRealtimeConfiguration() {
+        AiConfigSaveRequest request = new AiConfigSaveRequest();
+        request.setNaConfig("FunASR 配置");
+        request.setApiBaseUrl("https://llm.example.com");
+        request.setModelName("deepseek-chat");
+        request.setAudioBaseUrl("https://speech-fallback.example.com/v1");
+        request.setSpeechProvider("funasr");
+        request.setSpeechRealtimeUrl("ws://10.35.34.83:18111/");
+
+        AiConfigView view = configService.save(request);
+
+        org.mockito.ArgumentCaptor<AiConfig> captor = org.mockito.ArgumentCaptor.forClass(AiConfig.class);
+        verify(aiConfigMapper).insert(captor.capture());
+        AiConfig saved = captor.getValue();
+        assertEquals("funasr-websocket", saved.getSpeechProvider());
+        assertEquals("ws://10.35.34.83:18111", saved.getSpeechRealtimeUrl());
+        assertEquals("funasr-2pass", saved.getSpeechModel());
+        assertEquals("whisper-1", saved.getAudioModel());
+        assertEquals("ws://10.35.34.83:18111", view.getSpeechRealtimeUrl());
+    }
+
+    @Test
+    void saveShouldRequireFunAsrRealtimeUrl() {
+        AiConfigSaveRequest request = new AiConfigSaveRequest();
+        request.setNaConfig("FunASR 配置");
+        request.setApiBaseUrl("https://llm.example.com");
+        request.setModelName("deepseek-chat");
+        request.setSpeechProvider("funasr-websocket");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> configService.save(request));
+
+        assertEquals("FunASR 实时识别地址不能为空", ex.getMessage());
+        verify(aiConfigMapper, never()).insert(any(AiConfig.class));
+    }
+
+    @Test
+    void saveShouldRejectInvalidRealtimeUrlProtocol() {
+        AiConfigSaveRequest request = new AiConfigSaveRequest();
+        request.setNaConfig("FunASR 配置");
+        request.setApiBaseUrl("https://llm.example.com");
+        request.setModelName("deepseek-chat");
+        request.setSpeechProvider("funasr-websocket");
+        request.setSpeechRealtimeUrl("http://10.35.34.83:18111");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> configService.save(request));
+
+        assertEquals("实时语音地址必须是有效的 ws:// 或 wss:// 地址", ex.getMessage());
         verify(aiConfigMapper, never()).insert(any(AiConfig.class));
     }
 

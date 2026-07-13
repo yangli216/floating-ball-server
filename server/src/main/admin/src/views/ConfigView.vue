@@ -121,7 +121,7 @@
               </el-form-item>
               <el-form-item label="语音接口密钥">
                 <el-input v-model.trim="form.audioApiKey" show-password maxlength="1000" placeholder="留空则复用主模型接口密钥…" />
-                <p class="form-hint">语音供应商或账号与主模型不一致时必须填写。</p>
+                <p class="form-hint">用于批量转写上游；FunASR 原生实时连接不使用该密钥。</p>
               </el-form-item>
               <el-form-item label="转写模型">
                 <el-input v-model.trim="form.audioModel" maxlength="128" placeholder="例如 whisper-1" />
@@ -138,9 +138,18 @@
                 </el-select>
                 <p class="form-hint">{{ speechProviderHint }}</p>
               </el-form-item>
+              <el-form-item label="实时识别地址" prop="speechRealtimeUrl" :rules="speechRealtimeUrlRules">
+                <el-input
+                  v-model.trim="form.speechRealtimeUrl"
+                  maxlength="500"
+                  :disabled="!isRealtimeSpeechProvider"
+                  :placeholder="speechRealtimeUrlPlaceholder"
+                />
+                <p class="form-hint">服务端连接的 WebSocket 地址；FunASR 必填，DashScope 留空时使用官方地址。</p>
+              </el-form-item>
               <el-form-item label="桌面端显示模型">
                 <el-input v-model.trim="form.speechModel" maxlength="128" :placeholder="speechModelPlaceholder" />
-                <p class="form-hint">DashScope 时为 /api-ws/v1/inference 实时识别模型，默认 paraformer-realtime-v2，也可填 Fun-ASR/Gummy/Paraformer realtime 模型；OpenAI 兼容时仅用于桌面端展示。</p>
+                <p class="form-hint">DashScope 默认为 paraformer-realtime-v2；FunASR 默认为 funasr-2pass；OpenAI 兼容时仅用于桌面端展示。</p>
               </el-form-item>
             </div>
           </section>
@@ -253,9 +262,11 @@ import { CodeTag, SegmentedSwitch, StatusPill, TableAction } from '../components
 const DEFAULT_AUDIO_MODEL = 'whisper-1'
 const DEFAULT_DASHSCOPE_AUDIO_MODEL = 'qwen3-asr-flash'
 const DEFAULT_DASHSCOPE_REALTIME_MODEL = 'paraformer-realtime-v2'
+const DEFAULT_FUNASR_REALTIME_MODEL = 'funasr-2pass'
 const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 const DEFAULT_SPEECH_PROVIDER = 'openai-compatible'
 const ALIYUN_SPEECH_PROVIDER = 'aliyun-dashscope'
+const FUNASR_SPEECH_PROVIDER = 'funasr-websocket'
 const SPEECH_PROVIDER_OPTIONS = [
   {
     value: DEFAULT_SPEECH_PROVIDER,
@@ -265,7 +276,12 @@ const SPEECH_PROVIDER_OPTIONS = [
   {
     value: ALIYUN_SPEECH_PROVIDER,
     label: '阿里云 DashScope',
-    description: '下发给桌面端作为 DashScope 语音提供方标识。'
+    description: '通过区域后台代理 DashScope 实时语音协议。'
+  },
+  {
+    value: FUNASR_SPEECH_PROVIDER,
+    label: 'FunASR WebSocket',
+    description: '通过区域后台连接自建 FunASR 原生 2pass WebSocket 服务。'
   }
 ]
 
@@ -273,6 +289,9 @@ function normalizeSpeechProvider(value) {
   const normalized = String(value || '').trim().toLowerCase()
   if (normalized === 'aliyun' || normalized === 'dashscope' || normalized === ALIYUN_SPEECH_PROVIDER) {
     return ALIYUN_SPEECH_PROVIDER
+  }
+  if (normalized === 'funasr' || normalized === FUNASR_SPEECH_PROVIDER) {
+    return FUNASR_SPEECH_PROVIDER
   }
   return DEFAULT_SPEECH_PROVIDER
 }
@@ -287,6 +306,9 @@ function resolveSpeechModel(provider, speechModel, audioModel) {
   }
   if (normalizedProvider === ALIYUN_SPEECH_PROVIDER) {
     return DEFAULT_DASHSCOPE_REALTIME_MODEL
+  }
+  if (normalizedProvider === FUNASR_SPEECH_PROVIDER) {
+    return DEFAULT_FUNASR_REALTIME_MODEL
   }
   return audioModel || DEFAULT_AUDIO_MODEL
 }
@@ -314,6 +336,7 @@ function createDefaultForm() {
     audioApiKey: '',
     audioModel: DEFAULT_AUDIO_MODEL,
     speechProvider: DEFAULT_SPEECH_PROVIDER,
+    speechRealtimeUrl: '',
     speechModel: DEFAULT_AUDIO_MODEL,
     knowledgeBaseEnabled: false,
     knowledgeBaseBaseUrl: '',
@@ -376,10 +399,35 @@ export default {
       const option = SPEECH_PROVIDER_OPTIONS.find(item => item.value === provider)
       return option ? option.description : ''
     },
+    isFunAsrProvider() {
+      return normalizeSpeechProvider(this.form.speechProvider) === FUNASR_SPEECH_PROVIDER
+    },
+    isRealtimeSpeechProvider() {
+      return normalizeSpeechProvider(this.form.speechProvider) !== DEFAULT_SPEECH_PROVIDER
+    },
+    speechRealtimeUrlPlaceholder() {
+      if (this.isFunAsrProvider) {
+        return '例如 ws://funasr.internal:10095'
+      }
+      return this.isRealtimeSpeechProvider ? '留空则使用 DashScope 官方地址…' : '当前提供方不使用实时地址'
+    },
+    speechRealtimeUrlRules() {
+      const rules = []
+      if (this.isFunAsrProvider) {
+        rules.push({ required: true, message: '请输入 FunASR 实时识别地址', trigger: 'blur' })
+      }
+      rules.push({
+        pattern: /^wss?:\/\/[^\s/]+(?::\d+)?(?:\/.*)?$/i,
+        message: '请输入有效的 ws:// 或 wss:// 地址',
+        trigger: 'blur'
+      })
+      return rules
+    },
     speechModelPlaceholder() {
-      return normalizeSpeechProvider(this.form.speechProvider) === ALIYUN_SPEECH_PROVIDER
-        ? DEFAULT_DASHSCOPE_REALTIME_MODEL
-        : (this.form.audioModel || DEFAULT_AUDIO_MODEL)
+      const provider = normalizeSpeechProvider(this.form.speechProvider)
+      if (provider === ALIYUN_SPEECH_PROVIDER) return DEFAULT_DASHSCOPE_REALTIME_MODEL
+      if (provider === FUNASR_SPEECH_PROVIDER) return DEFAULT_FUNASR_REALTIME_MODEL
+      return this.form.audioModel || DEFAULT_AUDIO_MODEL
     }
   },
   async mounted() {
@@ -452,6 +500,7 @@ export default {
         audioApiKey: '',
         audioModel,
         speechProvider,
+        speechRealtimeUrl: row.speechRealtimeUrl || '',
         speechModel: resolveSpeechModel(speechProvider, row.speechModel || '', audioModel),
         knowledgeBaseEnabled: flagToBoolean(row.knowledgeBaseEnabled),
         knowledgeBaseBaseUrl: row.knowledgeBaseBaseUrl || '',
@@ -481,7 +530,7 @@ export default {
     handleSpeechProviderChange(provider) {
       const normalized = normalizeSpeechProvider(provider)
       this.form.speechProvider = normalized
-      const defaultModels = [DEFAULT_AUDIO_MODEL, DEFAULT_DASHSCOPE_AUDIO_MODEL, DEFAULT_DASHSCOPE_REALTIME_MODEL]
+      const defaultModels = [DEFAULT_AUDIO_MODEL, DEFAULT_DASHSCOPE_AUDIO_MODEL, DEFAULT_DASHSCOPE_REALTIME_MODEL, DEFAULT_FUNASR_REALTIME_MODEL]
       if (normalized === ALIYUN_SPEECH_PROVIDER) {
         if (!this.form.audioBaseUrl) {
           this.form.audioBaseUrl = DEFAULT_DASHSCOPE_BASE_URL
@@ -489,12 +538,18 @@ export default {
         if (!this.form.audioModel || defaultModels.indexOf(this.form.audioModel) > -1) {
           this.form.audioModel = DEFAULT_DASHSCOPE_AUDIO_MODEL
         }
-      } else if (!this.form.audioModel || defaultModels.indexOf(this.form.audioModel) > -1) {
-        this.form.audioModel = DEFAULT_AUDIO_MODEL
+      } else {
+        if (normalized === FUNASR_SPEECH_PROVIDER && this.form.audioBaseUrl === DEFAULT_DASHSCOPE_BASE_URL) {
+          this.form.audioBaseUrl = ''
+        }
+        if (!this.form.audioModel || defaultModels.indexOf(this.form.audioModel) > -1) {
+          this.form.audioModel = DEFAULT_AUDIO_MODEL
+        }
       }
       if (!this.form.speechModel || defaultModels.indexOf(this.form.speechModel) > -1) {
         this.form.speechModel = resolveSpeechModel(normalized, '', this.form.audioModel)
       }
+      this.$nextTick(() => this.$refs.formRef && this.$refs.formRef.clearValidate('speechRealtimeUrl'))
     },
     resetForm() {
       this.form = createDefaultForm()
@@ -549,6 +604,7 @@ export default {
             audioApiKey: this.form.audioApiKey,
             audioModel,
             speechProvider,
+            speechRealtimeUrl: this.form.speechRealtimeUrl,
             speechModel: resolveSpeechModel(speechProvider, this.form.speechModel, audioModel),
             knowledgeBaseEnabled: this.form.knowledgeBaseEnabled,
             knowledgeBaseBaseUrl: this.form.knowledgeBaseBaseUrl,
@@ -612,6 +668,7 @@ export default {
         audioApiKey: '',
         audioModel,
         speechProvider,
+        speechRealtimeUrl: row.speechRealtimeUrl || '',
         speechModel: resolveSpeechModel(speechProvider, row.speechModel || '', audioModel),
         knowledgeBaseEnabled: flagToBoolean(row.knowledgeBaseEnabled),
         knowledgeBaseBaseUrl: row.knowledgeBaseBaseUrl || '',

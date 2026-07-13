@@ -52,6 +52,9 @@ public class AiConfig extends BaseEntity {
     @TableField("speech_provider")
     private String speechProvider;
 
+    @TableField("speech_realtime_url")
+    private String speechRealtimeUrl;
+
     @TableField("speech_model")
     private String speechModel;
 

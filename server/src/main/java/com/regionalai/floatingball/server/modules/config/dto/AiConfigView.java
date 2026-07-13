@@ -18,6 +18,7 @@ public class AiConfigView {
     private String audioBaseUrl;
     private String audioModel;
     private String speechProvider;
+    private String speechRealtimeUrl;
     private String speechModel;
     private String knowledgeBaseEnabled;
     private String knowledgeBaseBaseUrl;
