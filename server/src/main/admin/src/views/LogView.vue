@@ -181,6 +181,7 @@
       title="日志详情"
       :visible.sync="payloadDialogVisible"
       width="88%"
+      top="4vh"
       custom-class="log-detail-dialog"
     >
       <div v-if="payloadRecord" class="detail-grid">
@@ -229,13 +230,27 @@
         <section
           v-for="section in payloadDetailSections"
           :key="section.key"
-          class="payload-section"
+          :class="['payload-section', section.collapsed ? 'is-collapsed' : '']"
         >
           <div class="payload-section__head">
-            <span class="payload-section__title">{{ section.title }}</span>
+            <button
+              type="button"
+              class="payload-section__toggle"
+              :aria-expanded="!section.collapsed"
+              :aria-label="`${section.collapsed ? '展开' : '收起'}${section.title}`"
+              @click="togglePayloadSection(section)"
+            >
+              <i :class="section.collapsed ? 'el-icon-arrow-right' : 'el-icon-arrow-down'" />
+              <span class="payload-section__title">{{ section.title }}</span>
+            </button>
             <span class="payload-section__status">{{ section.status }}</span>
           </div>
-          <pre class="code-block">{{ section.content }}</pre>
+          <json-detail-viewer
+            v-if="!section.collapsed"
+            :value="section.value"
+            :raw-value="section.rawValue"
+            :empty-text="section.emptyText"
+          />
         </section>
       </div>
       <span slot="footer">
@@ -247,6 +262,7 @@
 
 <script>
 import http from '../api/http'
+import JsonDetailViewer from '../components/log/JsonDetailViewer.vue'
 import { CodeTag, TableAction } from '../components/ui'
 
 const MODULE_LABELS = {
@@ -364,6 +380,7 @@ function createDefaultFilters() {
 export default {
   components: {
     CodeTag,
+    JsonDetailViewer,
     TableAction
   },
   data() {
@@ -376,7 +393,6 @@ export default {
       filters: createDefaultFilters(),
       payloadDialogVisible: false,
       payloadRecord: null,
-      payloadDetailText: '无原始数据',
       payloadDetailSections: [],
       moduleOptions: MODULE_OPTIONS,
       logTypeOptions: [
@@ -438,7 +454,6 @@ export default {
     },
     openRawData(row) {
       this.payloadRecord = row
-      this.payloadDetailText = this.formatRawDataDetail(row.payloadJson)
       this.payloadDetailSections = this.buildPayloadDetailSections(row)
       this.payloadDialogVisible = true
     },
@@ -604,7 +619,10 @@ export default {
           key: section.key,
           title: section.title,
           status: hasFullValue ? '已完整记录' : hasFallback ? '仅有摘要/兼容字段' : section.emptyText,
-          content: this.formatPayloadValue(value, section.emptyText)
+          value,
+          rawValue: section.key === 'payload' && row ? row.payloadJson : value,
+          emptyText: section.emptyText,
+          collapsed: false
         }
       })
     },
@@ -634,42 +652,10 @@ export default {
       if (typeof value === 'string') {
         return !!this.normalizeText(value)
       }
-      if (Array.isArray(value)) {
-        return value.length > 0
-      }
-      if (typeof value === 'object') {
-        return Object.keys(value).length > 0
-      }
       return true
     },
-    formatPayloadValue(value, emptyText) {
-      if (!this.hasPayloadContent(value)) {
-        return emptyText
-      }
-      if (typeof value === 'string') {
-        const text = this.normalizeText(value)
-        try {
-          return JSON.stringify(JSON.parse(text), null, 2)
-        } catch (error) {
-          return text
-        }
-      }
-      try {
-        return JSON.stringify(value, null, 2)
-      } catch (error) {
-        return String(value)
-      }
-    },
-    formatRawDataDetail(value) {
-      const text = this.normalizeText(value)
-      if (!text) {
-        return '无原始数据'
-      }
-      try {
-        return JSON.stringify(JSON.parse(text), null, 2)
-      } catch (error) {
-        return text
-      }
+    togglePayloadSection(section) {
+      section.collapsed = !section.collapsed
     },
     truncate(value, maxLength) {
       if (!value || value.length <= maxLength) {
@@ -752,7 +738,7 @@ export default {
 
 .detail-card {
   padding: 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #F9FCFB;
   border: 0.5px solid #E8EEEC;
 }
@@ -776,6 +762,13 @@ export default {
 
 .payload-section {
   min-width: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color-light);
+}
+
+.payload-section:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .payload-section__head {
@@ -784,6 +777,32 @@ export default {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.payload-section.is-collapsed .payload-section__head {
+  margin-bottom: 0;
+}
+
+.payload-section__toggle {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px 3px 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.payload-section__toggle:hover {
+  color: var(--color-primary-hover);
+}
+
+.payload-section__toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .payload-section__title {
@@ -798,17 +817,14 @@ export default {
   white-space: nowrap;
 }
 
-.code-block {
-  margin: 0;
-  padding: 14px;
-  max-height: 320px;
-  overflow: auto;
-  border-radius: 8px;
-  background: #F1EFE8;
-  color: #444441;
-  font-size: 12px;
-  line-height: 1.6;
-  font-family: var(--font-mono, SFMono-Regular, Menlo, Consolas, monospace);
+:deep(.log-detail-dialog) {
+  max-width: 1760px;
+}
+
+:deep(.log-detail-dialog .el-dialog__body) {
+  max-height: 82vh;
+  padding-top: 14px;
+  overflow-y: auto;
 }
 
 @media (max-width: 960px) {
@@ -818,6 +834,15 @@ export default {
   .filter-select,
   .filter-date {
     width: 100%;
+  }
+
+  .payload-section__head {
+    align-items: flex-start;
+  }
+
+  .payload-section__status {
+    white-space: normal;
+    text-align: right;
   }
 }
 </style>

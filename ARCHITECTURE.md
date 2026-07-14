@@ -262,7 +262,7 @@ floating-ball-server/
 5. 客户端本地只保留轻量失败重试队列，不再把区域化操作日志落本地 SQLite；服务端仍按同一批量接口落库
 6. 服务端兼容旧载荷：若未显式提供 `module/action/title/sourceModule/scene/result`，则回退从 `operationType/operationName/success` 与 `details.traceId / details.consultationId` 等字段推导
 7. 服务端写入 `c_ai_op_log`；`id_org` 继续来自设备鉴权，`id_his_org/na_his_org` 来自桌面端 SDK handshake 上下文，两者不得互相覆盖
-8. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选；详情弹窗必须把完整入参、完整出参与原始 payload 分区展示，不能只展示摘要字段。
+8. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选；详情弹窗必须把完整入参、完整出参与原始 payload 分区展示，不能只展示摘要字段。JSON 默认使用可折叠的结构化视图，完整 JSON 字符串字段递归解析为对象或数组，普通长文本按真实换行折行展示；超大内容的结构化视图使用全树节点预算并在工具栏提示截断，原文仍保留完整内容供查看和复制。
 9. `c_ai_op_log` 是审计事实源，只回答“发生过哪些技术/业务操作、链路如何排障”，不得直接作为辅诊功能调用次数统计源
 10. 服务端自身产生的成功代理日志必须可靠落库；若成功调用上游后审计日志写入失败，接口最终返回业务失败。失败代理调用的补充审计日志写入失败时必须 error 级别记录完整异常，保留原始业务失败语义。
 
