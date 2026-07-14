@@ -8,6 +8,7 @@ import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageIte
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQueryDTO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageResponseVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageTrendVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.HisOrgOptionVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.service.AnalyticsService;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,6 +71,7 @@ class AdminAnalyticsControllerTest {
                 .param("dateFrom", "2026-05-01")
                 .param("dateTo", "2026-05-02")
                 .param("idOrg", "ORG001")
+                .param("hisOrgId", "HIS-ORG-001")
                 .header("X-Request-Id", "RID-analytics-summary"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("0"))
@@ -95,6 +97,7 @@ class AdminAnalyticsControllerTest {
         verify(analyticsService).getSummary(queryCaptor.capture());
         assertEquals("2026-05-01", queryCaptor.getValue().getDateFrom());
         assertEquals("ORG001", queryCaptor.getValue().getIdOrg());
+        assertEquals("HIS-ORG-001", queryCaptor.getValue().getHisOrgId());
     }
 
     @Test
@@ -150,5 +153,20 @@ class AdminAnalyticsControllerTest {
             .andExpect(jsonPath("$.requestId").value("RID-analytics-options"))
             .andExpect(jsonPath("$.data[0]").value("语音问诊"))
             .andExpect(jsonPath("$.data[1]").value("智能问诊"));
+    }
+
+    @Test
+    void hisOrgOptionsShouldReturnStructuredOptions() throws Exception {
+        HisOrgOptionVO option = new HisOrgOptionVO();
+        option.setHisOrgId("HIS-ORG-001");
+        option.setHisOrgName("市第一医院");
+        when(analyticsService.getHisOrgOptions()).thenReturn(Collections.singletonList(option));
+
+        mockMvc.perform(get("/admin/api/analytics/his-org-options")
+                .header("X-Request-Id", "RID-his-org-options"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.requestId").value("RID-his-org-options"))
+            .andExpect(jsonPath("$.data[0].hisOrgId").value("HIS-ORG-001"))
+            .andExpect(jsonPath("$.data[0].hisOrgName").value("市第一医院"));
     }
 }

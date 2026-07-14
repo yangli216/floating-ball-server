@@ -13,6 +13,7 @@ public class FunctionUsageQueryDTO {
     private LocalDateTime dateToExclusiveTime;
     private String idRegion;
     private String idOrg;
+    private String hisOrgId;
     private List<String> functionModules;
     private Integer current;
     private Integer size;

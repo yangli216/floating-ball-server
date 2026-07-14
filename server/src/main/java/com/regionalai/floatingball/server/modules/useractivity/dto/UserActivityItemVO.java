@@ -10,6 +10,8 @@ public class UserActivityItemVO {
     private String naDevice;
     private String idOrg;
     private String naOrg;
+    private String hisOrgId;
+    private String hisOrgName;
     private String idRegion;
     private String naRegion;
     private String idDoctor;

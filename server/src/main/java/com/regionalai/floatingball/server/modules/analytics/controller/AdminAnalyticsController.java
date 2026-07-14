@@ -7,6 +7,7 @@ import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsSummary
 import com.regionalai.floatingball.server.modules.analytics.dto.DistributionDataVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQueryDTO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageResponseVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.HisOrgOptionVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.service.AnalyticsService;
 import org.springframework.core.io.ByteArrayResource;
@@ -51,6 +52,11 @@ public class AdminAnalyticsController {
     @GetMapping("/function-modules")
     public ApiResponse<List<String>> functionModules(HttpServletRequest request) {
         return ApiResponse.success(analyticsService.getFunctionModuleOptions(), RequestIdUtils.resolve(request));
+    }
+
+    @GetMapping("/his-org-options")
+    public ApiResponse<List<HisOrgOptionVO>> hisOrgOptions(HttpServletRequest request) {
+        return ApiResponse.success(analyticsService.getHisOrgOptions(), RequestIdUtils.resolve(request));
     }
 
     @GetMapping("/function-usage")

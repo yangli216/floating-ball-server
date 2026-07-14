@@ -4,6 +4,7 @@ import com.regionalai.floatingball.server.modules.analytics.dto.AnalyticsQueryDT
 import com.regionalai.floatingball.server.modules.analytics.dto.DistributionItemVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageItemVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQueryDTO;
+import com.regionalai.floatingball.server.modules.analytics.dto.HisOrgOptionVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.SelectProvider;
@@ -43,6 +44,9 @@ public interface AnalyticsMapper {
 
     @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryRegionDistributionRaw")
     List<DistributionItemVO> queryRegionDistributionRaw(@Param("query") AnalyticsQueryDTO query);
+
+    @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryHisOrgOptions")
+    List<HisOrgOptionVO> queryHisOrgOptions();
 
     @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryDistinctModules")
     List<String> queryDistinctModules();

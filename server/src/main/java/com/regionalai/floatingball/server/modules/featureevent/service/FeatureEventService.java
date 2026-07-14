@@ -92,6 +92,8 @@ public class FeatureEventService {
         entity.setIdDevice(idDevice);
         entity.setIdOrg(device == null ? null : trimToNull(device.getIdOrg()));
         entity.setIdRegion(device == null ? null : trimToNull(device.getIdRegion()));
+        entity.setHisOrgId(trimToNull(request.getHisOrgId()));
+        entity.setHisOrgName(trimToNull(request.getHisOrgName()));
         entity.setFeatureCode(featureCode);
         entity.setFeatureName(featureName);
         entity.setEventAction(trimToNull(request.getEventAction()));

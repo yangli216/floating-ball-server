@@ -26,6 +26,8 @@ public class FeatureEventBatchRequest {
         private String doctorName;
         private String deptId;
         private String deptName;
+        private String hisOrgId;
+        private String hisOrgName;
         private Map<String, Object> payload;
         private Long timestamp;
     }

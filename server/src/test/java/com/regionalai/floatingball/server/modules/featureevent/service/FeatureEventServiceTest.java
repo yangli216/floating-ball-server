@@ -64,6 +64,8 @@ class FeatureEventServiceTest {
         event.setDoctorName("张医生");
         event.setDeptId("DEPT001");
         event.setDeptName("全科");
+        event.setHisOrgId("HIS-ORG-001");
+        event.setHisOrgName("市第一医院");
         event.setTimestamp(1770000000000L);
         Map<String, Object> payload = new HashMap<String, Object>();
         payload.put("patientId", "PAT001");
@@ -99,6 +101,8 @@ class FeatureEventServiceTest {
         assertEquals("张医生", saved.getNaDoctor());
         assertEquals("DEPT001", saved.getIdDept());
         assertEquals("全科", saved.getNaDept());
+        assertEquals("HIS-ORG-001", saved.getHisOrgId());
+        assertEquals("市第一医院", saved.getHisOrgName());
         assertEquals("success", saved.getEventStatus());
         assertEquals("1", saved.getFgActive());
         assertNotNull(saved.getEventTime());

@@ -38,3 +38,8 @@ export async function activeRefOptions() {
     orgs: (orgs || []).filter(item => enabledRegionIds.has(item.idRegion))
   }
 }
+
+export async function fetchHisOrgOptions() {
+  const data = await http.get('/admin/api/analytics/his-org-options')
+  return data || []
+}

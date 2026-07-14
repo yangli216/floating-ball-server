@@ -15,7 +15,7 @@
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
-          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="handleRegionChange">
+          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="search">
             <el-option
               v-for="r in regionOptions"
               :key="r.id"
@@ -25,12 +25,12 @@
           </el-select>
         </div>
         <div class="filter-item">
-          <div class="filter-label">机构选择</div>
-          <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" class="filter-select" @change="search">
+          <div class="filter-label">HIS机构</div>
+          <el-select v-model="query.hisOrgId" placeholder="全部HIS机构" clearable filterable size="small" class="filter-select" @change="search">
             <el-option
-              v-for="o in filteredOrgOptions"
+              v-for="o in hisOrgOptions"
               :key="o.id"
-              :label="o.name"
+              :label="o.label"
               :value="o.id"
             />
           </el-select>
@@ -70,7 +70,7 @@
     </div>
 
     <div class="chart-grid chart-grid--double">
-      <chart-panel title="功能调用量按机构分布" subtitle="Top 10 医疗机构" :empty="isOrgDistributionEmpty">
+      <chart-panel title="功能调用量按HIS机构分布" subtitle="Top 10 医疗机构" :empty="isOrgDistributionEmpty">
         <div ref="orgChartRef" class="chart-body"></div>
       </chart-panel>
       <chart-panel title="功能调用量按区域分布" subtitle="各区县占比情况" :empty="isRegionDistributionEmpty">
@@ -93,7 +93,7 @@
 <script>
 import * as echarts from 'echarts'
 import http from '../api/http'
-import { activeRefOptions } from '../api/reference'
+import { fetchHisOrgOptions, fetchRegions } from '../api/reference'
 import { AdminFilterBar, ChartPanel, MetricCard, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
@@ -128,12 +128,12 @@ export default {
       loading: false,
       timeRange: 'month',
       timeRangeOptions: TIME_RANGES,
-      query: { dateFrom: '', dateTo: '', idRegion: '', idOrg: '' },
+      query: { dateFrom: '', dateTo: '', idRegion: '', hisOrgId: '' },
       summary: {},
       trendData: { days: [], aiServiceValues: [], consultationValues: [] },
       distribution: { orgDistribution: [], regionDistribution: [], totalService: 0 },
       regionOptions: [],
-      orgOptions: [],
+      hisOrgOptions: [],
       exporting: false,
       trendMetric: 'ai',
       trendChart: null,
@@ -203,12 +203,6 @@ export default {
         pct: item.percentage,
         color: COLORS[idx % COLORS.length]
       }))
-    },
-    filteredOrgOptions() {
-      if (!this.query.idRegion) {
-        return this.orgOptions
-      }
-      return this.orgOptions.filter(item => item.idRegion === this.query.idRegion)
     },
     isTrendEmpty() {
       const values = this.trendMetric === 'ai'
@@ -284,26 +278,25 @@ export default {
     },
     async loadRefOptions() {
       try {
-        const refs = await activeRefOptions()
-        this.regionOptions = (refs.regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
-        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg, idRegion: o.idRegion }))
+        const [regions, hisOrgs] = await Promise.all([
+          fetchRegions({ sdStatus: '1' }),
+          fetchHisOrgOptions()
+        ])
+        this.regionOptions = (regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
+        this.hisOrgOptions = (hisOrgs || []).map(o => ({
+          id: o.hisOrgId,
+          label: o.hisOrgName ? `${o.hisOrgName}（${o.hisOrgId}）` : o.hisOrgId
+        }))
       } catch (e) {
         // degrade gracefully
       }
-    },
-    handleRegionChange() {
-      const selectedOrg = this.orgOptions.find(item => item.id === this.query.idOrg)
-      if (this.query.idRegion && selectedOrg && selectedOrg.idRegion !== this.query.idRegion) {
-        this.query.idOrg = ''
-      }
-      this.search()
     },
     async search() {
       this.loading = true
       try {
         const params = { ...this.query, timeRange: this.timeRange }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
 
         const [summary, trend, distribution] = await Promise.all([
           http.get('/admin/api/analytics/summary', { params }),
@@ -328,7 +321,7 @@ export default {
     reset() {
       this.timeRange = 'month'
       this.query.idRegion = ''
-      this.query.idOrg = ''
+      this.query.hisOrgId = ''
       this.initDateRange()
       this.search()
     },
@@ -337,7 +330,7 @@ export default {
       try {
         const params = { ...this.query, timeRange: this.timeRange }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
         const blob = await http.get('/admin/api/analytics/export', { params, responseType: 'blob' })
         this.downloadBlob(blob, '统计分析_' + new Date().toISOString().slice(0, 10) + '.xlsx')
       } catch (error) {

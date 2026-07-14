@@ -92,25 +92,32 @@ public class AnalyticsSqlProvider {
     public String queryOrgDistribution() {
         DatabaseDialect dialect = dialect();
         return "<script>"
-            + "SELECT o.na_org AS name, " + dialect.nvl("l.cnt", "0") + " AS value "
-            + "FROM c_ai_org o "
-            + "JOIN c_ai_region r ON r.id_region = o.id_region AND r.fg_active = '1' AND r.sd_status = '1' "
-            + "LEFT JOIN ("
-            + "  SELECT e.id_org, COUNT(1) AS cnt FROM c_ai_feature_event e "
-            + "  JOIN c_ai_org o2 ON o2.id_org = e.id_org AND o2.fg_active = '1' AND o2.sd_status = '1' "
-            + "  JOIN c_ai_region r2 ON r2.id_region = o2.id_region AND r2.fg_active = '1' AND r2.sd_status = '1' "
-            + "  WHERE e.fg_active = '1' AND LOWER(e.event_status) = 'success' "
-            + "  <if test='query.dateFromTime != null'> AND e.event_time &gt;= #{query.dateFromTime}</if>"
-            + "  <if test='query.dateToExclusiveTime != null'> AND e.event_time &lt; #{query.dateToExclusiveTime}</if>"
-            + "  <if test='query.idRegion != null and query.idRegion != \"\"'> AND o2.id_region = #{query.idRegion}</if>"
-            + "  <if test='query.idOrg != null and query.idOrg != \"\"'> AND o2.id_org = #{query.idOrg}</if>"
-            + "  GROUP BY e.id_org"
-            + ") l ON o.id_org = l.id_org "
-            + "WHERE o.fg_active = '1' AND o.sd_status = '1' "
-            + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND o.id_region = #{query.idRegion}</if>"
-            + "<if test='query.idOrg != null and query.idOrg != \"\"'> AND o.id_org = #{query.idOrg}</if>"
+            + "SELECT " + dialect.nvl("MAX(e.na_his_org)", dialect.nvl("e.id_his_org", "'未上报HIS机构'")) + " AS name, "
+            + "COUNT(1) AS value "
+            + "FROM c_ai_feature_event e "
+            + FEATURE_SCOPE_JOIN + " "
+            + FEATURE_REGION_JOIN + " "
+            + "WHERE e.fg_active = '1' AND LOWER(e.event_status) = 'success' "
+            + featureFilters()
+            + " GROUP BY e.id_his_org"
             + " ORDER BY value DESC"
             + "</script>";
+    }
+
+    public String queryHisOrgOptions() {
+        return "SELECT his_org_id AS hisOrgId, MAX(his_org_name) AS hisOrgName FROM ("
+            + "SELECT e.id_his_org AS his_org_id, e.na_his_org AS his_org_name "
+            + "FROM c_ai_feature_event e "
+            + FEATURE_SCOPE_JOIN + " "
+            + FEATURE_REGION_JOIN + " "
+            + "WHERE e.fg_active = '1' AND e.id_his_org IS NOT NULL "
+            + "UNION ALL "
+            + "SELECT ucl.id_his_org AS his_org_id, ucl.na_org AS his_org_name "
+            + "FROM c_ai_user_consultation_log ucl "
+            + CONSULTATION_SCOPE_JOIN + " "
+            + CONSULTATION_REGION_JOIN + " "
+            + "WHERE ucl.fg_active = '1' AND ucl.id_his_org IS NOT NULL"
+            + ") his_orgs GROUP BY his_org_id ORDER BY hisOrgName, hisOrgId";
     }
 
     public String queryRegionDistributionRaw() {
@@ -128,6 +135,7 @@ public class AnalyticsSqlProvider {
             + "  <if test='query.dateToExclusiveTime != null'> AND e.event_time &lt; #{query.dateToExclusiveTime}</if>"
             + "  <if test='query.idRegion != null and query.idRegion != \"\"'> AND o2.id_region = #{query.idRegion}</if>"
             + "  <if test='query.idOrg != null and query.idOrg != \"\"'> AND o2.id_org = #{query.idOrg}</if>"
+            + "  <if test='query.hisOrgId != null and query.hisOrgId != \"\"'> AND e.id_his_org = #{query.hisOrgId}</if>"
             + "  GROUP BY e.id_org"
             + ") l ON o.id_org = l.id_org "
             + "WHERE r.fg_active = '1' AND r.sd_status = '1' "
@@ -234,14 +242,16 @@ public class AnalyticsSqlProvider {
         return "<if test='query.dateFromTime != null'> AND e.event_time &gt;= #{query.dateFromTime}</if>"
             + "<if test='query.dateToExclusiveTime != null'> AND e.event_time &lt; #{query.dateToExclusiveTime}</if>"
             + "<if test='query.idOrg != null and query.idOrg != \"\"'> AND o.id_org = #{query.idOrg}</if>"
-            + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND o.id_region = #{query.idRegion}</if>";
+            + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND o.id_region = #{query.idRegion}</if>"
+            + "<if test='query.hisOrgId != null and query.hisOrgId != \"\"'> AND e.id_his_org = #{query.hisOrgId}</if>";
     }
 
     private String consultationFilters() {
         return "<if test='query.dateFromTime != null'> AND ucl.consultation_time &gt;= #{query.dateFromTime}</if>"
             + "<if test='query.dateToExclusiveTime != null'> AND ucl.consultation_time &lt; #{query.dateToExclusiveTime}</if>"
             + "<if test='query.idOrg != null and query.idOrg != \"\"'> AND o.id_org = #{query.idOrg}</if>"
-            + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND o.id_region = #{query.idRegion}</if>";
+            + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND o.id_region = #{query.idRegion}</if>"
+            + "<if test='query.hisOrgId != null and query.hisOrgId != \"\"'> AND ucl.id_his_org = #{query.hisOrgId}</if>";
     }
 
     private String functionUsageFilters() {
@@ -249,6 +259,7 @@ public class AnalyticsSqlProvider {
             + "<if test='query.dateToExclusiveTime != null'> AND e.event_time &lt; #{query.dateToExclusiveTime}</if>"
             + "<if test='query.idOrg != null and query.idOrg != \"\"'> AND o.id_org = #{query.idOrg}</if>"
             + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND o.id_region = #{query.idRegion}</if>"
+            + "<if test='query.hisOrgId != null and query.hisOrgId != \"\"'> AND e.id_his_org = #{query.hisOrgId}</if>"
             + "<if test='query.functionModules != null and query.functionModules.size() &gt; 0'>"
             + " AND " + FUNCTION_USAGE_MODULE_EXPR + " IN "
             + " <foreach collection='query.functionModules' item='m' open='(' separator=',' close=')'>#{m}</foreach>"

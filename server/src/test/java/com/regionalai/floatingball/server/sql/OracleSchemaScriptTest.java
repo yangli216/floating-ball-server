@@ -19,9 +19,10 @@ class OracleSchemaScriptTest {
 
     private static final Path ORACLE_SQL_DIR = Paths.get("src/main/resources/sql/oracle");
     private static final Path GAUSSDB_SQL_DIR = Paths.get("src/main/resources/sql/gaussdb");
+    private static final Path DAMENG_SQL_DIR = Paths.get("src/main/resources/sql/dameng");
 
     @Test
-    void oracleDeliveryShouldOnlyKeepBootstrapAndInitScripts() throws IOException {
+    void oracleDeliveryShouldIncludeExplicitUpdateScript() throws IOException {
         Set<String> actualSqlFiles = new HashSet<String>();
         try (DirectoryStream<Path> sqlScripts = Files.newDirectoryStream(ORACLE_SQL_DIR, "*.sql")) {
             for (Path sqlScript : sqlScripts) {
@@ -29,8 +30,11 @@ class OracleSchemaScriptTest {
             }
         }
 
-        Set<String> expectedSqlFiles = new HashSet<String>(Arrays.asList("bootstrap.sql", "init.sql"));
-        assertTrue(actualSqlFiles.equals(expectedSqlFiles), "oracle delivery sql files should be bootstrap.sql and init.sql");
+        Set<String> expectedSqlFiles = new HashSet<String>(Arrays.asList(
+            "bootstrap.sql", "init.sql", "update_his_org_statistics.sql"
+        ));
+        assertTrue(actualSqlFiles.equals(expectedSqlFiles),
+            "oracle delivery should include the explicit HIS organization update script");
 
         try (DirectoryStream<Path> upgradeScripts = Files.newDirectoryStream(ORACLE_SQL_DIR, "upgrade_*.sql")) {
             assertFalse(upgradeScripts.iterator().hasNext(), "upgrade scripts should be folded into init.sql");
@@ -74,6 +78,7 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "trace_id             VARCHAR2(64)");
         assertContains(initSql, "audio_file_path      VARCHAR2(1000)");
         assertContains(initSql, "consultation_id      VARCHAR2(64)");
+        assertContains(initSql, "na_his_org           VARCHAR2(255)");
 
         assertContains(initSql, "speech_text          CLOB");
         assertContains(initSql, "audio_file_name      VARCHAR2(255)");
@@ -95,6 +100,9 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE INDEX idx_c_ai_device_register_ip");
         assertContains(initSql, "CREATE INDEX idx_c_ai_device_last_seen_ip");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feature_event_idem");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_op_log_his_org");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_user_log_his_org");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_feature_event_his_org");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_feedback_latest_scope");
@@ -126,8 +134,11 @@ class OracleSchemaScriptTest {
             }
         }
 
-        Set<String> expectedSqlFiles = new HashSet<String>(Arrays.asList("init.sql"));
-        assertTrue(actualSqlFiles.equals(expectedSqlFiles), "gaussdb delivery sql files should only keep init.sql");
+        Set<String> expectedSqlFiles = new HashSet<String>(Arrays.asList(
+            "init.sql", "update_his_org_statistics.sql"
+        ));
+        assertTrue(actualSqlFiles.equals(expectedSqlFiles),
+            "gaussdb delivery should include the explicit HIS organization update script");
 
         try (DirectoryStream<Path> upgradeScripts = Files.newDirectoryStream(GAUSSDB_SQL_DIR, "upgrade_*.sql")) {
             assertFalse(upgradeScripts.iterator().hasNext(), "gaussdb upgrade scripts should be folded into init.sql");
@@ -145,6 +156,10 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_agg_scope");
         assertContains(initSql, "id_his_org           VARCHAR(64)");
+        assertContains(initSql, "na_his_org           VARCHAR(255)");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_op_log_his_org");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_user_log_his_org");
+        assertContains(initSql, "CREATE INDEX idx_c_ai_feature_event_his_org");
         assertContains(initSql, "total_changes        NUMERIC(5)");
         assertContains(initSql, "CREATE TABLE c_ai_inpatient_emr_tpl_cache");
         assertContains(initSql, "CREATE TABLE c_ai_patient_memory");
@@ -168,6 +183,51 @@ class OracleSchemaScriptTest {
         assertNotContains(initSql, "NVL(");
         assertNotContains(initSql, "DBMS_");
         assertNotContains(initSql, "dba_");
+    }
+
+    @Test
+    void explicitUpdateScriptsShouldIncludeHisOrgAndConsultationRoundSchema() throws IOException {
+        for (Path script : Arrays.asList(
+            ORACLE_SQL_DIR.resolve("update_his_org_statistics.sql"),
+            GAUSSDB_SQL_DIR.resolve("update_his_org_statistics.sql"),
+            DAMENG_SQL_DIR.resolve("update_his_org_statistics.sql")
+        )) {
+            String sql = readSql(script);
+            assertContains(sql, "c_ai_user_consultation_log");
+            assertContains(sql, "consultation_round_id");
+            assertContains(sql, "id_his_org");
+            assertContains(sql, "c_ai_op_log");
+            assertContains(sql, "c_ai_feature_event");
+            assertContains(sql, "na_his_org");
+            assertContains(sql, "idx_c_ai_user_log_his_org");
+            assertContains(sql, "idx_c_ai_user_log_round");
+            assertContains(sql, "uk_c_ai_user_log_round_active");
+            assertContains(sql, "idx_c_ai_op_log_his_org");
+            assertContains(sql, "idx_c_ai_feature_event_his_org");
+            assertContains(sql, "COUNT(DISTINCT");
+        }
+
+        String oracleSql = readSql(ORACLE_SQL_DIR.resolve("update_his_org_statistics.sql"));
+        String gaussdbSql = readSql(GAUSSDB_SQL_DIR.resolve("update_his_org_statistics.sql"));
+        String damengSql = readSql(DAMENG_SQL_DIR.resolve("update_his_org_statistics.sql"));
+
+        String oracleCompatibleColumn =
+            "add_column_if_missing('c_ai_user_consultation_log', 'consultation_round_id', 'VARCHAR2(64)')";
+        String oracleCompatibleUniqueIndex =
+            "CASE WHEN fg_active = ''1'' AND status = ''generated'' THEN consultation_round_id END";
+        assertContains(oracleSql, oracleCompatibleColumn);
+        assertContains(oracleSql, oracleCompatibleUniqueIndex);
+        assertContains(damengSql, oracleCompatibleColumn);
+        assertContains(damengSql, oracleCompatibleUniqueIndex);
+
+        assertContains(
+            gaussdbSql,
+            "ALTER TABLE c_ai_user_consultation_log ADD COLUMN IF NOT EXISTS consultation_round_id VARCHAR(64)"
+        );
+        assertContains(
+            gaussdbSql,
+            "CASE WHEN fg_active = '1' AND status = 'generated' THEN consultation_round_id END"
+        );
     }
 
     private String readSql(Path path) throws IOException {

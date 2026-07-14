@@ -76,6 +76,8 @@ class AuditServiceTest {
         AuditBatchRequest request = new AuditBatchRequest();
         AuditBatchRequest.AuditEvent event = new AuditBatchRequest.AuditEvent();
         event.setEventType("operation");
+        event.setHisOrgId("HIS-ORG-001");
+        event.setHisOrgName("市第一医院");
         event.setTimestamp(1770000000000L);
         Map<String, Object> payload = new HashMap<String, Object>();
         payload.put("module", "consultation");
@@ -97,6 +99,8 @@ class AuditServiceTest {
         AiOpLog log = batchCaptor.getValue().get(0);
         assertEquals("DEV001", log.getIdDevice());
         assertEquals("ORG001", log.getIdOrg());
+        assertEquals("HIS-ORG-001", log.getHisOrgId());
+        assertEquals("市第一医院", log.getHisOrgName());
         assertEquals("operation", log.getSdLogType());
         assertEquals("consultation", log.getNaModule());
         assertEquals("finish", log.getOpAction());

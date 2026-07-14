@@ -780,6 +780,8 @@ Content-Type: application/json
     {
       "eventId": "uuid",
       "eventType": "operation",
+      "hisOrgId": "HIS-ORG-001",
+      "hisOrgName": "市第一医院",
       "payload": {
         "module": "consultation",
         "action": "reference_feedback_diagnosis",
@@ -822,6 +824,7 @@ Content-Type: application/json
 落表约定：
 
 - `sdLogType` ← `eventType`
+- `id_his_org` / `na_his_org` ← 事件外层 `hisOrgId` / `hisOrgName`；两者来自桌面端 SDK handshake，不从后台 `idOrg` 兜底
 - `naModule` ← `payload.module`，若缺失则回退 `operationType / metricType / targetType / sessionType`
 - `opAction` / `desOp` ← `payload.action`，若缺失则回退 `operationName / feedbackType / recType`
 - `opResult` ← `payload.result`，若缺失则回退 `success`
@@ -861,6 +864,8 @@ AI 调用类 `operation` 事件补充约束：
       "doctorName": "张医生",
       "deptId": "DEPT-001",
       "deptName": "全科",
+      "hisOrgId": "HIS-ORG-001",
+      "hisOrgName": "市第一医院",
       "payload": {
         "patientId": "PAT-001"
       },
@@ -889,6 +894,7 @@ AI 调用类 `operation` 事件补充约束：
 4. `traceId`、`consultationId`、`sessionId` 只用于关联审计链路，不参与调用次数累加。
 5. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口。来自 HIS Bridge 的完整问诊、语音问诊和 `assist` 入口在桌面端接诊上下文校验通过并准备打开目标界面时即记录一次成功调用；同一就诊再次显式触发入口按新调用计数，后续 AI 生成、问诊提交、PHIS 回写和审计日志不重复拆分计数。
 6. 不支持的 `featureCode`、缺失 `idempotencyKey`、不可序列化的 `payload` 计入 `rejected`，并在 `rejections[]` 返回 `index/eventId/featureCode/reason`；服务端不得把这类数据静默计入 `skipped`。
+7. `hisOrgId/hisOrgName` 由桌面端在事件产生时从 SDK handshake 固化，服务端分别写入 `c_ai_feature_event.id_his_org/na_his_org`；`id_org/id_region` 仍以设备鉴权为准。旧版客户端未上报 `hisOrgId` 的事件继续接收，但无法进入指定 HIS 机构的筛选结果。
 
 ### 3.9 POST `/v1/client/recommendation-preferences/events/batch`
 
@@ -1067,7 +1073,7 @@ AI 调用类 `operation` 事件补充约束：
 3. 服务端按 `consultationRoundId` 合并同一轮问诊的多次提交；数据库通过唯一索引 `uk_c_ai_user_log_round_active` 保证同一 `consultationRoundId` 同时只有一条 `generated` 记录。先收到首版快照则创建记录，后收到最终快照则更新同一条记录为 `completed` 或 `abandoned`。
 4. 若同一就诊在回写或放弃后再次发起智能问诊/语音问诊，客户端必须生成新的 `consultationRoundId`，服务端据此创建新的用户日志记录。客户端不需要上报每一次中间编辑，最终快照只代表医生提交/回写或放弃时的最终状态。
 5. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
-6. `idOrg` 由设备鉴权解析出的后台机构 ID 持久化，用于后台配置、统计和权限范围；`hisOrgId` 表示 HIS 端机构 ID，桌面端只能取 SDK handshake `urt.userRoleDepts.orgId`，服务端持久化到 `id_his_org`，用于问诊来源追踪，不再覆盖 `id_org`，也不再用 `orgCode` 兜底。
+6. `idOrg` 由设备鉴权解析出的后台机构 ID 持久化，用于后台配置、权限范围和平台机构筛选；`hisOrgId` 表示 HIS 端机构 ID，桌面端只能取 SDK handshake `urt.userRoleDepts.orgId`，服务端持久化到 `id_his_org`，用于问诊来源追踪和 HIS 机构统计，不再覆盖 `id_org`，也不再用 `orgCode` 兜底。
 7. `orgName` 桌面端取 SDK handshake `urt.orgPureName`；`deptId` 取 `urt.userRoleDepts.deptId`。
 
 ### 3.12 POST `/v1/client/feedbacks`
@@ -1486,13 +1492,15 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 - `dateFrom` — 开始日期（yyyy-MM-dd）
 - `dateTo` — 结束日期（yyyy-MM-dd）
 - `idRegion` — 区域ID（可选）
-- `idOrg` — 机构ID（可选）
+- `idOrg` — 后台平台机构ID（可选）
+- `hisOrgId` — HIS机构ID（可选）
 
 筛选约束：
 
-1. 统计分析、辅诊功能、用户活跃度三组统计接口只统计启用范围内的数据：区域与机构均需满足 `fg_active='1' AND sd_status='1'`。
-2. 当同时传入 `idRegion` 与 `idOrg` 时，机构必须归属该区域；若不匹配，查询返回空统计结果。
-3. 管理端区域/机构下拉只展示启用项，并按“区域 -> 机构”配置关系做联动过滤。
+1. 统计分析、辅诊功能、用户活跃度三组统计接口只统计启用的平台范围内数据：区域与后台机构均需满足 `fg_active='1' AND sd_status='1'`。
+2. 当同时传入 `idRegion` 与 `idOrg` 时，后台机构必须归属该区域；若不匹配，查询返回空统计结果。
+3. `idOrg` 与 `hisOrgId` 是两个独立维度：前者来自设备鉴权并关联 `c_ai_org`，后者来自 SDK handshake 并匹配业务事实表的 `id_his_org`；同时传入时取交集，不允许互相兜底。
+4. 管理端统计分析、辅诊功能和用户活跃度页面仅展示启用的区域与业务事实汇总的 HIS 机构下拉，不展示平台机构下拉；`idOrg` 仅作为后台/API 兼容筛选保留，旧版或其他调用方传入时仍适用上述启用状态、区域归属和双机构交集约束。
 
 响应 `data`：
 
@@ -1542,7 +1550,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.7 GET `/admin/api/analytics/distribution`
 
-用途：返回机构分布与区域分布数据。
+用途：返回 HIS 机构分布与后台区域分布数据。机构分布按 `c_ai_feature_event.id_his_org` 分组，不按后台 `id_org` 分组。
 
 请求参数同 5.5。
 
@@ -1588,6 +1596,20 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ["语音问诊", "智能问诊", "报告单解读", "聊天", "AI诊断鉴别", "AI推荐诊断", "AI推荐用药", "AI推荐检查", "AI推荐检验", "AI推荐处置", "AI推荐治疗方案", "知识库使用"]
 ```
 
+### 5.8.1 GET `/admin/api/analytics/his-org-options`
+
+用途：返回三个统计页面共用的 HIS 机构筛选选项。选项合并 `c_ai_feature_event.id_his_org/na_his_org` 与 `c_ai_user_consultation_log.id_his_org/na_org`，同一 `hisOrgId` 只返回一项。
+
+响应 `data`：
+
+```json
+[
+  { "hisOrgId": "HIS-ORG-001", "hisOrgName": "市第一医院" }
+]
+```
+
+只返回非空 `hisOrgId`；名称缺失时管理端显示 ID。该接口不从 `c_ai_org.id_org/cd_org` 推导或伪造 HIS 机构。
+
 ### 5.9 GET `/admin/api/analytics/function-usage`
 
 用途：返回辅诊功能应用统计数据，包含汇总指标、功能使用排行、趋势与分页明细。统计口径为 `/v1/client/feature-events/batch` 提交的“用户实际调用功能事件”，不按底层 AI 操作日志条数累加。
@@ -1599,7 +1621,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | `dateFrom` | string | 起始日期 yyyy-MM-dd |
 | `dateTo` | string | 截止日期 yyyy-MM-dd |
 | `idRegion` | string | 区域 ID（可选） |
-| `idOrg` | string | 机构 ID（可选） |
+| `idOrg` | string | 后台平台机构 ID（可选） |
+| `hisOrgId` | string | HIS 机构 ID（可选） |
 | `functionModules` | string[] | 功能筛选（可选，多选），支持传功能展示名称，也兼容历史 `source_module / op_action / scene_code / na_module` 原始编码 |
 | `current` | int | 当前页（默认 1） |
 | `size` | int | 每页条数（默认 20） |
@@ -1640,7 +1663,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 6. `doctorCount` 按事件中的医生 ID 优先统计；医生 ID 为空时回退设备 ID
 7. `trend` 仅包含排名前 5 的功能的逐日调用趋势
 8. `records` 为当前页数据，支持分页
-9. 区域/机构筛选遵循 5.5 的启用状态与归属校验约束。
+9. 接口继续兼容区域、平台机构（`idOrg`）和 HIS 机构（`hisOrgId`）筛选，并遵循 5.5 的双机构维度约束；当前管理端页面只展示区域与 HIS 机构筛选。
 
 ### 5.9.1 GET `/admin/api/analytics/function-usage/export`
 
@@ -2808,7 +2831,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.58 GET `/admin/api/user-activity/summary`
 
-用途：返回指定时间范围、区域和机构下的用户活跃度汇总指标。
+用途：返回指定时间范围与筛选条件下的用户活跃度汇总指标；当前管理端页面展示区域与 HIS 机构筛选，接口仍兼容后台平台机构 `idOrg`。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -2819,10 +2842,11 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | dateFrom | string | 否 | 起始日期，yyyy-MM-dd |
 | dateTo | string | 否 | 截止日期，yyyy-MM-dd |
 | idRegion | string | 否 | 区域 ID，为空时统计全部 |
-| idOrg | string | 否 | 机构 ID，为空时统计全部 |
+| idOrg | string | 否 | 后台平台机构 ID，为空时统计全部 |
+| hisOrgId | string | 否 | HIS 机构 ID，为空时统计全部 |
 | timeRange | string | 否 | 时间范围：today / week / month / quarter / year / custom |
 
-说明：区域/机构筛选遵循 5.5 的启用状态与归属校验约束。
+说明：接口参数中的区域、平台机构（`idOrg`）和 HIS 机构（`hisOrgId`）筛选遵循 5.5 的双机构维度约束；当前管理端页面不展示平台机构筛选。传入 `hisOrgId` 时，总设备数只统计历史上曾在该 HIS 机构产生问诊记录的设备；所选时段存在该机构问诊的计为活跃，否则计为不活跃。
 
 响应 `data`：
 
@@ -2850,7 +2874,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.59 GET `/admin/api/user-activity/region-tree`
 
-用途：返回区域层级树，每个节点包含该区域下的活跃用户数。该接口保留用于兼容旧版区域树视图，当前管理端用户活跃度页面默认使用顶部区域/机构查询条件。
+用途：返回区域层级树，每个节点包含该区域下的活跃用户数。该接口保留用于兼容旧版区域树视图，当前管理端用户活跃度页面默认使用顶部区域/HIS 机构查询条件。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -2888,7 +2912,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.60 GET `/admin/api/user-activity/users`
 
-用途：返回用户活跃度明细列表，支持按区域、机构、活跃状态筛选和分页。
+用途：返回用户活跃度明细列表，接口支持按区域、后台平台机构、HIS 机构、活跃状态筛选和分页；当前管理端页面仅展示区域、HIS 机构与活跃状态筛选。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -2899,13 +2923,14 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | dateFrom | string | 否 | 起始日期 |
 | dateTo | string | 否 | 截止日期 |
 | idRegion | string | 否 | 区域 ID |
-| idOrg | string | 否 | 机构 ID |
+| idOrg | string | 否 | 后台平台机构 ID |
+| hisOrgId | string | 否 | HIS 机构 ID |
 | timeRange | string | 否 | 时间范围 |
 | activeStatus | string | 否 | 活跃状态筛选：active / inactive |
 | current | long | 否 | 页码，默认 1 |
 | size | long | 否 | 每页条数，默认 10 |
 
-说明：区域/机构筛选遵循 5.5 的启用状态与归属校验约束。
+说明：接口参数中的区域、平台机构（`idOrg`）和 HIS 机构（`hisOrgId`）筛选遵循 5.5 的双机构维度约束；当前管理端页面不展示平台机构筛选。响应中的 `idOrg` / `naOrg` 为兼容字段，当前管理端用户活跃度列表不展示平台机构列。
 
 响应 `data`：
 
@@ -2921,6 +2946,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
       "naDevice": "FloatingBall-win32",
       "idOrg": "ORG001",
       "naOrg": "区域中心医院",
+      "hisOrgId": "HIS-ORG-001",
+      "hisOrgName": "市第一医院",
       "idRegion": "REGION003",
       "naRegion": "东城区",
       "activeStatus": "active",

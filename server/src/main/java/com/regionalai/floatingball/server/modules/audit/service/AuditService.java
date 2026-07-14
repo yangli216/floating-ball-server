@@ -69,6 +69,8 @@ public class AuditService {
             AiOpLog opLog = new AiOpLog();
             opLog.setIdDevice(device.getIdDevice());
             opLog.setIdOrg(device.getIdOrg());
+            opLog.setHisOrgId(trimToNull(event.getHisOrgId()));
+            opLog.setHisOrgName(trimToNull(event.getHisOrgName()));
             opLog.setSdLogType(event.getEventType());
             String module = resolveModule(event.getEventType(), payload);
             String action = resolveAction(event.getEventType(), payload);
@@ -340,6 +342,15 @@ public class AuditService {
         opLog.setSdLogType(logType);
         opLog.setNaModule(module);
         Map<String, Object> payloadMap = asPayloadMap(payload);
+        opLog.setHisOrgId(firstNonBlank(
+            extractText(payloadMap, "hisOrgId"),
+            extractNestedText(payloadMap, "context", "hisOrgId")
+        ));
+        opLog.setHisOrgName(firstNonBlank(
+            extractText(payloadMap, "hisOrgName"),
+            extractText(payloadMap, "orgName"),
+            extractNestedText(payloadMap, "context", "hisOrgName")
+        ));
         opLog.setOpAction(action);
         opLog.setOpTitle(resolveTitle(payloadMap, action));
         opLog.setSourceModule(resolveSourceModule(payloadMap));

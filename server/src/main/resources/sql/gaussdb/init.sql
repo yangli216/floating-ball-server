@@ -408,6 +408,8 @@ CREATE TABLE c_ai_op_log (
     id_log               VARCHAR(32) PRIMARY KEY,
     id_device            VARCHAR(32),
     id_org               VARCHAR(32),
+    id_his_org           VARCHAR(64),
+    na_his_org           VARCHAR(255),
     sd_log_type          VARCHAR(64),
     na_module            VARCHAR(128),
     op_action            VARCHAR(256),
@@ -430,6 +432,8 @@ COMMENT ON TABLE c_ai_op_log IS '操作日志表';
 COMMENT ON COLUMN c_ai_op_log.id_log IS '日志主键ID';
 COMMENT ON COLUMN c_ai_op_log.id_device IS '设备ID';
 COMMENT ON COLUMN c_ai_op_log.id_org IS '机构ID';
+COMMENT ON COLUMN c_ai_op_log.id_his_org IS 'HIS端机构ID（来自桌面端事件上下文）';
+COMMENT ON COLUMN c_ai_op_log.na_his_org IS 'HIS端机构名称（来自桌面端事件上下文）';
 COMMENT ON COLUMN c_ai_op_log.sd_log_type IS '日志类型';
 COMMENT ON COLUMN c_ai_op_log.na_module IS '业务模块名称';
 COMMENT ON COLUMN c_ai_op_log.op_action IS '业务动作编码';
@@ -451,6 +455,7 @@ CREATE INDEX idx_c_ai_log_time ON c_ai_op_log (operation_time, fg_active);
 CREATE INDEX idx_c_ai_op_log_trace ON c_ai_op_log (trace_id, operation_time, fg_active);
 CREATE INDEX idx_c_ai_op_log_consultation ON c_ai_op_log (consultation_id, operation_time, fg_active);
 CREATE INDEX idx_c_ai_op_log_scene ON c_ai_op_log (source_module, scene_code, operation_time, fg_active);
+CREATE INDEX idx_c_ai_op_log_his_org ON c_ai_op_log (id_his_org, operation_time, fg_active);
 
 
 
@@ -526,6 +531,7 @@ CREATE INDEX idx_c_ai_user_log_patient ON c_ai_user_consultation_log (patient_id
 CREATE INDEX idx_c_ai_user_log_doctor ON c_ai_user_consultation_log (id_doctor, consultation_time, fg_active);
 CREATE INDEX idx_c_ai_user_log_consultation ON c_ai_user_consultation_log (consultation_id, consultation_type, id_device, fg_active);
 CREATE INDEX idx_c_ai_user_log_round ON c_ai_user_consultation_log (consultation_round_id, fg_active);
+CREATE INDEX idx_c_ai_user_log_his_org ON c_ai_user_consultation_log (id_his_org, consultation_time, fg_active);
 CREATE UNIQUE INDEX uk_c_ai_user_log_round_active ON c_ai_user_consultation_log (
     (CASE WHEN fg_active = '1' AND status = 'generated' THEN consultation_round_id END)
 );
@@ -536,6 +542,8 @@ CREATE TABLE c_ai_feature_event (
     id_device            VARCHAR(32),
     id_org               VARCHAR(32),
     id_region            VARCHAR(32),
+    id_his_org           VARCHAR(64),
+    na_his_org           VARCHAR(255),
     feature_code         VARCHAR(64) NOT NULL,
     feature_name         VARCHAR(128) NOT NULL,
     event_action         VARCHAR(128),
@@ -562,6 +570,8 @@ COMMENT ON COLUMN c_ai_feature_event.id_event IS '事件主键ID';
 COMMENT ON COLUMN c_ai_feature_event.id_device IS '设备ID';
 COMMENT ON COLUMN c_ai_feature_event.id_org IS '机构ID';
 COMMENT ON COLUMN c_ai_feature_event.id_region IS '区域ID';
+COMMENT ON COLUMN c_ai_feature_event.id_his_org IS 'HIS端机构ID（来自桌面端事件上下文）';
+COMMENT ON COLUMN c_ai_feature_event.na_his_org IS 'HIS端机构名称（来自桌面端事件上下文）';
 COMMENT ON COLUMN c_ai_feature_event.feature_code IS '功能编码';
 COMMENT ON COLUMN c_ai_feature_event.feature_name IS '功能展示名称';
 COMMENT ON COLUMN c_ai_feature_event.event_action IS '功能动作编码';
@@ -587,6 +597,7 @@ CREATE INDEX idx_c_ai_feature_event_time ON c_ai_feature_event (event_time, fg_a
 CREATE INDEX idx_c_ai_feature_event_feature ON c_ai_feature_event (feature_name, event_time, fg_active);
 CREATE INDEX idx_c_ai_feature_event_doctor ON c_ai_feature_event (id_doctor, event_time, fg_active);
 CREATE INDEX idx_c_ai_feature_event_org ON c_ai_feature_event (id_org, id_region, event_time, fg_active);
+CREATE INDEX idx_c_ai_feature_event_his_org ON c_ai_feature_event (id_his_org, event_time, fg_active);
 
 
 CREATE TABLE c_ai_rec_pref_event (
