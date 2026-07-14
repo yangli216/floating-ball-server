@@ -75,20 +75,20 @@ Oracle 通常不会像 MySQL 一样在应用脚本里直接执行 `CREATE DATABA
 
 1. 默认 AI 配置仅用于打通 `register -> bootstrap -> audit` 的启动联调链路
 2. 真正的上游 AI 地址、密钥、模型请在删库重建后再通过管理端修改；HTTP 批量转写地址与 `speech_realtime_url` 实时 WebSocket 地址必须分开配置
-3. 新建库仍采用“目标 schema 初始化/重建 + 重跑 `init.sql`”；本次按明确交付要求额外保留 `update_his_org_statistics.sql`，用于存量库补齐 HIS 机构统计字段、问诊轮次字段及其索引，不作为通用升级脚本目录
+3. 新建库仍采用“目标 schema 初始化/重建 + 重跑 `init.sql`”；本次按明确交付要求额外保留 `update_his_org_statistics.sql`，用于存量库补齐 `c_ai_config.speech_realtime_url`、HIS 机构统计字段、问诊轮次字段及其索引，不作为通用升级脚本目录
 4. 执行 `init.sql` 前请确认当前登录 schema 就是 `RBMH_AI`；脚本本身不再依赖 SQL*Plus 变量做前置校验
 5. 区域与机构的 `sd_status` 是启用/停用状态；`fg_active` 只表示逻辑删除/无效记录。管理端统计筛选只统计 `fg_active='1' AND sd_status='1'` 的区域和机构。
 
 ## 存量库处理
 
-当前仓库不保留通用 `upgrade_*.sql` 补丁链。各历史补丁仍折叠进 `init.sql`；本次用户明确要求交付的 `update_his_org_statistics.sql` 是一次性、可重复执行的定向升级文件，包含现场库可能遗漏的 `c_ai_user_consultation_log.id_his_org`、`consultation_round_id` 及问诊轮次索引，以及操作日志和功能事件新增的 HIS 机构字段、索引与可确定关联的数据回填。
+当前仓库不保留通用 `upgrade_*.sql` 补丁链。各历史补丁仍折叠进 `init.sql`；本次用户明确要求交付的 `update_his_org_statistics.sql` 是一次性、可重复执行的定向升级文件，包含现场库可能遗漏的 `c_ai_config.speech_realtime_url`、`c_ai_user_consultation_log.id_his_org`、`consultation_round_id` 及问诊轮次索引，以及操作日志和功能事件新增的 HIS 机构字段、索引与可确定关联的数据回填。
 
 如果现场库已经存在旧版本业务表，处理原则如下：
 
 1. 能重建的开发/联调环境，先备份必要数据，再清理目标 schema 并执行 `init.sql`
 2. 不能重建的生产/准生产环境，由 DBA 基于当前 `init.sql` 与现场库结构生成一次性迁移脚本
 3. 一次性迁移脚本必须先清理重复激活数据，再添加唯一索引，例如机构编码、设备编码、设备令牌、反馈最新版、问诊日志未结束轮次等约束
-4. 迁移完成后，需要确认 `c_ai_device.device_public_key`、`c_ai_device.register_ip`、`c_ai_device.last_seen_ip`、`c_ai_user_consultation_log.id_his_org`、`c_ai_user_consultation_log.consultation_round_id`、`idx_c_ai_user_log_round`、`uk_c_ai_user_log_round_active`、`c_ai_user_consultation_log.change_summary_json`、`c_ai_user_consultation_log.total_changes`、`c_security_rejection_log` 以及安全分析相关索引均已存在
+4. 迁移完成后，需要确认 `c_ai_config.speech_realtime_url`、`c_ai_device.device_public_key`、`c_ai_device.register_ip`、`c_ai_device.last_seen_ip`、`c_ai_user_consultation_log.id_his_org`、`c_ai_user_consultation_log.consultation_round_id`、`idx_c_ai_user_log_round`、`uk_c_ai_user_log_round_active`、`c_ai_user_consultation_log.change_summary_json`、`c_ai_user_consultation_log.total_changes`、`c_security_rejection_log` 以及安全分析相关索引均已存在
 
 本次 HIS 机构统计升级使用当前应用 schema 执行：
 

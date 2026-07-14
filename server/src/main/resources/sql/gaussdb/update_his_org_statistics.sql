@@ -1,7 +1,9 @@
--- One-time, idempotent HIS organization statistics and consultation round upgrade for GaussDB/openGauss.
+-- One-time, idempotent deployed-schema compatibility upgrade for GaussDB/openGauss.
 -- Run as the application schema owner after taking a database backup.
 
 -- These fields already exist in the current baseline but were omitted by some deployed databases.
+ALTER TABLE c_ai_config ADD COLUMN IF NOT EXISTS speech_realtime_url VARCHAR(500);
+
 ALTER TABLE c_ai_user_consultation_log ADD COLUMN IF NOT EXISTS consultation_round_id VARCHAR(64);
 ALTER TABLE c_ai_user_consultation_log ADD COLUMN IF NOT EXISTS id_his_org VARCHAR(64);
 
@@ -10,6 +12,7 @@ ALTER TABLE c_ai_op_log ADD COLUMN IF NOT EXISTS na_his_org VARCHAR(255);
 ALTER TABLE c_ai_feature_event ADD COLUMN IF NOT EXISTS id_his_org VARCHAR(64);
 ALTER TABLE c_ai_feature_event ADD COLUMN IF NOT EXISTS na_his_org VARCHAR(255);
 
+COMMENT ON COLUMN c_ai_config.speech_realtime_url IS '实时语音识别 WebSocket 上游地址';
 COMMENT ON COLUMN c_ai_user_consultation_log.consultation_round_id IS '问诊轮次ID（客户端生成UUID，每轮问诊一个，贯穿该轮所有提交）';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_his_org IS 'HIS端机构ID（来自桌面端问诊上下文）';
 COMMENT ON COLUMN c_ai_op_log.id_his_org IS 'HIS端机构ID（来自桌面端事件上下文）';

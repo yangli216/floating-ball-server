@@ -1,4 +1,4 @@
--- One-time, idempotent HIS organization statistics and consultation round upgrade for Oracle 19c.
+-- One-time, idempotent deployed-schema compatibility upgrade for Oracle 19c.
 -- Run as the application schema owner after taking a database backup.
 
 DECLARE
@@ -37,6 +37,8 @@ DECLARE
     END;
 BEGIN
     -- These fields already exist in the current baseline but were omitted by some deployed databases.
+    add_column_if_missing('c_ai_config', 'speech_realtime_url', 'VARCHAR2(500)');
+
     add_column_if_missing('c_ai_user_consultation_log', 'consultation_round_id', 'VARCHAR2(64)');
     add_column_if_missing('c_ai_user_consultation_log', 'id_his_org', 'VARCHAR2(64)');
 
@@ -68,6 +70,7 @@ BEGIN
 END;
 /
 
+COMMENT ON COLUMN c_ai_config.speech_realtime_url IS '实时语音识别 WebSocket 上游地址';
 COMMENT ON COLUMN c_ai_user_consultation_log.consultation_round_id IS '问诊轮次ID（客户端生成UUID，每轮问诊一个，贯穿该轮所有提交）';
 COMMENT ON COLUMN c_ai_user_consultation_log.id_his_org IS 'HIS端机构ID（来自桌面端问诊上下文）';
 COMMENT ON COLUMN c_ai_op_log.id_his_org IS 'HIS端机构ID（来自桌面端事件上下文）';

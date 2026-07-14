@@ -56,6 +56,7 @@ class OracleSchemaScriptTest {
         assertContains(initSql, "fast_model_name          VARCHAR2(128)");
         assertContains(initSql, "enable_thinking          CHAR(1) DEFAULT '0' NOT NULL");
         assertContains(initSql, "audio_api_key_encrypted  VARCHAR2(1000)");
+        assertContains(initSql, "speech_realtime_url      VARCHAR2(500)");
         assertContains(initSql, "pmphai_enabled           CHAR(1) DEFAULT '0' NOT NULL");
         assertContains(initSql, "reviewer_check_examination_enabled CHAR(1) DEFAULT '1' NOT NULL");
 
@@ -151,6 +152,7 @@ class OracleSchemaScriptTest {
 
         assertContains(initSql, "cd_org               VARCHAR(64) NOT NULL");
         assertContains(initSql, "features_json            TEXT");
+        assertContains(initSql, "speech_realtime_url      VARCHAR(500)");
         assertContains(initSql, "CREATE TABLE c_ai_rec_pref_event");
         assertContains(initSql, "CREATE TABLE c_ai_rec_pref_agg");
         assertContains(initSql, "CREATE UNIQUE INDEX uk_c_ai_rec_pref_event_idem");
@@ -193,6 +195,8 @@ class OracleSchemaScriptTest {
             DAMENG_SQL_DIR.resolve("update_his_org_statistics.sql")
         )) {
             String sql = readSql(script);
+            assertContains(sql, "c_ai_config");
+            assertContains(sql, "speech_realtime_url");
             assertContains(sql, "c_ai_user_consultation_log");
             assertContains(sql, "consultation_round_id");
             assertContains(sql, "id_his_org");
@@ -213,13 +217,21 @@ class OracleSchemaScriptTest {
 
         String oracleCompatibleColumn =
             "add_column_if_missing('c_ai_user_consultation_log', 'consultation_round_id', 'VARCHAR2(64)')";
+        String oracleCompatibleRealtimeColumn =
+            "add_column_if_missing('c_ai_config', 'speech_realtime_url', 'VARCHAR2(500)')";
         String oracleCompatibleUniqueIndex =
             "CASE WHEN fg_active = ''1'' AND status = ''generated'' THEN consultation_round_id END";
         assertContains(oracleSql, oracleCompatibleColumn);
+        assertContains(oracleSql, oracleCompatibleRealtimeColumn);
         assertContains(oracleSql, oracleCompatibleUniqueIndex);
         assertContains(damengSql, oracleCompatibleColumn);
+        assertContains(damengSql, oracleCompatibleRealtimeColumn);
         assertContains(damengSql, oracleCompatibleUniqueIndex);
 
+        assertContains(
+            gaussdbSql,
+            "ALTER TABLE c_ai_config ADD COLUMN IF NOT EXISTS speech_realtime_url VARCHAR(500)"
+        );
         assertContains(
             gaussdbSql,
             "ALTER TABLE c_ai_user_consultation_log ADD COLUMN IF NOT EXISTS consultation_round_id VARCHAR(64)"
