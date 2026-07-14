@@ -80,20 +80,30 @@ case "${ENVIRONMENT}" in
     SPEECH_DIR="${DEPLOY_DIR}/speech-files"
     SPRING_PROFILE="xiaoshan-test"
     SERVER_PORT="9090"
-    OTHER_PID_FILE="/data/floating-ball-server.pid"
+    OTHER_PID_FILE="/data/floating-ball-server-production/floating-ball-server-production.pid"
+    LEGACY_JAR_FILE=""
+    LEGACY_START_SCRIPT=""
+    LEGACY_PID_FILE=""
+    LEGACY_RELEASE_DIR=""
+    LEGACY_SPEECH_DIR=""
     ;;
   production)
-    APP_NAME="floating-ball-server"
-    DEPLOY_DIR="/data"
-    JAR_FILE="/data/floating-ball-server.jar"
-    START_SCRIPT="/data/start-floating-ball-server.sh"
-    PID_FILE="/data/floating-ball-server.pid"
-    LOG_DIR="/data/floating-ball-server/logs"
-    RELEASE_DIR="/tmp/floating-ball-server/releases"
-    SPEECH_DIR="/data/floating-ball/speech-files"
+    APP_NAME="floating-ball-server-production"
+    DEPLOY_DIR="/data/floating-ball-server-production"
+    JAR_FILE="${DEPLOY_DIR}/floating-ball-server.jar"
+    START_SCRIPT="${DEPLOY_DIR}/start.sh"
+    PID_FILE="${DEPLOY_DIR}/${APP_NAME}.pid"
+    LOG_DIR="${DEPLOY_DIR}/logs"
+    RELEASE_DIR="${DEPLOY_DIR}/releases"
+    SPEECH_DIR="${DEPLOY_DIR}/speech-files"
     SPRING_PROFILE="xiaoshan"
     SERVER_PORT="8080"
     OTHER_PID_FILE="/data/floating-ball-server-testing/floating-ball-server-testing.pid"
+    LEGACY_JAR_FILE="/data/floating-ball-server.jar"
+    LEGACY_START_SCRIPT="/data/start-floating-ball-server.sh"
+    LEGACY_PID_FILE="/data/floating-ball-server.pid"
+    LEGACY_RELEASE_DIR="/tmp/floating-ball-server/releases"
+    LEGACY_SPEECH_DIR="/data/floating-ball/speech-files"
     ;;
 esac
 
@@ -382,9 +392,16 @@ build_remote_deployer() {
     printf 'START_SCRIPT="%s"\n' "${START_SCRIPT}"
     printf 'PID_FILE="%s"\n' "${PID_FILE}"
     printf 'LOG_DIR="%s"\n' "${LOG_DIR}"
+    printf 'RELEASE_DIR="%s"\n' "${RELEASE_DIR}"
+    printf 'SPEECH_DIR="%s"\n' "${SPEECH_DIR}"
     printf 'SPRING_PROFILE="%s"\n' "${SPRING_PROFILE}"
     printf 'SERVER_PORT="%s"\n' "${SERVER_PORT}"
     printf 'OTHER_PID_FILE="%s"\n' "${OTHER_PID_FILE}"
+    printf 'LEGACY_JAR_FILE="%s"\n' "${LEGACY_JAR_FILE}"
+    printf 'LEGACY_START_SCRIPT="%s"\n' "${LEGACY_START_SCRIPT}"
+    printf 'LEGACY_PID_FILE="%s"\n' "${LEGACY_PID_FILE}"
+    printf 'LEGACY_RELEASE_DIR="%s"\n' "${LEGACY_RELEASE_DIR}"
+    printf 'LEGACY_SPEECH_DIR="%s"\n' "${LEGACY_SPEECH_DIR}"
     printf 'RELEASE_ID="%s"\n' "${release_id}"
     printf 'EXPECTED_SHA256="%s"\n' "${expected_sha256}"
     printf 'UPLOAD_JAR="%s"\n' "${upload_jar}"
@@ -396,6 +413,7 @@ JAR_BACKUP="${JAR_FILE}.backup-${RELEASE_ID}"
 SCRIPT_BACKUP="${START_SCRIPT}.backup-${RELEASE_ID}"
 LOG_ARCHIVE="${LOG_DIR}/archive/${RELEASE_ID}"
 ORIGINAL_RUNNING=0
+LEGACY_RUNNING=0
 OTHER_PID_BEFORE=""
 MUTATION_STARTED=0
 DEPLOY_SUCCEEDED=0
@@ -427,6 +445,8 @@ rollback() {
     fi
     if [[ "${ORIGINAL_RUNNING}" == "1" && -x "${START_SCRIPT}" ]]; then
       "${START_SCRIPT}" start || true
+    elif [[ "${LEGACY_RUNNING}" == "1" && -x "${LEGACY_START_SCRIPT}" ]]; then
+      "${LEGACY_START_SCRIPT}" start || true
     fi
   fi
 
@@ -477,9 +497,30 @@ if [[ -f "${PID_FILE}" ]]; then
   fi
 fi
 
+legacy_pid=""
+if [[ -n "${LEGACY_PID_FILE}" && -f "${LEGACY_PID_FILE}" ]]; then
+  legacy_pid="$(cat "${LEGACY_PID_FILE}")"
+  if kill -0 "${legacy_pid}" >/dev/null 2>&1; then
+    legacy_cmdline="$(tr '\000' ' ' < "/proc/${legacy_pid}/cmdline")"
+    if [[ "${legacy_cmdline}" != *"-jar ${LEGACY_JAR_FILE}"* || "${legacy_cmdline}" != *"spring.profiles.active=${SPRING_PROFILE}"* ]]; then
+      echo "Legacy production PID does not match the expected service; refusing deployment." >&2
+      exit 1
+    fi
+    LEGACY_RUNNING=1
+  else
+    legacy_pid=""
+  fi
+fi
+
+if [[ "${ORIGINAL_RUNNING}" == "1" && "${LEGACY_RUNNING}" == "1" ]]; then
+  echo "Both current and legacy production PID files are active; refusing deployment." >&2
+  exit 1
+fi
+
 listener="$(ss -ltnp 2>/dev/null | grep -E ":${SERVER_PORT}[[:space:]]" || true)"
 if [[ -n "${listener}" ]]; then
-  if [[ -z "${current_pid}" || "${listener}" != *"pid=${current_pid},"* ]]; then
+  expected_listener_pid="${current_pid:-${legacy_pid}}"
+  if [[ -z "${expected_listener_pid}" || "${listener}" != *"pid=${expected_listener_pid},"* ]]; then
     echo "Port ${SERVER_PORT} is owned by another process; refusing deployment." >&2
     exit 1
   fi
@@ -499,9 +540,21 @@ if [[ -f "${START_SCRIPT}" ]]; then
   cp -p "${START_SCRIPT}" "${SCRIPT_BACKUP}"
 fi
 
+if [[ "${LEGACY_RUNNING}" == "1" ]]; then
+  mkdir -p "${RELEASE_DIR}" "${SPEECH_DIR}"
+  if [[ -d "${LEGACY_RELEASE_DIR}" ]]; then
+    cp -a -n "${LEGACY_RELEASE_DIR}/." "${RELEASE_DIR}/"
+  fi
+  if [[ -d "${LEGACY_SPEECH_DIR}" ]]; then
+    cp -a -n "${LEGACY_SPEECH_DIR}/." "${SPEECH_DIR}/"
+  fi
+fi
+
 MUTATION_STARTED=1
 if [[ "${ORIGINAL_RUNNING}" == "1" ]]; then
   "${START_SCRIPT}" stop
+elif [[ "${LEGACY_RUNNING}" == "1" ]]; then
+  "${LEGACY_START_SCRIPT}" stop
 fi
 
 if ss -ltnp 2>/dev/null | grep -qE ":${SERVER_PORT}[[:space:]]"; then
@@ -577,6 +630,9 @@ echo "script_backup=${SCRIPT_BACKUP}"
 echo "log_archive=${LOG_ARCHIVE}"
 if [[ -n "${OTHER_PID_BEFORE}" ]]; then
   echo "other_environment_pid=${OTHER_PID_BEFORE} (unchanged)"
+fi
+if [[ "${LEGACY_RUNNING}" == "1" ]]; then
+  echo "legacy_production_migrated=${LEGACY_JAR_FILE}"
 fi
 REMOTE_DEPLOY
   } > "${output}"

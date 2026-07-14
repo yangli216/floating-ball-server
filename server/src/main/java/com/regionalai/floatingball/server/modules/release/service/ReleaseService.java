@@ -249,7 +249,7 @@ public class ReleaseService {
         }
 
         List<ReleasePackage> packages = resolveReleasePackages(request, uploadedLatestJson, files);
-        ReleaseMetadata releaseMetadata = packages.get(0).metadata;
+        ReleaseMetadata releaseMetadata = firstReleaseMetadata(packages);
         List<ReleaseView> views = new ArrayList<ReleaseView>();
         try {
             for (String channel : channels) {
@@ -310,29 +310,39 @@ public class ReleaseService {
             if (!fileNames.add(originalFileName)) {
                 throw new BusinessException("同一次发布中存在重复安装包文件名: " + originalFileName);
             }
-            ReleaseMetadata metadata = resolveBatchReleaseMetadata(request, uploadedLatestJson, originalFileName);
-            validatePackageMatchesMetadata(uploadedLatestJson, originalFileName, metadata);
-            if (version == null) {
-                version = metadata.version;
-            } else if (!version.equals(metadata.version)) {
-                throw new BusinessException("同一次批量发布中的安装包版本必须一致");
-            }
-            if (!targets.add(metadata.target)) {
-                throw new BusinessException("同一次发布中存在重复平台 target: " + metadata.target);
+            List<ReleaseMetadata> metadataList = resolveBatchReleaseMetadataList(request, uploadedLatestJson, originalFileName);
+            for (ReleaseMetadata metadata : metadataList) {
+                validatePackageMatchesMetadata(uploadedLatestJson, originalFileName, metadata);
+                if (version == null) {
+                    version = metadata.version;
+                } else if (!version.equals(metadata.version)) {
+                    throw new BusinessException("同一次批量发布中的安装包版本必须一致");
+                }
+                if (!targets.add(metadata.target)) {
+                    throw new BusinessException("同一次发布中存在重复平台 target: " + metadata.target);
+                }
             }
 
             ReleasePackage releasePackage = new ReleasePackage();
             releasePackage.file = file;
             releasePackage.fileName = originalFileName;
-            releasePackage.metadata = metadata;
+            releasePackage.metadataList = metadataList;
             packages.add(releasePackage);
         }
         return packages;
     }
 
-    private ReleaseMetadata resolveBatchReleaseMetadata(ReleaseBatchUploadRequest request,
-                                                        TauriLatestJson uploadedLatestJson,
-                                                        String originalFileName) {
+    private ReleaseMetadata firstReleaseMetadata(List<ReleasePackage> packages) {
+        if (packages == null || packages.isEmpty()
+            || packages.get(0).metadataList == null || packages.get(0).metadataList.isEmpty()) {
+            throw new BusinessException("安装包文件不能为空");
+        }
+        return packages.get(0).metadataList.get(0);
+    }
+
+    private List<ReleaseMetadata> resolveBatchReleaseMetadataList(ReleaseBatchUploadRequest request,
+                                                                  TauriLatestJson uploadedLatestJson,
+                                                                  String originalFileName) {
         String version = trimToNull(request.getVersion());
         String notes = trimToNull(request.getNotes());
         String pubDate = trimToNull(request.getPubDate());
@@ -341,18 +351,22 @@ public class ReleaseService {
         notes = firstText(notes, uploadedLatestJson.getNotes());
         pubDate = firstText(pubDate, uploadedLatestJson.getPubDate());
 
-        PlatformMatch platformMatch = findPlatformMatch(uploadedLatestJson, originalFileName, null);
-        if (platformMatch == null || platformMatch.platformInfo == null) {
+        List<PlatformMatch> platformMatches = findPlatformMatches(uploadedLatestJson, originalFileName, null);
+        if (platformMatches.isEmpty()) {
             throw new BusinessException("无法根据安装包文件名识别平台 target: " + originalFileName);
         }
 
-        ReleaseMetadata metadata = new ReleaseMetadata();
-        metadata.version = requireSafeText(version, "版本号不能为空，请上传 latest.json 或手工填写版本号", "版本号只能包含字母、数字、点、下划线和短横线");
-        metadata.target = requireSafeText(platformMatch.target, "平台 target 不能为空", "平台 target 只能包含字母、数字、点、下划线和短横线");
-        metadata.signature = requireText(platformMatch.platformInfo.getSignature(), "latest.json 缺少 " + metadata.target + " 的签名");
-        metadata.notes = notes;
-        metadata.pubDate = normalizePubDate(pubDate);
-        return metadata;
+        List<ReleaseMetadata> metadataList = new ArrayList<ReleaseMetadata>();
+        for (PlatformMatch platformMatch : platformMatches) {
+            ReleaseMetadata metadata = new ReleaseMetadata();
+            metadata.version = requireSafeText(version, "版本号不能为空，请上传 latest.json 或手工填写版本号", "版本号只能包含字母、数字、点、下划线和短横线");
+            metadata.target = requireSafeText(platformMatch.target, "平台 target 不能为空", "平台 target 只能包含字母、数字、点、下划线和短横线");
+            metadata.signature = requireText(platformMatch.platformInfo.getSignature(), "latest.json 缺少 " + metadata.target + " 的签名");
+            metadata.notes = notes;
+            metadata.pubDate = normalizePubDate(pubDate);
+            metadataList.add(metadata);
+        }
+        return metadataList;
     }
 
     private void applyReleasePackages(String channel,
@@ -371,21 +385,22 @@ public class ReleaseService {
         latestJson.setPubDate(releaseMetadata.pubDate);
 
         for (ReleasePackage releasePackage : packages) {
-            ReleaseMetadata metadata = releasePackage.metadata;
-            Path targetDirectory = storageRoot.resolve(channel).resolve(metadata.target).normalize();
-            ensureInsideStorage(targetDirectory);
-            Files.createDirectories(targetDirectory);
-            Path targetPath = targetDirectory.resolve(releasePackage.fileName).normalize();
-            ensureInsideStorage(targetPath);
-            try (InputStream inputStream = releasePackage.file.getInputStream()) {
-                Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            }
+            for (ReleaseMetadata metadata : releasePackage.metadataList) {
+                Path targetDirectory = storageRoot.resolve(channel).resolve(metadata.target).normalize();
+                ensureInsideStorage(targetDirectory);
+                Files.createDirectories(targetDirectory);
+                Path targetPath = targetDirectory.resolve(releasePackage.fileName).normalize();
+                ensureInsideStorage(targetPath);
+                try (InputStream inputStream = releasePackage.file.getInputStream()) {
+                    Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                }
 
-            TauriLatestJson.PlatformInfo platformInfo = new TauriLatestJson.PlatformInfo();
-            platformInfo.setSignature(metadata.signature);
-            platformInfo.setUrl(buildFileUrl(channel, metadata.target, releasePackage.fileName));
-            latestJson.getPlatforms().put(metadata.target, platformInfo);
-            log.info("release file uploaded. channel={}, version={}, target={}, fileName={}", channel, metadata.version, metadata.target, releasePackage.fileName);
+                TauriLatestJson.PlatformInfo platformInfo = new TauriLatestJson.PlatformInfo();
+                platformInfo.setSignature(metadata.signature);
+                platformInfo.setUrl(buildFileUrl(channel, metadata.target, releasePackage.fileName));
+                latestJson.getPlatforms().put(metadata.target, platformInfo);
+                log.info("release file uploaded. channel={}, version={}, target={}, fileName={}", channel, metadata.version, metadata.target, releasePackage.fileName);
+            }
         }
 
         writeLatestJson(channel, latestJson);
@@ -459,21 +474,30 @@ public class ReleaseService {
     }
 
     private PlatformMatch findPlatformMatch(TauriLatestJson latestJson, String originalFileName, String preferredTarget) {
+        List<PlatformMatch> matches = findPlatformMatches(latestJson, originalFileName, preferredTarget);
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private List<PlatformMatch> findPlatformMatches(TauriLatestJson latestJson, String originalFileName, String preferredTarget) {
         if (latestJson == null || latestJson.getPlatforms() == null || latestJson.getPlatforms().isEmpty()) {
-            return null;
+            return Collections.emptyList();
         }
         if (StringUtils.hasText(preferredTarget) && latestJson.getPlatforms().containsKey(preferredTarget)) {
-            return new PlatformMatch(preferredTarget, latestJson.getPlatforms().get(preferredTarget));
+            return Collections.singletonList(new PlatformMatch(preferredTarget, latestJson.getPlatforms().get(preferredTarget)));
         }
+        List<PlatformMatch> matches = new ArrayList<PlatformMatch>();
         for (String target : latestJson.getPlatforms().keySet()) {
             TauriLatestJson.PlatformInfo platformInfo = latestJson.getPlatforms().get(target);
-            if (originalFileName.equals(extractFileName(platformInfo.getUrl()))) {
-                return new PlatformMatch(target, platformInfo);
+            if (platformInfo != null && originalFileName.equals(extractFileName(platformInfo.getUrl()))) {
+                matches.add(new PlatformMatch(target, platformInfo));
             }
+        }
+        if (!matches.isEmpty()) {
+            return matches;
         }
         if (latestJson.getPlatforms().size() == 1) {
             String target = latestJson.getPlatforms().keySet().iterator().next();
-            return new PlatformMatch(target, latestJson.getPlatforms().get(target));
+            return Collections.singletonList(new PlatformMatch(target, latestJson.getPlatforms().get(target)));
         }
         throw new BusinessException("latest.json 中包含多个平台，但无法根据安装包文件名匹配；请在平台 target 中选择正确项");
     }
@@ -1283,7 +1307,7 @@ public class ReleaseService {
     private static class ReleasePackage {
         private MultipartFile file;
         private String fileName;
-        private ReleaseMetadata metadata;
+        private List<ReleaseMetadata> metadataList;
     }
 
     private static class PlatformMatch {

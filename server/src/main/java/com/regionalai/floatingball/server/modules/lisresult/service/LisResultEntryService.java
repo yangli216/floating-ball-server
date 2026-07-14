@@ -1,6 +1,6 @@
 package com.regionalai.floatingball.server.modules.lisresult.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.api.PageResponse;
@@ -70,44 +70,61 @@ public class LisResultEntryService {
         long pageSize = Math.max(1, Math.min(size, 100));
         TimeRange timeRange = resolveApplyTimeRange(dateFrom, dateTo);
         Page<HiOdsApply> page = new Page<HiOdsApply>(Math.max(1, current), pageSize);
-        LambdaQueryWrapper<HiOdsApply> wrapper = new LambdaQueryWrapper<HiOdsApply>()
-            .and(q -> q.isNull(HiOdsApply::getIdResult).or().eq(HiOdsApply::getIdResult, ""))
-            .ge(HiOdsApply::getInsertTime, timeRange.start)
-            .lt(HiOdsApply::getInsertTime, timeRange.endExclusive)
-            .orderByDesc(HiOdsApply::getInsertTime)
-            .orderByDesc(HiOdsApply::getFgUrgent);
+        QueryWrapper<HiOdsApply> wrapper = new QueryWrapper<HiOdsApply>()
+            .select(
+                "id_apply",
+                "cd_apply",
+                "na_apply",
+                "sd_disp",
+                "sd_business",
+                "sd_apply",
+                "fg_urgent",
+                "id_pi",
+                "id_vis",
+                "id_reg",
+                "nas_diag",
+                "na_dept_exec",
+                "na_doc_exec",
+                "id_org",
+                "insert_time"
+            )
+            .and(q -> q.isNull("id_result").or().eq("id_result", ""))
+            .ge("insert_time", timeRange.start)
+            .lt("insert_time", timeRange.endExclusive)
+            .orderByDesc("insert_time")
+            .orderByDesc("fg_urgent");
 
         if (StringUtils.hasText(dispType)) {
             String normalizedDispType = dispType.trim();
             if (!DISP_LIS.equals(normalizedDispType) && !DISP_PACS.equals(normalizedDispType)) {
                 throw new BusinessException("申请单类别只支持检验或检查");
             }
-            wrapper.eq(HiOdsApply::getSdDisp, normalizedDispType);
+            wrapper.eq("sd_disp", normalizedDispType);
         } else {
-            wrapper.in(HiOdsApply::getSdDisp, Arrays.asList(DISP_LIS, DISP_PACS));
+            wrapper.in("sd_disp", Arrays.asList(DISP_LIS, DISP_PACS));
         }
         if (StringUtils.hasText(businessType)) {
             String normalizedBusinessType = businessType.trim();
             if (!BUSINESS_OUTPATIENT.equals(normalizedBusinessType) && !BUSINESS_INPATIENT.equals(normalizedBusinessType)) {
                 throw new BusinessException("申请类别只支持门诊或住院");
             }
-            wrapper.eq(HiOdsApply::getSdBusiness, normalizedBusinessType);
+            wrapper.eq("sd_business", normalizedBusinessType);
         }
         if (StringUtils.hasText(status)) {
-            wrapper.eq(HiOdsApply::getSdApply, status.trim());
+            wrapper.eq("sd_apply", status.trim());
         } else {
-            wrapper.notIn(HiOdsApply::getSdApply, Arrays.asList(STATUS_REPORTED, STATUS_VOID));
+            wrapper.notIn("sd_apply", Arrays.asList(STATUS_REPORTED, STATUS_VOID));
         }
         if (StringUtils.hasText(keyword)) {
             String value = keyword.trim();
-            wrapper.and(q -> q.like(HiOdsApply::getCdApply, value)
-                .or().like(HiOdsApply::getNaApply, value)
-                .or().like(HiOdsApply::getIdPi, value)
-                .or().like(HiOdsApply::getIdVis, value)
-                .or().like(HiOdsApply::getNasDiag, value));
+            wrapper.and(q -> q.like("cd_apply", value)
+                .or().like("na_apply", value)
+                .or().like("id_pi", value)
+                .or().like("id_vis", value)
+                .or().like("nas_diag", value));
         }
         if (StringUtils.hasText(idOrg)) {
-            wrapper.eq(HiOdsApply::getIdOrg, idOrg.trim());
+            wrapper.eq("id_org", idOrg.trim());
         }
 
         Page<HiOdsApply> result = applyMapper.selectPage(page, wrapper);
@@ -140,19 +157,58 @@ public class LisResultEntryService {
         if (!StringUtils.hasText(idApply)) {
             throw new BusinessException("申请单ID不能为空");
         }
-        return reportMapper.selectList(new LambdaQueryWrapper<HiOdsApplyLisReport>()
-            .eq(HiOdsApplyLisReport::getIdApply, idApply.trim())
-            .orderByAsc(HiOdsApplyLisReport::getInsertTime)
-            .orderByAsc(HiOdsApplyLisReport::getCdResult));
+        return reportMapper.selectList(new QueryWrapper<HiOdsApplyLisReport>()
+            .select(
+                "id_report",
+                "id_apply",
+                "resultid",
+                "id_report_group",
+                "cd_result",
+                "na_result",
+                "test_result",
+                "result_qualitative",
+                "reference_range",
+                "reference_low",
+                "reference_high",
+                "result_unit",
+                "result_hint",
+                "instrument_code",
+                "instrument_name",
+                "insert_user",
+                "insert_time",
+                "update_user",
+                "update_time"
+            )
+            .eq("id_apply", idApply.trim())
+            .orderByAsc("insert_time")
+            .orderByAsc("cd_result"));
     }
 
     public HiOdsApplyPacsReport getPacsReport(String idApply) {
         if (!StringUtils.hasText(idApply)) {
             throw new BusinessException("申请单ID不能为空");
         }
-        return pacsReportMapper.selectOne(new LambdaQueryWrapper<HiOdsApplyPacsReport>()
-            .eq(HiOdsApplyPacsReport::getIdApply, idApply.trim())
-            .orderByDesc(HiOdsApplyPacsReport::getUpdateTime)
+        return pacsReportMapper.selectOne(new QueryWrapper<HiOdsApplyPacsReport>()
+            .select(
+                "id_report",
+                "id_apply",
+                "\"RESULT\"",
+                "remark",
+                "clinical_impression",
+                "negative_positive",
+                "diagnostic_imaging",
+                "na_insert_user",
+                "na_update_user",
+                "cd_study",
+                "id_dept",
+                "na_dept",
+                "insert_user",
+                "insert_time",
+                "update_user",
+                "update_time"
+            )
+            .eq("id_apply", idApply.trim())
+            .orderByDesc("update_time")
             .last(databaseDialect.firstRows(1)));
     }
 
@@ -175,7 +231,7 @@ public class LisResultEntryService {
             throw new BusinessException("单份报告最多录入" + MAX_REPORT_ITEMS + "项结果");
         }
 
-        HiOdsApply apply = applyMapper.selectById(idApply.trim());
+        HiOdsApply apply = findApplyForWriteback(idApply);
         validateWritableApply(apply, DISP_LIS, "仅支持检验申请单录入指标结果");
 
         LocalDateTime now = LocalDateTime.now();
@@ -231,7 +287,7 @@ public class LisResultEntryService {
             throw new BusinessException("检查结果或影像诊断至少填写一项");
         }
 
-        HiOdsApply apply = applyMapper.selectById(idApply.trim());
+        HiOdsApply apply = findApplyForWriteback(idApply);
         validateWritableApply(apply, DISP_PACS, "仅支持检查申请单录入检查报告");
 
         LocalDateTime now = LocalDateTime.now();
@@ -263,6 +319,22 @@ public class LisResultEntryService {
 
         markApplyReported(apply, reportId, operator, now);
         return new LisReportSubmitResponse(apply.getIdApply(), reportId, 1);
+    }
+
+    private HiOdsApply findApplyForWriteback(String idApply) {
+        return applyMapper.selectOne(new QueryWrapper<HiOdsApply>()
+            .select(
+                "id_apply",
+                "sd_disp",
+                "sd_apply",
+                "id_result",
+                "id_org",
+                "id_tet",
+                "revision",
+                "dt_exec"
+            )
+            .eq("id_apply", idApply.trim())
+            .last(databaseDialect.firstRows(1)));
     }
 
     private void validateWritableApply(HiOdsApply apply, String expectedDispType, String dispErrorMessage) {

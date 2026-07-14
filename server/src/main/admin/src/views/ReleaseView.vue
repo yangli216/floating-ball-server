@@ -15,77 +15,72 @@
       </div>
     </admin-filter-bar>
 
-    <section class="page-section page-section--table release-table-card">
-      <el-table v-loading="loading" :data="records" class="admin-table" row-key="channel">
-        <el-table-column label="通道" width="130">
-          <template slot-scope="{ row }">
-            <status-pill tone="success" :label="channelLabel(row.channel)" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="version" label="版本" width="120">
-          <template slot-scope="{ row }">{{ row.version || '--' }}</template>
-        </el-table-column>
-        <el-table-column label="强制更新" width="130">
-          <template slot-scope="{ row }">
-            <el-switch
-              v-model="row.forceUpdate"
-              :disabled="!row.version || policySavingKey === row.channel"
-              active-color="#1D9E75"
-              inactive-color="#dcdfe6"
-              @change="toggleForceUpdate(row, $event)"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
-          <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
-        </el-table-column>
-        <el-table-column label="平台" min-width="220">
-          <template slot-scope="{ row }">
-            <div v-if="releasePlatforms(row).length" class="release-platform-list">
-              <code-tag v-for="item in releasePlatforms(row)" :key="item.target" :value="item.target" />
+    <section v-loading="loading" class="release-current-section">
+      <div v-if="records.length" class="release-card-grid">
+        <article v-for="row in records" :key="row.channel" class="release-channel-card">
+          <header class="release-card-header">
+            <div class="release-card-title">
+              <status-pill tone="success" :label="channelLabel(row.channel)" />
+              <strong>{{ row.version || '暂无版本' }}</strong>
             </div>
-            <span v-else class="muted">暂无平台</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="安装包" min-width="280">
-          <template slot-scope="{ row }">
-            <div v-if="releasePlatforms(row).length" class="release-file-list">
-              <div v-for="item in releasePlatforms(row)" :key="item.target" class="release-file-list__item">
-                <span>{{ item.fileName || '暂无上传文件' }}</span>
-                <span v-if="item.fileSize" class="muted">（{{ formatFileSize(item.fileSize) }}）</span>
-              </div>
+            <div class="release-card-policy">
+              <span class="muted">强制更新</span>
+              <el-switch
+                v-model="row.forceUpdate"
+                :disabled="!row.version || policySavingKey === row.channel"
+                active-color="#1D9E75"
+                inactive-color="#dcdfe6"
+                @change="toggleForceUpdate(row, $event)"
+              />
             </div>
-            <span v-else class="muted">暂无上传文件</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="客户端下载" min-width="320">
-          <template slot-scope="{ row }">
-            <template v-if="downloadPlatforms(row).length">
-              <div v-for="item in downloadPlatforms(row)" :key="item.target" class="release-download-item">
-                <code-tag :value="item.downloadUrl" />
+          </header>
+
+          <div class="release-meta-grid">
+            <div class="release-meta-item">
+              <span>最低可用版本</span>
+              <strong>{{ row.minSupportedVersion || '--' }}</strong>
+            </div>
+            <div class="release-meta-item">
+              <span>发布时间</span>
+              <strong>{{ row.pubDate || '--' }}</strong>
+            </div>
+            <div class="release-meta-item release-meta-item--source">
+              <span>更新源</span>
+              <div class="release-source-row">
+                <code-tag :value="row.latestJsonUrl || '--'" />
                 <div class="release-link-actions">
-                  <table-action @click="copy(item.downloadUrl, `${item.target || '客户端'}下载链接`)">复制</table-action>
-                  <table-action @click="openUrl(item.downloadUrl)">打开</table-action>
+                  <table-action :disabled="!row.latestJsonUrl" @click="copy(row.latestJsonUrl, '更新源')">复制</table-action>
                 </div>
               </div>
-            </template>
-            <span v-else class="muted">暂无下载链接</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="更新源" min-width="300">
-          <template slot-scope="{ row }">
-            <code-tag :value="row.latestJsonUrl" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="pubDate" label="发布时间" width="190">
-          <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template slot-scope="{ row }">
-            <table-action :disabled="!row.latestJsonUrl" @click="copy(row.latestJsonUrl, '更新源')">复制源</table-action>
-          </template>
-        </el-table-column>
-      </el-table>
+            </div>
+          </div>
+
+          <div class="release-package-panel">
+            <div class="release-panel-heading">
+              <span>平台包</span>
+              <span class="muted">{{ releasePlatforms(row).length }} 个</span>
+            </div>
+            <div v-if="releasePlatforms(row).length" class="release-package-list">
+              <div v-for="item in releasePlatforms(row)" :key="item.target || item.fileName" class="release-package-row">
+                <div class="release-package-main">
+                  <code-tag :value="item.target || '--'" />
+                  <div class="release-package-name">
+                    <span>{{ item.fileName || '暂无上传文件' }}</span>
+                    <span v-if="item.fileSize" class="muted">{{ formatFileSize(item.fileSize) }}</span>
+                  </div>
+                </div>
+                <div class="release-package-actions">
+                  <table-action :disabled="!item.downloadUrl" @click="copy(item.downloadUrl, `${item.target || '客户端'}下载链接`)">复制</table-action>
+                  <table-action :disabled="!item.downloadUrl" @click="openUrl(item.downloadUrl)">打开</table-action>
+                </div>
+                <div v-if="item.downloadUrl" class="release-package-url">{{ item.downloadUrl }}</div>
+              </div>
+            </div>
+            <div v-else class="release-empty-row">暂无平台包</div>
+          </div>
+        </article>
+      </div>
+      <el-empty v-else description="暂无发布版本" :image-size="80" />
     </section>
 
     <div class="history-header">
@@ -117,11 +112,21 @@
         <el-table-column prop="minSupportedVersion" label="最低可用版本" width="140">
           <template slot-scope="{ row }">{{ row.minSupportedVersion || '--' }}</template>
         </el-table-column>
-        <el-table-column label="平台" width="180">
-          <template slot-scope="{ row }"><code-tag :value="formatList(row.targets)" /></template>
+        <el-table-column label="平台" min-width="220">
+          <template slot-scope="{ row }">
+            <div v-if="historyTargets(row).length" class="release-platform-list release-platform-list--compact">
+              <code-tag v-for="target in historyTargets(row)" :key="target" :value="target" />
+            </div>
+            <span v-else class="muted">暂无平台</span>
+          </template>
         </el-table-column>
-        <el-table-column label="安装包" min-width="260">
-          <template slot-scope="{ row }">{{ formatList(row.fileNames) || '暂无上传文件' }}</template>
+        <el-table-column label="安装包" min-width="360">
+          <template slot-scope="{ row }">
+            <div v-if="historyFileNames(row).length" class="history-file-list">
+              <span v-for="fileName in historyFileNames(row)" :key="fileName" class="history-file-item">{{ fileName }}</span>
+            </div>
+            <span v-else class="muted">暂无上传文件</span>
+          </template>
         </el-table-column>
         <el-table-column prop="pubDate" label="发布时间" width="190">
           <template slot-scope="{ row }">{{ row.pubDate || '--' }}</template>
@@ -284,6 +289,12 @@ export default {
     },
     formatList(value) {
       return Array.isArray(value) ? value.filter(Boolean).join('、') : ''
+    },
+    historyTargets(row) {
+      return Array.isArray(row.targets) ? row.targets.filter(Boolean) : []
+    },
+    historyFileNames(row) {
+      return Array.isArray(row.fileNames) ? row.fileNames.filter(Boolean) : []
     },
     releasePlatforms(row) {
       if (Array.isArray(row.platforms) && row.platforms.length) {
@@ -521,6 +532,172 @@ export default {
   padding: 0;
 }
 
+.release-current-section {
+  min-height: 160px;
+}
+
+.release-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  gap: 14px;
+}
+
+.release-channel-card {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.release-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: #fbfcfc;
+}
+
+.release-card-title,
+.release-card-policy,
+.release-source-row,
+.release-package-main,
+.release-package-actions,
+.release-panel-heading {
+  display: flex;
+  align-items: center;
+}
+
+.release-card-title {
+  gap: 10px;
+  min-width: 0;
+}
+
+.release-card-title strong {
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.release-card-policy {
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.release-meta-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(220px, 1.3fr);
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.release-meta-item {
+  min-width: 0;
+}
+
+.release-meta-item span,
+.release-panel-heading {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.release-meta-item strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--color-text-regular);
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.release-meta-item--source {
+  grid-column: 1 / -1;
+}
+
+.release-source-row {
+  gap: 8px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.release-source-row .code-tag,
+.release-package-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-source-row .code-tag {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+.release-package-panel {
+  padding: 0 16px 16px;
+}
+
+.release-panel-heading {
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.release-package-list {
+  display: grid;
+  gap: 8px;
+}
+
+.release-package-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  border: 1px solid #e8ecec;
+  border-radius: 6px;
+  background: #fcfdfd;
+}
+
+.release-package-main {
+  gap: 10px;
+  min-width: 0;
+}
+
+.release-package-name {
+  min-width: 0;
+}
+
+.release-package-name span:first-child {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-package-actions {
+  gap: 10px;
+  align-self: start;
+  padding-top: 2px;
+}
+
+.release-package-url {
+  grid-column: 1 / -1;
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.release-empty-row {
+  padding: 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
 .release-toolbar__actions {
   display: flex;
   gap: 8px;
@@ -532,15 +709,9 @@ export default {
   display: flex;
   gap: 10px;
   align-items: center;
-  margin-top: 8px;
-}
-
-.release-download-item + .release-download-item {
-  margin-top: 10px;
 }
 
 .release-platform-list,
-.release-file-list,
 .selected-files,
 .detected-targets {
   display: flex;
@@ -549,14 +720,20 @@ export default {
   flex-wrap: wrap;
 }
 
-.release-file-list {
+.release-platform-list--compact {
   align-items: flex-start;
-  flex-direction: column;
 }
 
-.release-file-list__item {
-  max-width: 100%;
-  word-break: break-all;
+.history-file-list {
+  display: grid;
+  gap: 4px;
+}
+
+.history-file-item {
+  overflow: hidden;
+  color: var(--color-text-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .selected-files {
@@ -635,5 +812,29 @@ export default {
 .is-disabled {
   color: var(--color-text-placeholder);
   cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .release-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .release-card-header,
+  .release-package-row {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .release-card-header {
+    flex-direction: column;
+  }
+
+  .release-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .release-package-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

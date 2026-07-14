@@ -1,6 +1,9 @@
 package com.regionalai.floatingball.server.modules.lisresult.service;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.modules.auth.dto.AdminCurrentUser;
@@ -22,6 +25,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -61,6 +67,94 @@ class LisResultEntryServiceTest {
     }
 
     @Test
+    void listAppliesSelectsOnlyDisplayedColumns() {
+        Page<HiOdsApply> pageResult = new Page<HiOdsApply>(1, 10);
+        pageResult.setRecords(Collections.emptyList());
+        when(applyMapper.selectPage(any(Page.class), any())).thenReturn(pageResult);
+
+        service.listApplies(1, 10, "上呼吸道感染", null, null, null, "ORG001", "2026-07-01", "2026-07-02");
+
+        ArgumentCaptor<Wrapper<HiOdsApply>> queryCaptor = wrapperCaptor();
+        verify(applyMapper).selectPage(any(Page.class), queryCaptor.capture());
+        assertSelectColumns(queryCaptor.getValue(),
+            "id_apply",
+            "cd_apply",
+            "na_apply",
+            "sd_disp",
+            "sd_business",
+            "sd_apply",
+            "fg_urgent",
+            "id_pi",
+            "id_vis",
+            "id_reg",
+            "nas_diag",
+            "na_dept_exec",
+            "na_doc_exec",
+            "id_org",
+            "insert_time"
+        );
+    }
+
+    @Test
+    void listReportsSelectsOnlyDisplayedColumns() {
+        when(reportMapper.selectList(any())).thenReturn(Collections.emptyList());
+
+        service.listReports("APPLY001");
+
+        ArgumentCaptor<Wrapper<HiOdsApplyLisReport>> queryCaptor = wrapperCaptor();
+        verify(reportMapper).selectList(queryCaptor.capture());
+        assertSelectColumns(queryCaptor.getValue(),
+            "id_report",
+            "id_apply",
+            "resultid",
+            "id_report_group",
+            "cd_result",
+            "na_result",
+            "test_result",
+            "result_qualitative",
+            "reference_range",
+            "reference_low",
+            "reference_high",
+            "result_unit",
+            "result_hint",
+            "instrument_code",
+            "instrument_name",
+            "insert_user",
+            "insert_time",
+            "update_user",
+            "update_time"
+        );
+    }
+
+    @Test
+    void getPacsReportSelectsOnlyDisplayedColumns() {
+        when(pacsReportMapper.selectOne(any())).thenReturn(null);
+
+        service.getPacsReport("PACS001");
+
+        ArgumentCaptor<Wrapper<HiOdsApplyPacsReport>> queryCaptor = wrapperCaptor();
+        verify(pacsReportMapper).selectOne(queryCaptor.capture());
+        assertSelectColumns(queryCaptor.getValue(),
+            "id_report",
+            "id_apply",
+            "\"RESULT\"",
+            "remark",
+            "clinical_impression",
+            "negative_positive",
+            "diagnostic_imaging",
+            "na_insert_user",
+            "na_update_user",
+            "cd_study",
+            "id_dept",
+            "na_dept",
+            "insert_user",
+            "insert_time",
+            "update_user",
+            "update_time"
+        );
+    }
+
+    @Test
     void submitReportWritesValidItemsAndMarksApplyReported() {
         HiOdsApply apply = new HiOdsApply();
         apply.setIdApply("APPLY001");
@@ -69,7 +163,7 @@ class LisResultEntryServiceTest {
         apply.setIdOrg("ORG001");
         apply.setIdTet("TENANT001");
         apply.setRevision(2);
-        when(applyMapper.selectById("APPLY001")).thenReturn(apply);
+        when(applyMapper.selectOne(any())).thenReturn(apply);
 
         LisReportItemRequest valid = new LisReportItemRequest();
         valid.setCdResult("WBC");
@@ -112,6 +206,18 @@ class LisResultEntryServiceTest {
         assertEquals(response.getReportGroupId(), report.getResultid());
         assertEquals(response.getReportGroupId(), report.getIdReportGroup());
 
+        ArgumentCaptor<Wrapper<HiOdsApply>> queryCaptor = wrapperCaptor();
+        verify(applyMapper).selectOne(queryCaptor.capture());
+        assertSelectColumns(queryCaptor.getValue(),
+            "id_apply",
+            "sd_disp",
+            "sd_apply",
+            "id_result",
+            "id_org",
+            "id_tet",
+            "revision",
+            "dt_exec"
+        );
         verify(applyMapper).update(org.mockito.Mockito.<HiOdsApply>isNull(), any(UpdateWrapper.class));
     }
 
@@ -121,7 +227,7 @@ class LisResultEntryServiceTest {
         apply.setIdApply("APPLY001");
         apply.setSdDisp("1");
         apply.setSdApply("3");
-        when(applyMapper.selectById("APPLY001")).thenReturn(apply);
+        when(applyMapper.selectOne(any())).thenReturn(apply);
 
         LisReportItemRequest item = new LisReportItemRequest();
         item.setNaResult("白细胞计数");
@@ -144,7 +250,7 @@ class LisResultEntryServiceTest {
         apply.setIdOrg("ORG001");
         apply.setIdTet("TENANT001");
         apply.setRevision(4);
-        when(applyMapper.selectById("PACS001")).thenReturn(apply);
+        when(applyMapper.selectOne(any())).thenReturn(apply);
 
         PacsReportSubmitRequest request = new PacsReportSubmitRequest();
         request.setResult("双肺纹理增多，未见明确实变影。");
@@ -179,5 +285,21 @@ class LisResultEntryServiceTest {
         assertEquals("系统管理员", report.getInsertUser());
 
         verify(applyMapper).update(org.mockito.Mockito.<HiOdsApply>isNull(), any(UpdateWrapper.class));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private <T> ArgumentCaptor<Wrapper<T>> wrapperCaptor() {
+        return ArgumentCaptor.forClass((Class) Wrapper.class);
+    }
+
+    private void assertSelectColumns(Wrapper<?> wrapper, String... columns) {
+        assertEquals(Arrays.asList(columns), selectedColumns(wrapper));
+    }
+
+    private List<String> selectedColumns(Wrapper<?> wrapper) {
+        String sqlSelect = ((QueryWrapper<?>) wrapper).getSqlSelect();
+        return Arrays.stream(sqlSelect.split(","))
+            .map(String::trim)
+            .collect(Collectors.toList());
     }
 }

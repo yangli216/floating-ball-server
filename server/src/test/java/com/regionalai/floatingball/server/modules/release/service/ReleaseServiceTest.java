@@ -160,6 +160,46 @@ class ReleaseServiceTest {
         assertEquals(2, productionView.getPlatforms().size());
     }
 
+    @Test
+    void uploadBatchShouldPublishUniversalPackageToAllMatchingTargets() {
+        ReleaseBatchUploadRequest request = new ReleaseBatchUploadRequest();
+        request.setChannels(Arrays.asList("production"));
+        request.setMetadataFile(new MockMultipartFile(
+            "metadataFile",
+            "latest.json",
+            "application/json",
+            buildLatestJson(
+                "1.3.1",
+                "darwin-aarch64",
+                "MedHermes_universal.app.tar.gz",
+                "darwin-x86_64",
+                "MedHermes_universal.app.tar.gz"
+            ).getBytes(StandardCharsets.UTF_8)
+        ));
+        request.setFiles(Arrays.asList(
+            new MockMultipartFile(
+                "files",
+                "MedHermes_universal.app.tar.gz",
+                "application/octet-stream",
+                "package-universal".getBytes(StandardCharsets.UTF_8)
+            )
+        ));
+
+        List<ReleaseView> views = releaseService.uploadBatch(request);
+
+        assertEquals(1, views.size());
+        TauriLatestJson latestJson = releaseService.getLatestJson("production");
+        assertEquals("1.3.1", latestJson.getVersion());
+        assertEquals(2, latestJson.getPlatforms().size());
+        assertTrue(latestJson.getPlatforms().containsKey("darwin-aarch64"));
+        assertTrue(latestJson.getPlatforms().containsKey("darwin-x86_64"));
+        assertTrue(latestJson.getPlatforms().get("darwin-aarch64").getUrl().contains("/darwin-aarch64/MedHermes_universal.app.tar.gz"));
+        assertTrue(latestJson.getPlatforms().get("darwin-x86_64").getUrl().contains("/darwin-x86_64/MedHermes_universal.app.tar.gz"));
+        assertEquals("signature-darwin-aarch64", latestJson.getPlatforms().get("darwin-aarch64").getSignature());
+        assertEquals("signature-darwin-x86_64", latestJson.getPlatforms().get("darwin-x86_64").getSignature());
+        assertEquals(2, views.get(0).getPlatforms().size());
+    }
+
     private void upload(String version, String target, String fileName, boolean forceUpdate) {
         ReleaseUploadRequest request = new ReleaseUploadRequest();
         request.setChannel("production");
