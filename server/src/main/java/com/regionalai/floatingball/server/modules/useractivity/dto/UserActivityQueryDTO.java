@@ -13,6 +13,7 @@ public class UserActivityQueryDTO {
     private LocalDateTime dateToExclusiveTime;
     private String idRegion;
     private String idOrg;
+    private String hisOrgId;
     private String timeRange;
     private String activeStatus;
 }

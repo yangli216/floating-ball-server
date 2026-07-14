@@ -148,6 +148,8 @@ public class UserActivityService {
             item.setNaDevice(stringVal(mapValue(row, "NADEVICE", "nadevice")));
             item.setIdOrg(stringVal(mapValue(row, "IDORG", "idorg")));
             item.setNaOrg(stringVal(mapValue(row, "NAORG", "naorg")));
+            item.setHisOrgId(stringVal(mapValue(row, "HISORGID", "hisorgid")));
+            item.setHisOrgName(stringVal(mapValue(row, "HISORGNAME", "hisorgname")));
             item.setIdRegion(stringVal(mapValue(row, "IDREGION", "idregion")));
             item.setNaRegion(stringVal(mapValue(row, "NAREGION", "naregion")));
             item.setNaDoctor(stringVal(mapValue(row, "NADOCTOR", "nadoctor")));
@@ -184,7 +186,7 @@ public class UserActivityService {
             autoSize(summarySheet, 3);
 
             XSSFSheet userSheet = workbook.createSheet("用户明细");
-            writeHeader(userSheet, headerStyle, "医生姓名", "设备编码", "所属机构", "所属区域", "活跃状态", "问诊次数", "有效问诊数", "最后活跃时间");
+            writeHeader(userSheet, headerStyle, "医生姓名", "设备编码", "平台机构", "HIS机构", "所属区域", "活跃状态", "问诊次数", "有效问诊数", "最后活跃时间");
             for (int i = 0; i < users.size(); i++) {
                 UserActivityItemVO item = users.get(i);
                 writeRow(
@@ -193,6 +195,7 @@ public class UserActivityService {
                     item.getNaDoctor(),
                     item.getCdDevice(),
                     item.getNaOrg(),
+                    firstNonBlank(item.getHisOrgName(), item.getHisOrgId()),
                     item.getNaRegion(),
                     "active".equals(item.getActiveStatus()) ? "活跃" : "不活跃",
                     item.getConsultationCount(),
@@ -200,7 +203,7 @@ public class UserActivityService {
                     item.getLastActiveTime()
                 );
             }
-            autoSize(userSheet, 8);
+            autoSize(userSheet, 9);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
@@ -246,6 +249,7 @@ public class UserActivityService {
         UserActivityQueryDTO prev = new UserActivityQueryDTO();
         prev.setIdRegion(current.getIdRegion());
         prev.setIdOrg(current.getIdOrg());
+        prev.setHisOrgId(current.getHisOrgId());
         prev.setActiveStatus(current.getActiveStatus());
 
         String fromStr = current.getDateFrom();
@@ -337,6 +341,10 @@ public class UserActivityService {
 
     private String stringVal(Object obj) {
         return obj != null ? String.valueOf(obj) : null;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return primary != null && !primary.trim().isEmpty() ? primary : fallback;
     }
 
     private long longVal(Object obj) {

@@ -15,14 +15,14 @@
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
-          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="handleRegionChange">
+          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="search">
             <el-option v-for="r in regionOptions" :key="r.id" :label="r.name" :value="r.id" />
           </el-select>
         </div>
         <div class="filter-item">
-          <div class="filter-label">机构选择</div>
-          <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" class="filter-select" @change="search">
-            <el-option v-for="o in filteredOrgOptions" :key="o.id" :label="o.name" :value="o.id" />
+          <div class="filter-label">HIS机构</div>
+          <el-select v-model="query.hisOrgId" placeholder="全部HIS机构" clearable filterable size="small" class="filter-select" @change="search">
+            <el-option v-for="o in hisOrgOptions" :key="o.id" :label="o.label" :value="o.id" />
           </el-select>
         </div>
         <div class="filter-item">
@@ -101,7 +101,7 @@
 <script>
 import * as echarts from 'echarts'
 import http from '../api/http'
-import { activeRefOptions } from '../api/reference'
+import { fetchHisOrgOptions, fetchRegions } from '../api/reference'
 import { AdminFilterBar, ChartPanel, MetricCard, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
@@ -129,12 +129,12 @@ export default {
       timeRangeOptions: TIME_RANGES,
       pageNum: 1,
       pageSize: 20,
-      query: { dateFrom: '', dateTo: '', idRegion: '', idOrg: '', functionModules: [] },
+      query: { dateFrom: '', dateTo: '', idRegion: '', hisOrgId: '', functionModules: [] },
       response: {},
       trend: { modules: [], days: [], values: [] },
       moduleOptions: [],
       regionOptions: [],
-      orgOptions: [],
+      hisOrgOptions: [],
       exporting: false,
       COLORS,
       rankChart: null,
@@ -142,12 +142,6 @@ export default {
     }
   },
   computed: {
-    filteredOrgOptions() {
-      if (!this.query.idRegion) {
-        return this.orgOptions
-      }
-      return this.orgOptions.filter(item => item.idRegion === this.query.idRegion)
-    },
     isRankingEmpty() {
       return !(this.response.ranking || []).some(item => Number(item.callCount) > 0)
     },
@@ -211,19 +205,18 @@ export default {
     },
     async loadRefs() {
       try {
-        const refs = await activeRefOptions()
-        this.regionOptions = (refs.regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
-        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg, idRegion: o.idRegion }))
-        const mods = await http.get('/admin/api/analytics/function-modules')
+        const [regions, hisOrgs, mods] = await Promise.all([
+          fetchRegions({ sdStatus: '1' }),
+          fetchHisOrgOptions(),
+          http.get('/admin/api/analytics/function-modules')
+        ])
+        this.regionOptions = (regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
+        this.hisOrgOptions = (hisOrgs || []).map(o => ({
+          id: o.hisOrgId,
+          label: o.hisOrgName ? `${o.hisOrgName}（${o.hisOrgId}）` : o.hisOrgId
+        }))
         this.moduleOptions = mods || []
       } catch (e) { /* degrade */ }
-    },
-    handleRegionChange() {
-      const selectedOrg = this.orgOptions.find(item => item.id === this.query.idOrg)
-      if (this.query.idRegion && selectedOrg && selectedOrg.idRegion !== this.query.idRegion) {
-        this.query.idOrg = ''
-      }
-      this.search()
     },
     async search() {
       this.loading = true
@@ -234,7 +227,7 @@ export default {
           size: this.pageSize
         }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
         if (!params.functionModules || params.functionModules.length === 0) delete params.functionModules
 
         const data = await http.get('/admin/api/analytics/function-usage', { params })
@@ -252,7 +245,7 @@ export default {
     },
     reset() {
       this.timeRange = 'month'
-      this.query = { dateFrom: '', dateTo: '', idRegion: '', idOrg: '', functionModules: [] }
+      this.query = { dateFrom: '', dateTo: '', idRegion: '', hisOrgId: '', functionModules: [] }
       this.pageNum = 1
       this.initDateRange()
       this.search()
@@ -266,7 +259,7 @@ export default {
       try {
         const params = { ...this.query }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
         if (!params.functionModules || params.functionModules.length === 0) delete params.functionModules
         const blob = await http.get('/admin/api/analytics/function-usage/export', { params, responseType: 'blob' })
         this.downloadBlob(blob, '辅诊功能统计_' + new Date().toISOString().slice(0, 10) + '.xlsx')

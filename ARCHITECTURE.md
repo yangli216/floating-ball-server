@@ -1,6 +1,6 @@
 # floating-ball-server 架构说明
 
-> 更新日期：2026-07-06
+> 更新日期：2026-07-14
 
 ## 1. 项目定位
 
@@ -257,11 +257,11 @@ floating-ball-server/
 
 1. 客户端本地缓存事件
 2. 客户端对区域化操作日志不再依赖本地 SQLite，直接调用 `POST /v1/client/audit/events/batch`；启动时补传遗留队列，新事件入队后异步立即尝试一次，失败或离线时继续保留队列并按固定周期重试
-3. 客户端对 `operation` 事件优先上报 `{ module, action, title, sourceModule, scene, result, operationType, operationName, details }`；其中 `module/action/title/sourceModule/scene/result` 会被服务端提取到结构化列，`operationType/operationName/details` 继续保留在原始 payload
+3. 客户端对 `operation` 事件优先上报 `{ module, action, title, sourceModule, scene, result, operationType, operationName, details }`，并在事件外层携带事件产生时的 `hisOrgId/hisOrgName`；其中 `module/action/title/sourceModule/scene/result` 与 HIS 机构会被服务端提取到结构化列，`operationType/operationName/details` 继续保留在原始 payload
 4. AI 调用类 `operation` 事件必须同时保留摘要与完整出入参：`details.requestSummary/responseSummary` 用于列表摘要，`details.requestPayload/responsePayload` 用于详情排障。`requestPayload` 应记录实际发送给 `/v1/ai/chat` 或语音代理的业务请求体；`responsePayload` 应记录业务回文或错误对象。API Key、Bearer Token 等凭据不得进入 payload；语音原始 base64 / 二进制音频不得进入 payload。
 5. 客户端本地只保留轻量失败重试队列，不再把区域化操作日志落本地 SQLite；服务端仍按同一批量接口落库
 6. 服务端兼容旧载荷：若未显式提供 `module/action/title/sourceModule/scene/result`，则回退从 `operationType/operationName/success` 与 `details.traceId / details.consultationId` 等字段推导
-7. 服务端写入 `c_ai_op_log`
+7. 服务端写入 `c_ai_op_log`；`id_org` 继续来自设备鉴权，`id_his_org/na_his_org` 来自桌面端 SDK handshake 上下文，两者不得互相覆盖
 8. 管理端提供分页查询，并支持按 `module/action/title/sourceModule/scene/traceId/consultationId/result` 结构化筛选；详情弹窗必须把完整入参、完整出参与原始 payload 分区展示，不能只展示摘要字段。
 9. `c_ai_op_log` 是审计事实源，只回答“发生过哪些技术/业务操作、链路如何排障”，不得直接作为辅诊功能调用次数统计源
 10. 服务端自身产生的成功代理日志必须可靠落库；若成功调用上游后审计日志写入失败，接口最终返回业务失败。失败代理调用的补充审计日志写入失败时必须 error 级别记录完整异常，保留原始业务失败语义。
@@ -277,7 +277,7 @@ floating-ball-server/
 
 1. 功能调用事件是面向统计的业务事实源，独立于审计日志和问诊用户日志。
 2. 桌面端在用户真实触发功能时调用 `POST /v1/client/feature-events/batch`，一次明确功能调用只提交一条事件。
-3. 服务端以 `idDevice + idempotencyKey` 幂等入库到 `c_ai_feature_event`，客户端离线重试或接口重试不会重复计数。
+3. 服务端以 `idDevice + idempotencyKey` 幂等入库到 `c_ai_feature_event`，客户端离线重试或接口重试不会重复计数；事件同时保存独立的 `id_his_org/na_his_org`，用于 HIS 机构统计，后台 `id_org/id_region` 仍由设备鉴权决定。
 4. 事件固定使用 `featureCode` 表示产品功能，服务端统一映射展示名：语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用。
 5. `traceId`、`consultationId`、`sessionId` 只用于把功能事件关联回 `c_ai_op_log` 或 `c_ai_user_consultation_log`，不参与统计去重。
 6. 统计口径按用户显式功能入口统一：智能问诊、语音问诊、报告单解读、聊天、知识库使用按主功能入口计数；知识库批量检索只按一次用户检索动作计数，不按内部拆开的多个查询词累加；诊断鉴别和推荐诊断/用药/检查/检验/处置/诊疗方案推荐只统计医生显式触发的独立辅助入口，不统计智能问诊或语音问诊主流程内部自动生成的 AI trace。来自 HIS Bridge 的入口在桌面端接诊上下文校验通过并准备打开目标界面时即按成功调用入库；同一就诊再次显式触发入口按新调用计数，只有同一条已入队功能事件的离线重试或接口重试通过自身 `idempotencyKey` 去重。
@@ -390,10 +390,11 @@ floating-ball-server/
    - 区域分布饼图：各区县功能调用量占比
    - 功能调用量统一按 `c_ai_feature_event` 中成功的用户实际功能调用事件计数，不再按 `c_ai_op_log` 的 AI 代理日志行数计数
    - 支持时间范围快捷切换（今日/本周/本月/本季度/本年/自定义）
-   - 支持区域、机构下拉筛选；统计分析、辅诊功能、用户活跃度三页只展示启用的区域/机构，机构下拉按所选区域联动过滤
-   - 区域/机构筛选只统计 `fg_active='1' AND sd_status='1'` 的区域与机构；选定区域后，机构必须属于该区域，否则查询结果按空结果处理，避免跨区域误统计
+   - 统计分析、辅诊功能和用户活跃度三个页面仅展示区域与 HIS 机构下拉筛选，不展示平台机构筛选；HIS 机构使用业务事实中的 `id_his_org`。服务端仍保留 `idOrg` 作为后台/API 兼容筛选及授权、配置范围，来源于设备鉴权，与 `hisOrgId` 独立且互不替代
+   - 区域下拉只展示 `fg_active='1' AND sd_status='1'` 的区域；HIS 机构选项从功能事件和问诊日志的非空 `id_his_org` 汇总，不要求在 `c_ai_org` 建立同值主键。兼容调用方显式传入 `idOrg` 时，平台机构仍须启用并归属所选区域，否则查询返回空结果
    - 支持统计分析、辅诊功能和用户活跃度 Excel 数据导出
    - “辅诊功能”统计必须按产品功能维度归并，不直接展示底层 AI 操作名或审计来源模块名；服务端只基于 `c_ai_feature_event` 的实际用户功能调用事件统计，统一归类为语音问诊、智能问诊、报告单解读、聊天、AI诊断鉴别、AI推荐诊断、AI推荐用药、AI推荐检查、AI推荐检验、AI推荐处置、AI推荐治疗方案、知识库使用；主流程内部自动 AI 推荐不重复拆分为子功能次数，知识库批量检索也不按内部多个查询词重复计数
+   - 综合统计中的功能调用指标和机构分布、辅诊功能统计按 `c_ai_feature_event.id_his_org` 过滤；问诊指标按 `c_ai_user_consultation_log.id_his_org` 过滤。用户活跃度选定 HIS 机构后，只把历史上在该 HIS 机构产生过问诊的设备纳入分母，再按所选时段是否存在该机构问诊区分活跃与不活跃
 
 约束：
 
@@ -439,9 +440,9 @@ floating-ball-server/
    - 仅作为症状模板审计追踪，不参与客户端 `templates/delta` 下发
 9. `c_ai_op_log`
    - 代理日志主体仍保存在 `payload_json`
-   - 同步冗余结构化列：`op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`、`consultation_id`
+   - 同步冗余结构化列：`op_action`、`op_title`、`source_module`、`scene_code`、`trace_id`、`consultation_id`、`id_his_org`、`na_his_org`
    - 语音代理的录音文件路径保存在 `audio_file_path`
-   - 用于排障、审计和反馈关联，不作为辅诊功能调用次数统计源
+   - `id_org` 保存后台机构，`id_his_org/na_his_org` 保存事件产生时的 HIS 机构上下文；用于排障、审计和反馈关联，不作为辅诊功能调用次数统计源
 10. `c_ai_feedback`
    - 统一存储四类反馈：`general`（设置入口）、`recommendation`（语音推荐）、`record_field`（语音病例字段）、`session`（语音整页评分）
    - 关键扩展列：`kind` / `severity` / `tags_json`（标签数组 JSON）/ `has_correction`（是否包含医生修正）/ `has_trace`
@@ -455,7 +456,7 @@ floating-ball-server/
    - `change_summary_json` 保存主诉、现病史、诊断、用药、检查、检验、处置和选中状态等类别变更计数，`total_changes` 保存总变更数，统计分析诊断符合率依赖其中的 `diagnosisChanges`
    - 索引：`idx_c_ai_user_log_time` / `_patient` / `_doctor` / `_consultation` / `_round`，并通过 `uk_c_ai_user_log_round_active` 保证激活且尚未结束的 `consultation_round_id` 只有一条，已回写/放弃后同一就诊可再次生成新日志
 12. `c_ai_feature_event`
-   - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、机构、事件时间
+   - 按用户真实功能调用记录统计事件，关键列包括 `feature_code`、`feature_name`、`event_action`、`idempotency_key`、`trace_id`、`consultation_id`、`session_id`、医生、后台机构、HIS 机构、事件时间
    - 通过 `id_device + idempotency_key` 保证同一设备的同一功能调用只计一次
    - 索引：`idx_c_ai_feature_event_time` / `_feature` / `_doctor` / `_org` / `_idem`
 13. `c_security_rejection_log`
@@ -512,6 +513,12 @@ GaussDB/openGauss 初始化：
 2. 推荐运行配置使用 `SPRING_PROFILES_ACTIVE=gaussdb`，默认 driver 为 `org.opengauss.Driver`，默认 `mybatis-plus.db-type=opengauss`
 3. `gaussdb` profile 默认日志目录为 `/opt/floating-ball-server/logs`，发布包与语音审计文件默认落在 `/opt/floating-ball-server/data/*`，可通过 `FB_LOG_PATH`、`FB_RELEASE_STORAGE_DIR`、`FB_AUDIT_SPEECH_FILE_DIR` 覆盖；服务器 `java -jar` 测试部署说明见 `server/src/main/resources/sql/gaussdb/DEPLOY.md`
 4. openGauss JDBC 驱动与 PostgreSQL JDBC 驱动同 JVM 混用存在类名空间冲突风险；当前交付优先携带 openGauss 驱动，普通 PostgreSQL 作为 PG 兼容 SQL 的次级适配方向
+
+存量库 HIS 机构统计与问诊轮次补齐：
+
+1. 本次按明确交付要求，在 Oracle、GaussDB 与达梦数据库目录分别保留 `update_his_org_statistics.sql`，承载 HIS 机构结构化字段、索引、可确定关联的历史数据回填，以及现场库遗漏的问诊轮次字段和索引。
+2. 升级文件同时补充历史基线中已经声明、但部分现场库遗漏的 `c_ai_user_consultation_log.id_his_org`、`consultation_round_id`、`idx_c_ai_user_log_round`、`uk_c_ai_user_log_round_active`，以及本次新增的操作日志和功能事件 HIS 机构列。
+3. 新建库仍只执行对应 `init.sql`；存量库执行升级文件前必须先备份，并由 DBA 确认目标 schema。升级脚本使用各数据库方言的存在性判断，允许已包含部分字段或索引的现场库重复执行；若现场库已存在重复的激活 `generated` 轮次，必须先确认并清理重复数据，再创建 `uk_c_ai_user_log_round_active`，脚本不得静默修改业务记录。
 
 ## 9. 单体部署约定
 

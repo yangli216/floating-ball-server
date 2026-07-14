@@ -24,6 +24,12 @@ public class AiOpLog extends BaseEntity {
     @TableField("id_org")
     private String idOrg;
 
+    @TableField("id_his_org")
+    private String hisOrgId;
+
+    @TableField("na_his_org")
+    private String hisOrgName;
+
     @TableField("sd_log_type")
     private String sdLogType;
 

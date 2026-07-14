@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class AnalyticsServiceTest {
@@ -74,6 +75,7 @@ class AnalyticsServiceTest {
         FunctionUsageQueryDTO query = new FunctionUsageQueryDTO();
         query.setDateFrom("2026-05-01");
         query.setDateTo("2026-05-01");
+        query.setHisOrgId("HIS-ORG-001");
         query.setFunctionModules(Collections.singletonList("语音问诊 AI"));
 
         FunctionUsageResponseVO response = analyticsService.getFunctionUsage(query);
@@ -83,7 +85,8 @@ class AnalyticsServiceTest {
         assertIterableEquals(Collections.singletonList("语音问诊"), response.getTrend().getModules());
         assertIterableEquals(Collections.singletonList("2026-05-01"), response.getTrend().getDays());
         verify(analyticsMapper).queryFunctionUsageRanking(argThat(arg -> arg.getFunctionModules() != null
-            && arg.getFunctionModules().contains("语音问诊")));
+            && arg.getFunctionModules().contains("语音问诊")
+            && "HIS-ORG-001".equals(arg.getHisOrgId())));
     }
 
     @Test
@@ -151,6 +154,7 @@ class AnalyticsServiceTest {
         query.setDateFrom("2026-05-01");
         query.setDateTo("2026-05-02");
         query.setTimeRange("custom");
+        query.setHisOrgId("HIS-ORG-001");
 
         when(analyticsMapper.countAiService(any(AnalyticsQueryDTO.class))).thenReturn(20L, 10L);
         when(analyticsMapper.countConsultation(any(AnalyticsQueryDTO.class))).thenReturn(8L, 4L);
@@ -171,6 +175,7 @@ class AnalyticsServiceTest {
         assertEquals("25", summary.getMatchRateGrowth());
         assertEquals("2", summary.getActiveDoctorGrowth());
         assertEquals("100", summary.getConsultationGrowth());
+        verify(analyticsMapper, times(2)).countAiService(argThat(arg -> "HIS-ORG-001".equals(arg.getHisOrgId())));
     }
 
     @Test

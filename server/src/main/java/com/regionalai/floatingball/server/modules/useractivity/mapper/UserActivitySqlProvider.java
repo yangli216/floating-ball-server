@@ -28,6 +28,7 @@ public class UserActivitySqlProvider {
             + DEVICE_REGION_JOIN + " "
             + "WHERE d.fg_active = '1' "
             + scopeFilters()
+            + hisOrgMembershipExists()
             + "</script>";
     }
 
@@ -60,46 +61,40 @@ public class UserActivitySqlProvider {
 
     public String queryUserActivityList() {
         DatabaseDialect dialect = DatabaseDialectHolder.get();
-        String doctorSubquery;
-        if (dialect.isPgCompatible()) {
-            doctorSubquery = "(SELECT ucl5.na_doctor FROM c_ai_user_consultation_log ucl5 "
-                + "WHERE ucl5.fg_active = '1' AND ucl5.id_device = d.id_device "
-                + "ORDER BY ucl5.consultation_time DESC LIMIT 1) AS naDoctor,";
-        } else {
-            doctorSubquery = "(SELECT na_doctor FROM ("
-                + "SELECT ucl5.na_doctor FROM c_ai_user_consultation_log ucl5 "
-                + "WHERE ucl5.fg_active = '1' AND ucl5.id_device = d.id_device "
-                + "ORDER BY ucl5.consultation_time DESC"
-                + ") WHERE ROWNUM = 1) AS naDoctor,";
-        }
+        String doctorSubquery = latestConsultationValue(dialect, "na_doctor", "naDoctor");
+        String hisOrgIdSubquery = latestConsultationValue(dialect, "id_his_org", "hisOrgId");
+        String hisOrgNameSubquery = latestConsultationValue(dialect, "na_org", "hisOrgName");
         return "<script>"
             + "SELECT d.id_device AS idDevice, d.cd_device AS cdDevice, d.na_device AS naDevice, "
             + "o.id_org AS idOrg, o.na_org AS naOrg, o.id_region AS idRegion, r.na_region AS naRegion, "
             + doctorSubquery
+            + hisOrgIdSubquery
+            + hisOrgNameSubquery
             + "(SELECT MAX(ucl.consultation_time) FROM c_ai_user_consultation_log ucl "
             + " WHERE ucl.fg_active = '1' AND ucl.id_device = d.id_device "
-            + consultationTimeFilters("ucl")
+            + consultationFactFilters("ucl")
             + ") AS lastActiveTime, "
             + "(SELECT COUNT(1) FROM c_ai_user_consultation_log ucl2 "
             + " WHERE ucl2.fg_active = '1' AND ucl2.id_device = d.id_device "
-            + consultationTimeFilters("ucl2")
+            + consultationFactFilters("ucl2")
             + ") AS consultationCount, "
             + "(SELECT COUNT(1) FROM c_ai_user_consultation_log ucl6 "
             + " WHERE ucl6.fg_active = '1' AND ucl6.id_device = d.id_device AND ucl6.status = 'completed' "
-            + consultationTimeFilters("ucl6")
+            + consultationFactFilters("ucl6")
             + ") AS effectiveConsultationCount "
             + "FROM c_ai_device d "
             + DEVICE_SCOPE_JOIN + " "
             + DEVICE_REGION_JOIN + " "
             + "WHERE d.fg_active = '1' "
             + scopeFilters()
+            + hisOrgMembershipExists()
             + "<if test='query.activeStatus == \"active\"'>"
             + activeConsultationExists("ucl3")
             + "</if>"
             + "<if test='query.activeStatus == \"inactive\"'>"
             + " AND NOT EXISTS (SELECT 1 FROM c_ai_user_consultation_log ucl4 "
             + "WHERE ucl4.fg_active = '1' AND ucl4.id_device = d.id_device "
-            + consultationTimeFilters("ucl4")
+            + consultationFactFilters("ucl4")
             + ")"
             + "</if>"
             + " ORDER BY lastActiveTime DESC NULLS LAST"
@@ -115,7 +110,7 @@ public class UserActivitySqlProvider {
             + DEVICE_REGION_JOIN + " "
             + "WHERE ucl.fg_active = '1' "
             + extraCondition + " "
-            + consultationTimeFilters("ucl")
+            + consultationFactFilters("ucl")
             + scopeFilters()
             + "</script>";
     }
@@ -124,13 +119,45 @@ public class UserActivitySqlProvider {
         String actualAlias = alias == null || alias.isEmpty() ? "ucl" : alias;
         return " AND EXISTS (SELECT 1 FROM c_ai_user_consultation_log " + actualAlias
             + " WHERE " + actualAlias + ".fg_active = '1' AND " + actualAlias + ".id_device = d.id_device "
-            + consultationTimeFilters(actualAlias)
+            + consultationFactFilters(actualAlias)
             + ")";
+    }
+
+    private String latestConsultationValue(DatabaseDialect dialect, String column, String resultAlias) {
+        if (dialect.isPgCompatible()) {
+            return "(SELECT ucl5." + column + " FROM c_ai_user_consultation_log ucl5 "
+                + "WHERE ucl5.fg_active = '1' AND ucl5.id_device = d.id_device "
+                + hisOrgFilter("ucl5")
+                + "ORDER BY ucl5.consultation_time DESC LIMIT 1) AS " + resultAlias + ",";
+        }
+        return "(SELECT latest_value FROM ("
+            + "SELECT ucl5." + column + " AS latest_value FROM c_ai_user_consultation_log ucl5 "
+            + "WHERE ucl5.fg_active = '1' AND ucl5.id_device = d.id_device "
+            + hisOrgFilter("ucl5")
+            + "ORDER BY ucl5.consultation_time DESC"
+            + ") WHERE ROWNUM = 1) AS " + resultAlias + ",";
+    }
+
+    private String consultationFactFilters(String alias) {
+        return consultationTimeFilters(alias) + hisOrgFilter(alias);
     }
 
     private String consultationTimeFilters(String alias) {
         return "<if test='query.dateFromTime != null'> AND " + alias + ".consultation_time &gt;= #{query.dateFromTime}</if>"
             + "<if test='query.dateToExclusiveTime != null'> AND " + alias + ".consultation_time &lt; #{query.dateToExclusiveTime}</if>";
+    }
+
+    private String hisOrgFilter(String alias) {
+        return "<if test='query.hisOrgId != null and query.hisOrgId != \"\"'> AND "
+            + alias + ".id_his_org = #{query.hisOrgId}</if>";
+    }
+
+    private String hisOrgMembershipExists() {
+        return "<if test='query.hisOrgId != null and query.hisOrgId != \"\"'>"
+            + " AND EXISTS (SELECT 1 FROM c_ai_user_consultation_log ucl_scope "
+            + "WHERE ucl_scope.fg_active = '1' AND ucl_scope.id_device = d.id_device "
+            + "AND ucl_scope.id_his_org = #{query.hisOrgId})"
+            + "</if>";
     }
 
     private String scopeFilters() {

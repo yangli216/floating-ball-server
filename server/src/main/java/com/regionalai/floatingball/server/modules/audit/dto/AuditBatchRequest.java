@@ -14,6 +14,8 @@ public class AuditBatchRequest {
     public static class AuditEvent {
         private String eventId;
         private String eventType;
+        private String hisOrgId;
+        private String hisOrgName;
         private Map<String, Object> payload;
         private Long timestamp;
     }

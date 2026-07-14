@@ -8,6 +8,7 @@ import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageIte
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageQueryDTO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageResponseVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.FunctionUsageTrendVO;
+import com.regionalai.floatingball.server.modules.analytics.dto.HisOrgOptionVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.RegionDistributionItemVO;
 import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
@@ -226,7 +227,7 @@ public class AnalyticsService {
             autoSize(trendSheet, 3);
 
             XSSFSheet orgSheet = workbook.createSheet("机构分布");
-            writeHeader(orgSheet, headerStyle, "机构", "功能调用量");
+            writeHeader(orgSheet, headerStyle, "HIS机构", "功能调用量");
             List<DistributionItemVO> orgItems = distribution.getOrgDistribution() != null ? distribution.getOrgDistribution() : new ArrayList<DistributionItemVO>();
             for (int i = 0; i < orgItems.size(); i++) {
                 DistributionItemVO item = orgItems.get(i);
@@ -270,6 +271,7 @@ public class AnalyticsService {
         AnalyticsQueryDTO prev = new AnalyticsQueryDTO();
         prev.setIdOrg(current.getIdOrg());
         prev.setIdRegion(current.getIdRegion());
+        prev.setHisOrgId(current.getHisOrgId());
 
         String fromStr = current.getDateFrom();
         String toStr = current.getDateTo();
@@ -522,6 +524,7 @@ public class AnalyticsService {
         FunctionUsageQueryDTO prev = new FunctionUsageQueryDTO();
         prev.setIdOrg(current.getIdOrg());
         prev.setIdRegion(current.getIdRegion());
+        prev.setHisOrgId(current.getHisOrgId());
         prev.setFunctionModules(current.getFunctionModules());
 
         String fromStr = current.getDateFrom();
@@ -571,6 +574,7 @@ public class AnalyticsService {
         normalized.setDateTo(query.getDateTo());
         normalized.setIdOrg(query.getIdOrg());
         normalized.setIdRegion(query.getIdRegion());
+        normalized.setHisOrgId(query.getHisOrgId());
         normalized.setCurrent(query.getCurrent());
         normalized.setSize(query.getSize());
         normalized.setFunctionModules(resolveFunctionModules(query.getFunctionModules()));
@@ -599,6 +603,10 @@ public class AnalyticsService {
             result.add(m);
         }
         return new ArrayList<String>(result);
+    }
+
+    public List<HisOrgOptionVO> getHisOrgOptions() {
+        return analyticsMapper.queryHisOrgOptions();
     }
 
     private static Map<String, String> buildFunctionUsageAliases() {

@@ -15,7 +15,7 @@
         </div>
         <div class="filter-item">
           <div class="filter-label">区域选择</div>
-          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="handleRegionChange">
+          <el-select v-model="query.idRegion" placeholder="全部区域" clearable size="small" class="filter-select" @change="search">
             <el-option
               v-for="r in regionOptions"
               :key="r.id"
@@ -25,12 +25,12 @@
           </el-select>
         </div>
         <div class="filter-item">
-          <div class="filter-label">机构选择</div>
-          <el-select v-model="query.idOrg" placeholder="全部机构" clearable size="small" class="filter-select" @change="search">
+          <div class="filter-label">HIS机构</div>
+          <el-select v-model="query.hisOrgId" placeholder="全部HIS机构" clearable filterable size="small" class="filter-select" @change="search">
             <el-option
-              v-for="o in filteredOrgOptions"
+              v-for="o in hisOrgOptions"
               :key="o.id"
-              :label="o.name"
+              :label="o.label"
               :value="o.id"
             />
           </el-select>
@@ -68,7 +68,11 @@
       <el-table :data="userList" size="small" class="admin-table">
         <el-table-column prop="naDoctor" label="医生姓名" min-width="120" />
         <el-table-column prop="cdDevice" label="设备编码" min-width="120" />
-        <el-table-column prop="naOrg" label="所属机构" min-width="140" />
+        <el-table-column label="HIS机构" min-width="180">
+          <template slot-scope="{ row }">
+            {{ row.hisOrgName || row.hisOrgId || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="naRegion" label="所属区域" min-width="100" />
         <el-table-column label="活跃状态" width="100">
           <template slot-scope="{ row }">
@@ -101,7 +105,7 @@
 
 <script>
 import http from '../api/http'
-import { activeRefOptions } from '../api/reference'
+import { fetchHisOrgOptions, fetchRegions } from '../api/reference'
 import { AdminFilterBar, MetricCard, StatusPill, TimeRangeFilter } from '../components/ui'
 
 const TIME_RANGES = [
@@ -132,22 +136,16 @@ export default {
       loading: false,
       timeRange: 'month',
       timeRangeOptions: TIME_RANGES,
-      query: { dateFrom: '', dateTo: '', idRegion: '', idOrg: '', activeStatus: '' },
+      query: { dateFrom: '', dateTo: '', idRegion: '', hisOrgId: '', activeStatus: '' },
       summary: {},
       regionOptions: [],
-      orgOptions: [],
+      hisOrgOptions: [],
       exporting: false,
       userList: [],
       userPage: { current: 1, size: 10, total: 0 }
     }
   },
   computed: {
-    filteredOrgOptions() {
-      if (!this.query.idRegion) {
-        return this.orgOptions
-      }
-      return this.orgOptions.filter(item => item.idRegion === this.query.idRegion)
-    },
     cardCompareLabel() {
       const m = {
         today: '较昨日',
@@ -252,19 +250,18 @@ export default {
     },
     async loadRefOptions() {
       try {
-        const refs = await activeRefOptions()
-        this.regionOptions = (refs.regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
-        this.orgOptions = (refs.orgs || []).map(o => ({ id: o.idOrg, name: o.naOrg, idRegion: o.idRegion }))
+        const [regions, hisOrgs] = await Promise.all([
+          fetchRegions({ sdStatus: '1' }),
+          fetchHisOrgOptions()
+        ])
+        this.regionOptions = (regions || []).map(r => ({ id: r.idRegion, name: r.naRegion }))
+        this.hisOrgOptions = (hisOrgs || []).map(o => ({
+          id: o.hisOrgId,
+          label: o.hisOrgName ? `${o.hisOrgName}（${o.hisOrgId}）` : o.hisOrgId
+        }))
       } catch (e) {
         // degrade gracefully
       }
-    },
-    handleRegionChange() {
-      const selectedOrg = this.orgOptions.find(item => item.id === this.query.idOrg)
-      if (this.query.idRegion && selectedOrg && selectedOrg.idRegion !== this.query.idRegion) {
-        this.query.idOrg = ''
-      }
-      this.search()
     },
     onPageChange(page) {
       this.userPage.current = page
@@ -276,7 +273,7 @@ export default {
         this.userPage.current = 1
         const params = { ...this.query, timeRange: this.timeRange }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
         if (!params.activeStatus) delete params.activeStatus
 
         const [summary, users] = await Promise.all([
@@ -301,7 +298,7 @@ export default {
           size: this.userPage.size
         }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
         if (!params.activeStatus) delete params.activeStatus
 
         const data = await http.get('/admin/api/user-activity/users', { params })
@@ -313,7 +310,7 @@ export default {
     },
     reset() {
       this.timeRange = 'month'
-      this.query = { dateFrom: '', dateTo: '', idRegion: '', idOrg: '', activeStatus: '' }
+      this.query = { dateFrom: '', dateTo: '', idRegion: '', hisOrgId: '', activeStatus: '' }
       this.userPage.current = 1
       this.initDateRange()
       this.search()
@@ -323,7 +320,7 @@ export default {
       try {
         const params = { ...this.query, timeRange: this.timeRange }
         if (!params.idRegion) delete params.idRegion
-        if (!params.idOrg) delete params.idOrg
+        if (!params.hisOrgId) delete params.hisOrgId
         if (!params.activeStatus) delete params.activeStatus
         const blob = await http.get('/admin/api/user-activity/export', { params, responseType: 'blob' })
         this.downloadBlob(blob, '用户活跃度_' + new Date().toISOString().slice(0, 10) + '.xlsx')

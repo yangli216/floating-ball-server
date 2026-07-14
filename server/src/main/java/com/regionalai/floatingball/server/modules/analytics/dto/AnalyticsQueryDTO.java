@@ -12,5 +12,6 @@ public class AnalyticsQueryDTO {
     private LocalDateTime dateToExclusiveTime;
     private String idRegion;
     private String idOrg;
+    private String hisOrgId;
     private String timeRange;
 }

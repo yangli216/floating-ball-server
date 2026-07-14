@@ -61,6 +61,21 @@ class UserActivityMapperTest {
         assertFalse(sql.contains("TO_DATE"));
     }
 
+    @Test
+    void hisOrganizationFilterShouldScopeFactsAndDeviceDenominator() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+        UserActivitySqlProvider provider = new UserActivitySqlProvider();
+
+        assertTrue(provider.countActiveUsers().contains("ucl.id_his_org = #{query.hisOrgId}"));
+        assertTrue(provider.countConsultations().contains("ucl.id_his_org = #{query.hisOrgId}"));
+        assertTrue(provider.countTotalDevices().contains("ucl_scope.id_his_org = #{query.hisOrgId}"));
+
+        String list = provider.queryUserActivityList();
+        assertTrue(list.contains("id_his_org"));
+        assertTrue(list.contains("AS hisOrgId"));
+        assertTrue(list.contains("AS hisOrgName"));
+    }
+
     private void assertHasQueryParam(Method method) {
         Parameter parameter = method.getParameters()[0];
         Param annotation = parameter.getAnnotation(Param.class);

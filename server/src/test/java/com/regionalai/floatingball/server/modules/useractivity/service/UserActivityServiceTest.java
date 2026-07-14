@@ -51,6 +51,7 @@ class UserActivityServiceTest {
         query.setTimeRange("month");
         query.setIdRegion("REG001");
         query.setIdOrg("ORG001");
+        query.setHisOrgId("HIS-ORG-001");
         query.setActiveStatus("active");
 
         UserActivitySummaryVO summary = userActivityService.getSummary(query);
@@ -69,12 +70,14 @@ class UserActivityServiceTest {
         assertEquals("ORG001", activeQueries.get(0).getIdOrg());
         assertEquals("REG001", activeQueries.get(0).getIdRegion());
         assertEquals("active", activeQueries.get(0).getActiveStatus());
+        assertEquals("HIS-ORG-001", activeQueries.get(0).getHisOrgId());
         assertEquals("2026-05-01", activeQueries.get(0).getDateFrom());
         assertEquals("2026-05-21", activeQueries.get(0).getDateTo());
 
         assertEquals("ORG001", activeQueries.get(1).getIdOrg());
         assertEquals("REG001", activeQueries.get(1).getIdRegion());
         assertEquals("active", activeQueries.get(1).getActiveStatus());
+        assertEquals("HIS-ORG-001", activeQueries.get(1).getHisOrgId());
         assertEquals("2026-04-01", activeQueries.get(1).getDateFrom());
         assertEquals("2026-04-30", activeQueries.get(1).getDateTo());
     }
@@ -109,6 +112,8 @@ class UserActivityServiceTest {
         row.put("IDDEVICE", "DEV001");
         row.put("CDDEVICE", "FB-001");
         row.put("NAORG", "默认机构");
+        row.put("HISORGID", "HIS-ORG-001");
+        row.put("HISORGNAME", "市第一医院");
         row.put("NAREGION", "默认区域");
         row.put("NADOCTOR", "范医生");
         row.put("CONSULTATIONCOUNT", 2L);
@@ -128,7 +133,9 @@ class UserActivityServiceTest {
             assertEquals("1", workbook.getSheetAt(0).getRow(1).getCell(2).getStringCellValue());
             assertEquals("有效问诊率", workbook.getSheetAt(0).getRow(4).getCell(0).getStringCellValue());
             assertEquals("范医生", workbook.getSheetAt(1).getRow(1).getCell(0).getStringCellValue());
-            assertEquals("有效问诊数", workbook.getSheetAt(1).getRow(0).getCell(6).getStringCellValue());
+            assertEquals("HIS机构", workbook.getSheetAt(1).getRow(0).getCell(3).getStringCellValue());
+            assertEquals("市第一医院", workbook.getSheetAt(1).getRow(1).getCell(3).getStringCellValue());
+            assertEquals("有效问诊数", workbook.getSheetAt(1).getRow(0).getCell(7).getStringCellValue());
         }
     }
 }

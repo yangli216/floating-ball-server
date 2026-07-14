@@ -39,6 +39,9 @@ class AnalyticsMapperTest {
         Method functionTrend = AnalyticsMapper.class.getMethod("queryFunctionUsageTrend", FunctionUsageQueryDTO.class);
         assertHasQueryParam(functionTrend);
         assertProvider(functionTrend, "queryFunctionUsageTrend");
+
+        Method hisOrgOptions = AnalyticsMapper.class.getMethod("queryHisOrgOptions");
+        assertProvider(hisOrgOptions, "queryHisOrgOptions");
     }
 
     @Test
@@ -96,6 +99,23 @@ class AnalyticsMapperTest {
         assertEnabledScopeJoin(provider.countAiService());
         assertEnabledScopeJoin(provider.countConsultation());
         assertEnabledScopeJoin(provider.queryFunctionUsageRanking());
+    }
+
+    @Test
+    void analyticsSqlShouldUseIndependentHisOrganizationFacts() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+        AnalyticsSqlProvider provider = new AnalyticsSqlProvider();
+
+        assertTrue(provider.countAiService().contains("e.id_his_org = #{query.hisOrgId}"));
+        assertTrue(provider.countConsultation().contains("ucl.id_his_org = #{query.hisOrgId}"));
+        assertTrue(provider.queryFunctionUsageRanking().contains("e.id_his_org = #{query.hisOrgId}"));
+        assertTrue(provider.queryOrgDistribution().contains("GROUP BY e.id_his_org"));
+
+        String options = provider.queryHisOrgOptions();
+        assertTrue(options.contains("c_ai_feature_event"));
+        assertTrue(options.contains("c_ai_user_consultation_log"));
+        assertTrue(options.contains("e.id_his_org IS NOT NULL"));
+        assertFalse(options.contains("c_ai_op_log"));
     }
 
     private void assertHasQueryParam(Method method) {

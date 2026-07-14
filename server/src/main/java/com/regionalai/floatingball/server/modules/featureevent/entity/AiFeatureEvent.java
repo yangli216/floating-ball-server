@@ -27,6 +27,12 @@ public class AiFeatureEvent extends BaseEntity {
     @TableField("id_region")
     private String idRegion;
 
+    @TableField("id_his_org")
+    private String hisOrgId;
+
+    @TableField("na_his_org")
+    private String hisOrgName;
+
     @TableField("feature_code")
     private String featureCode;
 
