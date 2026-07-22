@@ -1,5 +1,7 @@
 package com.regionalai.floatingball.server.modules.device.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
 import com.regionalai.floatingball.server.common.exception.UpdateRequiredException;
 import com.regionalai.floatingball.server.common.db.DatabaseDialect;
@@ -12,9 +14,11 @@ import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.device.mapper.AiDeviceMapper;
 import com.regionalai.floatingball.server.modules.org.entity.AiOrg;
 import com.regionalai.floatingball.server.modules.org.mapper.AiOrgMapper;
+import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
+import com.regionalai.floatingball.server.modules.userlog.mapper.AiUserConsultationLogMapper;
 import org.apache.ibatis.exceptions.TooManyResultsException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,17 +56,63 @@ class DeviceServiceTest {
     private AiRegionMapper aiRegionMapper;
 
     @Mock
+    private AiUserConsultationLogMapper userConsultationLogMapper;
+
+    @Mock
     private ReleaseService releaseService;
 
     private DeviceService deviceService;
 
     @BeforeEach
     void setUp() {
-        deviceService = new DeviceService(aiDeviceMapper, aiOrgMapper, aiRegionMapper, releaseService, oracleDialect());
+        deviceService = new DeviceService(
+            aiDeviceMapper,
+            aiOrgMapper,
+            aiRegionMapper,
+            userConsultationLogMapper,
+            releaseService,
+            oracleDialect()
+        );
     }
 
     private DatabaseDialect oracleDialect() {
         return new DatabaseDialect(DatabaseDialect.Kind.ORACLE);
+    }
+
+    @Test
+    void listShouldAttachLatestUserNameFromConsultationLogs() {
+        AiDevice device = new AiDevice();
+        device.setIdDevice("DEV001");
+        device.setCdDevice("DEVICE-CODE");
+        device.setIdOrg("ORG001");
+        device.setIdRegion("REG001");
+        device.setFgActive("1");
+
+        Page<AiDevice> page = new Page<AiDevice>(1, 10, 1);
+        page.setRecords(Collections.singletonList(device));
+        when(aiDeviceMapper.selectPage(any(Page.class), any())).thenReturn(page);
+
+        AiOrg org = buildOrg("ORG001", "REG001");
+        org.setNaOrg("默认机构");
+        when(aiOrgMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(org));
+
+        AiRegion region = new AiRegion();
+        region.setIdRegion("REG001");
+        region.setNaRegion("默认区域");
+        when(aiRegionMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(region));
+
+        Map<String, Object> userRow = new LinkedHashMap<String, Object>();
+        userRow.put("IDDEVICE", "DEV001");
+        userRow.put("NAUSER", "张医生");
+        when(userConsultationLogMapper.selectLatestUserNames(Collections.singletonList("DEV001")))
+            .thenReturn(Collections.singletonList(userRow));
+
+        PageResponse<AiDeviceView> result = deviceService.list(1, 10, null);
+
+        assertEquals(1, result.getRecords().size());
+        assertEquals("张医生", result.getRecords().get(0).getNaUser());
+        assertEquals("默认机构", result.getRecords().get(0).getNaOrg());
+        assertEquals("默认区域", result.getRecords().get(0).getNaRegion());
     }
 
     @Test

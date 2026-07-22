@@ -76,6 +76,18 @@ class UserActivityMapperTest {
         assertTrue(list.contains("AS hisOrgName"));
     }
 
+    @Test
+    void userActivityListShouldOrderMostActiveDevicesFirst() {
+        DatabaseDialectHolder.set(new DatabaseDialect(DatabaseDialect.Kind.ORACLE));
+
+        String sql = new UserActivitySqlProvider().queryUserActivityList();
+
+        assertTrue(sql.contains(
+            "ORDER BY consultationCount DESC, effectiveConsultationCount DESC, "
+                + "lastActiveTime DESC NULLS LAST, idDevice ASC"
+        ));
+    }
+
     private void assertHasQueryParam(Method method) {
         Parameter parameter = method.getParameters()[0];
         Param annotation = parameter.getAnnotation(Param.class);

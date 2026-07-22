@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.db.DatabaseDialect;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.util.ExcelColumnWidthUtils;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import com.regionalai.floatingball.server.modules.audit.service.AudioLogStorageService;
 import com.regionalai.floatingball.server.modules.audit.entity.AiOpLog;
@@ -223,9 +224,7 @@ public class UserConsultationLogService {
                 row.createCell(11).setCellValue(safe(record.getConsultationId()));
             }
 
-            for (int i = 0; i < headers.length; i++) {
-                sheet.autoSizeColumn(i);
-            }
+            ExcelColumnWidthUtils.fitColumns(sheet, headers.length);
 
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             workbook.write(out);

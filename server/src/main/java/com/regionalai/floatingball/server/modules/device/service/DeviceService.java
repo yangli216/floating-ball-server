@@ -19,6 +19,7 @@ import com.regionalai.floatingball.server.modules.region.entity.AiRegion;
 import com.regionalai.floatingball.server.modules.region.mapper.AiRegionMapper;
 import com.regionalai.floatingball.server.modules.release.dto.ReleasePolicyView;
 import com.regionalai.floatingball.server.modules.release.service.ReleaseService;
+import com.regionalai.floatingball.server.modules.userlog.mapper.AiUserConsultationLogMapper;
 import org.apache.ibatis.exceptions.TooManyResultsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,17 +49,20 @@ public class DeviceService {
     private final AiDeviceMapper aiDeviceMapper;
     private final AiOrgMapper aiOrgMapper;
     private final AiRegionMapper aiRegionMapper;
+    private final AiUserConsultationLogMapper userConsultationLogMapper;
     private final ReleaseService releaseService;
     private final DatabaseDialect databaseDialect;
 
     public DeviceService(AiDeviceMapper aiDeviceMapper,
                          AiOrgMapper aiOrgMapper,
                          AiRegionMapper aiRegionMapper,
+                         AiUserConsultationLogMapper userConsultationLogMapper,
                          ReleaseService releaseService,
                          DatabaseDialect databaseDialect) {
         this.aiDeviceMapper = aiDeviceMapper;
         this.aiOrgMapper = aiOrgMapper;
         this.aiRegionMapper = aiRegionMapper;
+        this.userConsultationLogMapper = userConsultationLogMapper;
         this.releaseService = releaseService;
         this.databaseDialect = databaseDialect;
     }
@@ -341,9 +345,39 @@ public class DeviceService {
                 .collect(Collectors.toList()))
             .stream()
             .collect(Collectors.toMap(AiRegion::getIdRegion, Function.identity(), (left, right) -> left));
+        Map<String, String> userNameMap = loadLatestUserNames(records);
         return records.stream()
-            .map(item -> toView(item, orgMap.get(item.getIdOrg()), regionMap.get(item.getIdRegion())))
+            .map(item -> {
+                AiDeviceView view = toView(item, orgMap.get(item.getIdOrg()), regionMap.get(item.getIdRegion()));
+                view.setNaUser(userNameMap.get(item.getIdDevice()));
+                return view;
+            })
             .collect(Collectors.toList());
+    }
+
+    private Map<String, String> loadLatestUserNames(List<AiDevice> records) {
+        List<String> deviceIds = records.stream()
+            .map(AiDevice::getIdDevice)
+            .filter(StringUtils::hasText)
+            .distinct()
+            .collect(Collectors.toList());
+        if (deviceIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<Map<String, Object>> rows = userConsultationLogMapper.selectLatestUserNames(deviceIds);
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        return rows.stream()
+            .filter(row -> mapValue(row, "IDDEVICE", "iddevice") != null
+                && mapValue(row, "NAUSER", "nauser") != null)
+            .collect(Collectors.toMap(
+                row -> String.valueOf(mapValue(row, "IDDEVICE", "iddevice")),
+                row -> String.valueOf(mapValue(row, "NAUSER", "nauser")),
+                (left, right) -> left
+            ));
     }
 
     private AiDeviceView toView(AiDevice device, AiOrg org, AiRegion region) {
@@ -369,6 +403,11 @@ public class DeviceService {
     private String normalizeIp(String clientIp) {
         String ip = StringUtils.hasText(clientIp) ? clientIp.trim() : UNKNOWN_IP;
         return ip.length() > 64 ? ip.substring(0, 64) : ip;
+    }
+
+    private Object mapValue(Map<String, Object> row, String upperKey, String lowerKey) {
+        Object value = row.get(upperKey);
+        return value != null ? value : row.get(lowerKey);
     }
 
     private String generateToken() {

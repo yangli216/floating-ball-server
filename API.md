@@ -1042,6 +1042,11 @@ AI 调用类 `operation` 事件补充约束：
   "firstSnapshot": {
     "chiefComplaint": "咳嗽3天",
     "historyOfPresentIllness": "患者3天前出现咳嗽...",
+    "pastMedicalHistory": "2型糖尿病；系统性红斑狼疮",
+    "personalHistory": "否认吸烟史、饮酒史及职业暴露史",
+    "familyHistory": "否认家族重大遗传病史",
+    "physicalExam": "双肺呼吸音清，未闻及干湿啰音",
+    "precautions": "监测体温及血糖，症状加重时及时复诊",
     "diagnoses": [{ "name": "急性上呼吸道感染", "selected": true }],
     "medicines": [{ "name": "氨溴索", "selected": true }],
     "examinations": [{ "name": "胸部CT", "selected": false }],
@@ -1051,6 +1056,11 @@ AI 调用类 `operation` 事件补充约束：
   "finalSnapshot": {
     "chiefComplaint": "咳嗽、咳痰3天",
     "historyOfPresentIllness": "医生修改后的最终现病史...",
+    "pastMedicalHistory": "2型糖尿病；系统性红斑狼疮",
+    "personalHistory": "否认吸烟史、饮酒史及职业暴露史",
+    "familyHistory": "否认家族重大遗传病史",
+    "physicalExam": "双肺呼吸音清，未闻及干湿啰音",
+    "precautions": "监测体温及血糖，症状加重时及时复诊",
     "diagnoses": [{ "name": "急性支气管炎", "selected": true }],
     "medicines": [{ "name": "氨溴索", "selected": true }],
     "examinations": [],
@@ -1076,6 +1086,7 @@ AI 调用类 `operation` 事件补充约束：
 5. `speechText` / `audio` 仅用于语音问诊输入复盘；`audio` 为 base64，不带 Data URL 前缀。`audioFormat` 可选，用于在 `audioMimeType` 缺失时辅助推断文件扩展名。服务端把音频落到 `floating-ball.audit.speech-file-dir`，数据库只保存文件路径、MIME、文件名和大小，不把原始 base64 写入快照 JSON。
 6. `idOrg` 由设备鉴权解析出的后台机构 ID 持久化，用于后台配置、权限范围和平台机构筛选；`hisOrgId` 表示 HIS 端机构 ID，桌面端只能取 SDK handshake `urt.userRoleDepts.orgId`，服务端持久化到 `id_his_org`，用于问诊来源追踪和 HIS 机构统计，不再覆盖 `id_org`，也不再用 `orgCode` 兜底。
 7. `orgName` 桌面端取 SDK handshake `urt.orgPureName`；`deptId` 取 `urt.userRoleDepts.deptId`。
+8. `firstSnapshot` 与 `finalSnapshot` 的病历字段统一包含 `chiefComplaint`、`historyOfPresentIllness`、`pastMedicalHistory`、`personalHistory`、`familyHistory`、`physicalExam`、`precautions`；管理端按这 7 个字段展示首版内容与最终差异。旧客户端缺失新增字段时按空文本兼容。
 
 ### 3.12 POST `/v1/client/feedbacks`
 
@@ -1551,7 +1562,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.7 GET `/admin/api/analytics/distribution`
 
-用途：返回 HIS 机构分布与后台区域分布数据。机构分布按 `c_ai_feature_event.id_his_org` 分组，不按后台 `id_org` 分组。
+用途：返回功能调用量和问诊量的 HIS 机构分布与后台区域分布数据。功能调用量机构分布按 `c_ai_feature_event.id_his_org` 分组，问诊量机构分布按 `c_ai_user_consultation_log.id_his_org` 分组，均不按后台 `id_org` 分组；区域分布分别按事实记录的后台机构关联启用区域后聚合。
 
 请求参数同 5.5。
 
@@ -1560,20 +1571,29 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 ```json
 {
   "orgDistribution": [
-    { "orgName": "市第一医院", "value": 600 },
-    { "orgName": "市第二医院", "value": 800 }
+    { "name": "市第一医院", "value": 600 },
+    { "name": "市第二医院", "value": 800 }
   ],
   "regionDistribution": [
-    { "regionName": "东城区", "value": 4938, "percentage": "40" },
-    { "regionName": "西城区", "value": 3704, "percentage": "30" }
+    { "name": "东城区", "value": 4938, "percentage": "40" },
+    { "name": "西城区", "value": 3704, "percentage": "30" }
   ],
-  "totalService": 12345
+  "totalService": 12345,
+  "consultationOrgDistribution": [
+    { "name": "市第一医院", "value": 120 },
+    { "name": "市第二医院", "value": 80 }
+  ],
+  "consultationRegionDistribution": [
+    { "name": "东城区", "value": 140, "percentage": "70" },
+    { "name": "西城区", "value": 60, "percentage": "30" }
+  ],
+  "totalConsultation": 200
 }
 ```
 
 ### 5.7.1 GET `/admin/api/analytics/export`
 
-用途：按当前统计分析筛选条件导出 Excel 文件，包含核心指标、趋势明细、机构分布和区域分布。
+用途：按当前统计分析筛选条件导出 Excel 文件，包含核心指标、趋势明细、功能调用量机构/区域分布和问诊量机构/区域分布。
 
 鉴权：`Authorization: Bearer {adminToken}`
 
@@ -1854,6 +1874,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
       "idDevice": "uuid",
       "cdDevice": "9C:4E:36:AA:BB:CC",
       "naDevice": "诊室 1 号机",
+      "naUser": "张医生",
       "idOrg": "ORG001",
       "idRegion": "REGION001",
       "deviceTokenMasked": "abcd****wxyz",
@@ -1866,6 +1887,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   ]
 }
 ```
+
+字段说明：`naUser` 为该设备最近一次问诊日志中的非空医生姓名；设备尚未产生问诊记录时返回 `null`。该字段仅用于令牌列表展示，不表示设备与后台管理员账号建立了绑定关系。
 
 ### 5.27 POST `/admin/api/devices`
 用途：手工创建令牌记录。服务端会生成 `deviceToken`，列表仅返回脱敏值。
@@ -2443,8 +2466,8 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
   "audioSize": 128000,
   "hasAudio": true,
   "hasSpeechText": true,
-  "firstSnapshotJson": "{\"chiefComplaint\":\"咳嗽3天\"}",
-  "finalSnapshotJson": "{\"chiefComplaint\":\"咳嗽、咳痰3天\"}",
+  "firstSnapshotJson": "{\"chiefComplaint\":\"咳嗽3天\",\"pastMedicalHistory\":\"2型糖尿病\",\"physicalExam\":\"双肺呼吸音清\"}",
+  "finalSnapshotJson": "{\"chiefComplaint\":\"咳嗽、咳痰3天\",\"pastMedicalHistory\":\"2型糖尿病\",\"physicalExam\":\"双肺呼吸音清\"}",
   "selectionJson": "{\"selectedMedicineNames\":[\"氨溴索\"],\"selectedProcedureNames\":[\"雾化吸入\"]}",
   "status": "completed",
   "consultationTime": "2026-04-27T10:00:00"
@@ -2931,7 +2954,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 | current | long | 否 | 页码，默认 1 |
 | size | long | 否 | 每页条数，默认 10 |
 
-说明：接口参数中的区域、平台机构（`idOrg`）和 HIS 机构（`hisOrgId`）筛选遵循 5.5 的双机构维度约束；当前管理端页面不展示平台机构筛选。响应中的 `idOrg` / `naOrg` 为兼容字段，当前管理端用户活跃度列表不展示平台机构列。
+说明：接口参数中的区域、平台机构（`idOrg`）和 HIS 机构（`hisOrgId`）筛选遵循 5.5 的双机构维度约束；当前管理端页面不展示平台机构筛选。响应中的 `idOrg` / `naOrg` 为兼容字段，当前管理端用户活跃度列表不展示平台机构列。列表默认按所选时段内的问诊次数降序返回，问诊次数相同时依次按有效问诊数、最后活跃时间降序排列，最后按设备 ID 升序保证分页顺序稳定。
 
 响应 `data`：
 
@@ -2962,7 +2985,7 @@ ws(s)://{server}/v1/ai/speech/realtime/ws?token={deviceToken}&clientVersion={ver
 
 ### 5.60.1 GET `/admin/api/user-activity/export`
 
-用途：按当前用户活跃度筛选条件导出 Excel 文件，包含活跃度汇总指标和用户活跃明细。明细中的“有效问诊数”按 `status='completed'`（一键回写）统计，汇总中的“有效问诊率”按有效问诊数 / 总问诊数计算。
+用途：按当前用户活跃度筛选条件导出 Excel 文件，包含活跃度汇总指标和用户活跃明细。明细沿用 5.60 的默认活跃度排序；其中“有效问诊数”按 `status='completed'`（一键回写）统计，汇总中的“有效问诊率”按有效问诊数 / 总问诊数计算。
 
 鉴权：`Authorization: Bearer {adminToken}`
 

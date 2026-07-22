@@ -45,6 +45,12 @@ public interface AnalyticsMapper {
     @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryRegionDistributionRaw")
     List<DistributionItemVO> queryRegionDistributionRaw(@Param("query") AnalyticsQueryDTO query);
 
+    @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryConsultationOrgDistribution")
+    List<DistributionItemVO> queryConsultationOrgDistribution(@Param("query") AnalyticsQueryDTO query);
+
+    @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryConsultationRegionDistributionRaw")
+    List<DistributionItemVO> queryConsultationRegionDistributionRaw(@Param("query") AnalyticsQueryDTO query);
+
     @SelectProvider(type = AnalyticsSqlProvider.class, method = "queryHisOrgOptions")
     List<HisOrgOptionVO> queryHisOrgOptions();
 

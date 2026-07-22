@@ -10,6 +10,7 @@ import com.regionalai.floatingball.server.modules.device.entity.AiDevice;
 import com.regionalai.floatingball.server.modules.userlog.dto.UserConsultationLogRequest;
 import com.regionalai.floatingball.server.modules.userlog.entity.AiUserConsultationLog;
 import com.regionalai.floatingball.server.modules.userlog.mapper.AiUserConsultationLogMapper;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.io.ByteArrayInputStream;
 import java.util.Collections;
 import java.util.Base64;
 import java.util.HashMap;
@@ -518,5 +520,31 @@ class UserConsultationLogServiceTest {
         assertEquals(1, timeline.size());
         assertEquals("智能问诊", timeline.get(0).getDisplayModule());
         assertEquals("完成智能问诊", timeline.get(0).getDisplayAction());
+    }
+
+    @Test
+    void exportExcelShouldCreateWorkbookWithFontIndependentColumnWidths() throws Exception {
+        AiUserConsultationLog record = new AiUserConsultationLog();
+        record.setNaOrg("区域中心医院");
+        record.setIdOrg("ORG001");
+        record.setHisOrgId("HIS-ORG-001");
+        record.setNaDoctor("张医生");
+        record.setConsultationTime(java.time.LocalDateTime.of(2026, 7, 16, 17, 19, 0));
+        record.setPatientName("王某");
+        record.setPatientGender("男");
+        record.setPatientAge("42");
+        record.setConsultationType("voice");
+        record.setStatus("completed");
+        record.setTotalChanges(2);
+        record.setConsultationId("CONSULT-001");
+        when(mapper.selectList(any())).thenReturn(Collections.singletonList(record));
+
+        byte[] data = service.exportExcel(null, null, null, null, null, null, null);
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+            assertEquals("用户日志", workbook.getSheetAt(0).getSheetName());
+            assertEquals("区域中心医院", workbook.getSheetAt(0).getRow(1).getCell(0).getStringCellValue());
+            assertEquals(14 * 256, workbook.getSheetAt(0).getColumnWidth(0));
+        }
     }
 }

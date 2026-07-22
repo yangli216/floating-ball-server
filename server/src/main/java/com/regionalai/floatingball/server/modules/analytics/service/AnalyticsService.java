@@ -14,6 +14,7 @@ import com.regionalai.floatingball.server.modules.analytics.dto.TrendDataVO;
 import com.regionalai.floatingball.server.modules.analytics.mapper.AnalyticsMapper;
 import com.regionalai.floatingball.server.modules.audit.service.AuditLogDisplayCatalog;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.util.ExcelColumnWidthUtils;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
@@ -167,34 +168,20 @@ public class AnalyticsService {
 
         List<DistributionItemVO> orgDist = analyticsMapper.queryOrgDistribution(query);
         List<DistributionItemVO> rawRegion = analyticsMapper.queryRegionDistributionRaw(query);
+        List<DistributionItemVO> consultationOrgDist = analyticsMapper.queryConsultationOrgDistribution(query);
+        List<DistributionItemVO> rawConsultationRegion = analyticsMapper.queryConsultationRegionDistributionRaw(query);
 
-        long totalService = 0L;
-        for (DistributionItemVO item : orgDist) {
-            if (item.getValue() != null) {
-                totalService += item.getValue();
-            }
-        }
-
-        List<RegionDistributionItemVO> regionDist = new ArrayList<>();
-        long regionTotal = 0L;
-        for (DistributionItemVO raw : rawRegion) {
-            if (raw.getValue() != null) {
-                regionTotal += raw.getValue();
-            }
-        }
-        for (DistributionItemVO raw : rawRegion) {
-            RegionDistributionItemVO item = new RegionDistributionItemVO();
-            item.setName(raw.getName());
-            item.setValue(raw.getValue());
-            long val = raw.getValue() != null ? raw.getValue() : 0L;
-            String pct = regionTotal > 0 ? String.valueOf(Math.round((double) val / regionTotal * 100)) : "0";
-            item.setPercentage(pct);
-            regionDist.add(item);
-        }
+        long totalService = sumDistribution(orgDist);
+        long serviceRegionTotal = sumDistribution(rawRegion);
+        long totalConsultation = sumDistribution(consultationOrgDist);
+        long consultationRegionTotal = sumDistribution(rawConsultationRegion);
 
         vo.setOrgDistribution(orgDist);
-        vo.setRegionDistribution(regionDist);
-        vo.setTotalService(totalService > 0 ? totalService : regionTotal);
+        vo.setRegionDistribution(toRegionDistribution(rawRegion, serviceRegionTotal));
+        vo.setTotalService(totalService > 0 ? totalService : serviceRegionTotal);
+        vo.setConsultationOrgDistribution(consultationOrgDist);
+        vo.setConsultationRegionDistribution(toRegionDistribution(rawConsultationRegion, consultationRegionTotal));
+        vo.setTotalConsultation(totalConsultation > 0 ? totalConsultation : consultationRegionTotal);
         return vo;
     }
 
@@ -244,6 +231,26 @@ public class AnalyticsService {
             }
             autoSize(regionSheet, 3);
 
+            XSSFSheet consultationOrgSheet = workbook.createSheet("问诊HIS机构分布");
+            writeHeader(consultationOrgSheet, headerStyle, "HIS机构", "问诊量");
+            List<DistributionItemVO> consultationOrgItems = distribution.getConsultationOrgDistribution() != null
+                ? distribution.getConsultationOrgDistribution() : new ArrayList<DistributionItemVO>();
+            for (int i = 0; i < consultationOrgItems.size(); i++) {
+                DistributionItemVO item = consultationOrgItems.get(i);
+                writeRow(consultationOrgSheet, i + 1, item.getName(), safeLong(item.getValue()));
+            }
+            autoSize(consultationOrgSheet, 2);
+
+            XSSFSheet consultationRegionSheet = workbook.createSheet("问诊区域分布");
+            writeHeader(consultationRegionSheet, headerStyle, "区域", "问诊量", "占比");
+            List<RegionDistributionItemVO> consultationRegionItems = distribution.getConsultationRegionDistribution() != null
+                ? distribution.getConsultationRegionDistribution() : new ArrayList<RegionDistributionItemVO>();
+            for (int i = 0; i < consultationRegionItems.size(); i++) {
+                RegionDistributionItemVO item = consultationRegionItems.get(i);
+                writeRow(consultationRegionSheet, i + 1, item.getName(), safeLong(item.getValue()), item.getPercentage() + "%");
+            }
+            autoSize(consultationRegionSheet, 3);
+
             return writeWorkbook(workbook);
         } catch (IOException ex) {
             throw new BusinessException("导出Excel失败：" + ex.getMessage());
@@ -263,6 +270,35 @@ public class AnalyticsService {
         } catch (Exception e) {
             return 30;
         }
+    }
+
+    private static long sumDistribution(List<DistributionItemVO> items) {
+        long total = 0L;
+        if (items == null) {
+            return total;
+        }
+        for (DistributionItemVO item : items) {
+            if (item != null && item.getValue() != null) {
+                total += item.getValue();
+            }
+        }
+        return total;
+    }
+
+    private static List<RegionDistributionItemVO> toRegionDistribution(List<DistributionItemVO> rawItems, long total) {
+        List<RegionDistributionItemVO> result = new ArrayList<>();
+        if (rawItems == null) {
+            return result;
+        }
+        for (DistributionItemVO raw : rawItems) {
+            RegionDistributionItemVO item = new RegionDistributionItemVO();
+            item.setName(raw.getName());
+            item.setValue(raw.getValue());
+            long value = raw.getValue() != null ? raw.getValue() : 0L;
+            item.setPercentage(total > 0 ? String.valueOf(Math.round((double) value / total * 100)) : "0");
+            result.add(item);
+        }
+        return result;
     }
 
     private static final WeekFields WEEK_FIELDS = WeekFields.of(Locale.CHINA);
@@ -741,9 +777,7 @@ public class AnalyticsService {
     }
 
     private static void autoSize(XSSFSheet sheet, int columns) {
-        for (int i = 0; i < columns; i++) {
-            sheet.autoSizeColumn(i);
-        }
+        ExcelColumnWidthUtils.fitColumns(sheet, columns);
     }
 
     private static long valueAt(List<Long> values, int index) {

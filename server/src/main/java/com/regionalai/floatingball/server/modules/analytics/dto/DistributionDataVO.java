@@ -9,4 +9,7 @@ public class DistributionDataVO {
     private List<DistributionItemVO> orgDistribution;
     private List<RegionDistributionItemVO> regionDistribution;
     private Long totalService;
+    private List<DistributionItemVO> consultationOrgDistribution;
+    private List<RegionDistributionItemVO> consultationRegionDistribution;
+    private Long totalConsultation;
 }

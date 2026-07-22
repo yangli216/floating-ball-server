@@ -55,6 +55,7 @@ class AdminDeviceControllerTest {
         device.setIdDevice("DEV001");
         device.setCdDevice("clinic-room-1");
         device.setNaDevice("诊室一终端");
+        device.setNaUser("张医生");
         device.setIdOrg("ORG001");
         device.setNaOrg("默认机构");
         device.setIdRegion("REG001");
@@ -79,6 +80,7 @@ class AdminDeviceControllerTest {
             .andExpect(jsonPath("$.data.size").value(20))
             .andExpect(jsonPath("$.data.total").value(1))
             .andExpect(jsonPath("$.data.records[0].idDevice").value("DEV001"))
+            .andExpect(jsonPath("$.data.records[0].naUser").value("张医生"))
             .andExpect(jsonPath("$.data.records[0].naOrg").value("默认机构"))
             .andExpect(jsonPath("$.data.records[0].deviceTokenMasked").value("abcd****wxyz"))
             .andExpect(jsonPath("$.data.records[0].registerIp").value("10.0.0.10"))

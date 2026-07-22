@@ -204,7 +204,7 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    void getDistributionShouldPreferOrgTotalAndComputeRegionPercentages() {
+    void getDistributionShouldComputeServiceAndConsultationPercentages() {
         DistributionItemVO org = new DistributionItemVO();
         org.setName("默认机构");
         org.setValue(7L);
@@ -216,16 +216,34 @@ class AnalyticsServiceTest {
         regionB.setName("区域B");
         regionB.setValue(1L);
 
+        DistributionItemVO consultationOrg = new DistributionItemVO();
+        consultationOrg.setName("市第一医院");
+        consultationOrg.setValue(5L);
+        DistributionItemVO consultationRegionA = new DistributionItemVO();
+        consultationRegionA.setName("区域A");
+        consultationRegionA.setValue(4L);
+        DistributionItemVO consultationRegionB = new DistributionItemVO();
+        consultationRegionB.setName("区域B");
+        consultationRegionB.setValue(1L);
+
         when(analyticsMapper.queryOrgDistribution(any(AnalyticsQueryDTO.class)))
             .thenReturn(Collections.singletonList(org));
         when(analyticsMapper.queryRegionDistributionRaw(any(AnalyticsQueryDTO.class)))
             .thenReturn(Arrays.asList(regionA, regionB));
+        when(analyticsMapper.queryConsultationOrgDistribution(any(AnalyticsQueryDTO.class)))
+            .thenReturn(Collections.singletonList(consultationOrg));
+        when(analyticsMapper.queryConsultationRegionDistributionRaw(any(AnalyticsQueryDTO.class)))
+            .thenReturn(Arrays.asList(consultationRegionA, consultationRegionB));
 
         DistributionDataVO distribution = analyticsService.getDistribution(new AnalyticsQueryDTO());
 
         assertEquals(Long.valueOf(7L), distribution.getTotalService());
         assertEquals("75", distribution.getRegionDistribution().get(0).getPercentage());
         assertEquals("25", distribution.getRegionDistribution().get(1).getPercentage());
+        assertEquals(Long.valueOf(5L), distribution.getTotalConsultation());
+        assertEquals("市第一医院", distribution.getConsultationOrgDistribution().get(0).getName());
+        assertEquals("80", distribution.getConsultationRegionDistribution().get(0).getPercentage());
+        assertEquals("20", distribution.getConsultationRegionDistribution().get(1).getPercentage());
     }
 
     @Test
@@ -254,6 +272,8 @@ class AnalyticsServiceTest {
         when(analyticsMapper.queryConsultationTrend(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(consultationRow));
         when(analyticsMapper.queryOrgDistribution(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(org));
         when(analyticsMapper.queryRegionDistributionRaw(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(region));
+        when(analyticsMapper.queryConsultationOrgDistribution(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(org));
+        when(analyticsMapper.queryConsultationRegionDistributionRaw(any(AnalyticsQueryDTO.class))).thenReturn(Collections.singletonList(region));
 
         AnalyticsQueryDTO query = new AnalyticsQueryDTO();
         query.setDateFrom("2026-05-01");
@@ -264,6 +284,9 @@ class AnalyticsServiceTest {
             assertEquals("趋势明细", workbook.getSheetAt(1).getSheetName());
             assertEquals("机构分布", workbook.getSheetAt(2).getSheetName());
             assertEquals("区域分布", workbook.getSheetAt(3).getSheetName());
+            assertEquals("问诊HIS机构分布", workbook.getSheetAt(4).getSheetName());
+            assertEquals("问诊区域分布", workbook.getSheetAt(5).getSheetName());
+            assertEquals("问诊量", workbook.getSheetAt(4).getRow(0).getCell(1).getStringCellValue());
             assertEquals("功能调用总量", workbook.getSheetAt(0).getRow(1).getCell(0).getStringCellValue());
         }
     }

@@ -97,7 +97,8 @@ public class UserActivitySqlProvider {
             + consultationFactFilters("ucl4")
             + ")"
             + "</if>"
-            + " ORDER BY lastActiveTime DESC NULLS LAST"
+            + " ORDER BY consultationCount DESC, effectiveConsultationCount DESC, "
+            + "lastActiveTime DESC NULLS LAST, idDevice ASC"
             + "</script>";
     }
 

@@ -185,13 +185,11 @@
         <div v-if="!isReportInterpretationDetail" class="snapshot-compare">
           <div class="snapshot-panel">
             <div class="snapshot-panel__title">首次生成内容</div>
-            <div class="record-field">
-              <div class="record-field__label">主诉</div>
-              <div class="record-field__value">{{ snapshotText(firstSnapshot, 'chiefComplaint') }}</div>
-            </div>
-            <div class="record-field">
-              <div class="record-field__label">现病史</div>
-              <div class="record-field__value multiline">{{ snapshotText(firstSnapshot, 'historyOfPresentIllness') }}</div>
+            <div v-for="field in recordFieldDefinitions" :key="field.key" class="record-field">
+              <div class="record-field__label">{{ field.label }}</div>
+              <div :class="['record-field__value', { multiline: field.multiline }]">
+                {{ snapshotText(firstSnapshot, field.key) }}
+              </div>
             </div>
             <SnapshotList title="诊断" :items="snapshotItems(firstSnapshot, 'diagnoses')" />
             <SnapshotList title="用药" :items="snapshotItems(firstSnapshot, 'medicines')" />
@@ -202,21 +200,12 @@
 
           <div class="snapshot-panel">
             <div class="snapshot-panel__title">最终修改内容</div>
-            <div class="record-field">
-              <div class="record-field__label">主诉</div>
-              <div class="record-field__value">
+            <div v-for="field in recordFieldDefinitions" :key="field.key" class="record-field">
+              <div class="record-field__label">{{ field.label }}</div>
+              <div :class="['record-field__value', { multiline: field.multiline }]">
                 <DiffValue
-                  :old-value="snapshotRaw(firstSnapshot, 'chiefComplaint')"
-                  :new-value="snapshotRaw(finalSnapshot, 'chiefComplaint')"
-                />
-              </div>
-            </div>
-            <div class="record-field">
-              <div class="record-field__label">现病史</div>
-              <div class="record-field__value multiline">
-                <DiffValue
-                  :old-value="snapshotRaw(firstSnapshot, 'historyOfPresentIllness')"
-                  :new-value="snapshotRaw(finalSnapshot, 'historyOfPresentIllness')"
+                  :old-value="snapshotRaw(firstSnapshot, field.key)"
+                  :new-value="snapshotRaw(finalSnapshot, field.key)"
                 />
               </div>
             </div>
@@ -352,6 +341,16 @@ function normalizeTextValue(value) {
   if (!text || text === 'null' || text === 'undefined') return ''
   return text
 }
+
+const RECORD_FIELD_DEFINITIONS = Object.freeze([
+  { key: 'chiefComplaint', label: '主诉', multiline: false },
+  { key: 'historyOfPresentIllness', label: '现病史', multiline: true },
+  { key: 'pastMedicalHistory', label: '既往史', multiline: true },
+  { key: 'personalHistory', label: '个人史', multiline: true },
+  { key: 'familyHistory', label: '家族史', multiline: true },
+  { key: 'physicalExam', label: '体格检查', multiline: true },
+  { key: 'precautions', label: '注意事项', multiline: true }
+])
 
 const DiffValue = {
   props: {
@@ -542,6 +541,7 @@ export default {
       audioObjectUrl: '',
       audioLoading: false,
       audioLoadError: '',
+      recordFieldDefinitions: RECORD_FIELD_DEFINITIONS,
       consultationTypeOptions: [
         { value: 'voice', label: '语音问诊', type: 'success' },
         { value: 'smart', label: '智能问诊', type: 'primary' },

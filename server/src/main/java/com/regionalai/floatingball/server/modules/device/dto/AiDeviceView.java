@@ -10,6 +10,7 @@ public class AiDeviceView {
     private String idDevice;
     private String cdDevice;
     private String naDevice;
+    private String naUser;
     private String idOrg;
     private String naOrg;
     private String idRegion;

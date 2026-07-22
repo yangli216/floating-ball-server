@@ -65,6 +65,9 @@ class AdminAnalyticsControllerTest {
         distribution.setTotalService(8L);
         distribution.setOrgDistribution(Collections.emptyList());
         distribution.setRegionDistribution(Collections.emptyList());
+        distribution.setTotalConsultation(3L);
+        distribution.setConsultationOrgDistribution(Collections.emptyList());
+        distribution.setConsultationRegionDistribution(Collections.emptyList());
         when(analyticsService.getDistribution(any(AnalyticsQueryDTO.class))).thenReturn(distribution);
 
         mockMvc.perform(get("/admin/api/analytics/summary")
@@ -91,7 +94,10 @@ class AdminAnalyticsControllerTest {
                 .param("idRegion", "REG001")
                 .header("X-Request-Id", "RID-analytics-distribution"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.totalService").value(8));
+            .andExpect(jsonPath("$.data.totalService").value(8))
+            .andExpect(jsonPath("$.data.totalConsultation").value(3))
+            .andExpect(jsonPath("$.data.consultationOrgDistribution").isArray())
+            .andExpect(jsonPath("$.data.consultationRegionDistribution").isArray());
 
         ArgumentCaptor<AnalyticsQueryDTO> queryCaptor = ArgumentCaptor.forClass(AnalyticsQueryDTO.class);
         verify(analyticsService).getSummary(queryCaptor.capture());

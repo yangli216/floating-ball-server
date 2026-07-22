@@ -87,6 +87,25 @@
         </div>
       </chart-panel>
     </div>
+
+    <div class="chart-grid chart-grid--double">
+      <chart-panel title="问诊量按HIS机构分布" subtitle="Top 10 医疗机构" :empty="isConsultationOrgDistributionEmpty">
+        <div ref="consultationOrgChartRef" class="chart-body"></div>
+      </chart-panel>
+      <chart-panel title="问诊量按区域分布" subtitle="各区县占比情况" :empty="isConsultationRegionDistributionEmpty">
+        <div ref="consultationRegionChartRef" class="chart-body"></div>
+        <div class="pie-legend">
+          <span
+            v-for="(item, idx) in consultationRegionLegend"
+            :key="idx"
+            class="legend-item"
+          >
+            <span class="legend-dot" :style="{ background: item.color }"></span>
+            {{ item.name }} ({{ item.pct }}%)
+          </span>
+        </div>
+      </chart-panel>
+    </div>
   </div>
 </template>
 
@@ -131,14 +150,23 @@ export default {
       query: { dateFrom: '', dateTo: '', idRegion: '', hisOrgId: '' },
       summary: {},
       trendData: { days: [], aiServiceValues: [], consultationValues: [] },
-      distribution: { orgDistribution: [], regionDistribution: [], totalService: 0 },
+      distribution: {
+        orgDistribution: [],
+        regionDistribution: [],
+        totalService: 0,
+        consultationOrgDistribution: [],
+        consultationRegionDistribution: [],
+        totalConsultation: 0
+      },
       regionOptions: [],
       hisOrgOptions: [],
       exporting: false,
       trendMetric: 'ai',
       trendChart: null,
       orgChart: null,
-      regionChart: null
+      regionChart: null,
+      consultationOrgChart: null,
+      consultationRegionChart: null
     }
   },
   computed: {
@@ -204,6 +232,13 @@ export default {
         color: COLORS[idx % COLORS.length]
       }))
     },
+    consultationRegionLegend() {
+      return (this.distribution.consultationRegionDistribution || []).map((item, idx) => ({
+        name: item.name,
+        pct: item.percentage,
+        color: COLORS[idx % COLORS.length]
+      }))
+    },
     isTrendEmpty() {
       const values = this.trendMetric === 'ai'
         ? (this.trendData.aiServiceValues || [])
@@ -215,6 +250,12 @@ export default {
     },
     isRegionDistributionEmpty() {
       return !(this.distribution.regionDistribution || []).some(item => Number(item.value) > 0)
+    },
+    isConsultationOrgDistributionEmpty() {
+      return !(this.distribution.consultationOrgDistribution || []).some(item => Number(item.value) > 0)
+    },
+    isConsultationRegionDistributionEmpty() {
+      return !(this.distribution.consultationRegionDistribution || []).some(item => Number(item.value) > 0)
     }
   },
   mounted() {
@@ -305,12 +346,21 @@ export default {
         ])
         this.summary = summary || {}
         this.trendData = trend || { days: [], aiServiceValues: [], consultationValues: [] }
-        this.distribution = distribution || { orgDistribution: [], regionDistribution: [], totalService: 0 }
+        this.distribution = distribution || {
+          orgDistribution: [],
+          regionDistribution: [],
+          totalService: 0,
+          consultationOrgDistribution: [],
+          consultationRegionDistribution: [],
+          totalConsultation: 0
+        }
 
         this.$nextTick(() => {
           this.renderTrendChart()
           this.renderOrgChart()
           this.renderRegionChart()
+          this.renderConsultationOrgChart()
+          this.renderConsultationRegionChart()
         })
       } catch (error) {
         this.$message.error((error && error.message) || '加载失败')
@@ -353,6 +403,8 @@ export default {
       if (this.trendChart) { this.trendChart.dispose(); this.trendChart = null }
       if (this.orgChart) { this.orgChart.dispose(); this.orgChart = null }
       if (this.regionChart) { this.regionChart.dispose(); this.regionChart = null }
+      if (this.consultationOrgChart) { this.consultationOrgChart.dispose(); this.consultationOrgChart = null }
+      if (this.consultationRegionChart) { this.consultationRegionChart.dispose(); this.consultationRegionChart = null }
       if (this._resizeHandler) {
         window.removeEventListener('resize', this._resizeHandler)
         this._resizeHandler = null
@@ -363,7 +415,13 @@ export default {
         return
       }
       this._resizeHandler = () => {
-        [this.trendChart, this.orgChart, this.regionChart].forEach(chart => {
+        [
+          this.trendChart,
+          this.orgChart,
+          this.regionChart,
+          this.consultationOrgChart,
+          this.consultationRegionChart
+        ].forEach(chart => {
           if (chart) {
             chart.resize()
           }
@@ -416,13 +474,29 @@ export default {
       this.bindResize()
     },
     renderOrgChart() {
-      if (this.orgChart) this.orgChart.dispose()
-      this.orgChart = null
-      if (!this.$refs.orgChartRef || this.isOrgDistributionEmpty) return
-      this.orgChart = echarts.init(this.$refs.orgChartRef)
+      this.renderBarDistributionChart(
+        'orgChart',
+        'orgChartRef',
+        this.distribution.orgDistribution,
+        this.isOrgDistributionEmpty
+      )
+    },
+    renderConsultationOrgChart() {
+      this.renderBarDistributionChart(
+        'consultationOrgChart',
+        'consultationOrgChartRef',
+        this.distribution.consultationOrgDistribution,
+        this.isConsultationOrgDistributionEmpty
+      )
+    },
+    renderBarDistributionChart(chartKey, refName, items, empty) {
+      if (this[chartKey]) this[chartKey].dispose()
+      this[chartKey] = null
+      if (!this.$refs[refName] || empty) return
+      this[chartKey] = echarts.init(this.$refs[refName])
 
-      const data = (this.distribution.orgDistribution || []).slice(0, 10)
-      this.orgChart.setOption({
+      const data = (items || []).slice(0, 10)
+      this[chartKey].setOption({
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
         grid: { left: 60, right: 20, top: 20, bottom: 50 },
         xAxis: {
@@ -459,13 +533,33 @@ export default {
       this.bindResize()
     },
     renderRegionChart() {
-      if (this.regionChart) this.regionChart.dispose()
-      this.regionChart = null
-      if (!this.$refs.regionChartRef || this.isRegionDistributionEmpty) return
-      this.regionChart = echarts.init(this.$refs.regionChartRef)
+      this.renderRegionDistributionChart(
+        'regionChart',
+        'regionChartRef',
+        this.distribution.regionDistribution,
+        this.distribution.totalService,
+        '总调用量',
+        this.isRegionDistributionEmpty
+      )
+    },
+    renderConsultationRegionChart() {
+      this.renderRegionDistributionChart(
+        'consultationRegionChart',
+        'consultationRegionChartRef',
+        this.distribution.consultationRegionDistribution,
+        this.distribution.totalConsultation,
+        '总问诊量',
+        this.isConsultationRegionDistributionEmpty
+      )
+    },
+    renderRegionDistributionChart(chartKey, refName, items, total, totalLabel, empty) {
+      if (this[chartKey]) this[chartKey].dispose()
+      this[chartKey] = null
+      if (!this.$refs[refName] || empty) return
+      this[chartKey] = echarts.init(this.$refs[refName])
 
-      const data = this.distribution.regionDistribution || []
-      this.regionChart.setOption({
+      const data = items || []
+      this[chartKey].setOption({
         tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
         series: [{
           type: 'pie',
@@ -489,7 +583,7 @@ export default {
             left: 'center',
             top: '38%',
             style: {
-              text: (this.distribution.totalService || 0).toLocaleString(),
+              text: (total || 0).toLocaleString(),
               textAlign: 'center',
               fill: '#1E293B',
               fontSize: 20,
@@ -501,7 +595,7 @@ export default {
             left: 'center',
             top: '50%',
             style: {
-              text: '总调用量',
+              text: totalLabel,
               textAlign: 'center',
               fill: '#94A3B8',
               fontSize: 12

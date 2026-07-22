@@ -2,6 +2,7 @@ package com.regionalai.floatingball.server.modules.useractivity.service;
 
 import com.regionalai.floatingball.server.common.api.PageResponse;
 import com.regionalai.floatingball.server.common.exception.BusinessException;
+import com.regionalai.floatingball.server.common.util.ExcelColumnWidthUtils;
 import com.regionalai.floatingball.server.modules.useractivity.dto.RegionTreeNodeVO;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityItemVO;
 import com.regionalai.floatingball.server.modules.useractivity.dto.UserActivityQueryDTO;
@@ -424,8 +425,6 @@ public class UserActivityService {
     }
 
     private static void autoSize(XSSFSheet sheet, int columns) {
-        for (int i = 0; i < columns; i++) {
-            sheet.autoSizeColumn(i);
-        }
+        ExcelColumnWidthUtils.fitColumns(sheet, columns);
     }
 }

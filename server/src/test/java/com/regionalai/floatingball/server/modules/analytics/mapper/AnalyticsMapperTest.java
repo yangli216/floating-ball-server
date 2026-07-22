@@ -42,6 +42,14 @@ class AnalyticsMapperTest {
 
         Method hisOrgOptions = AnalyticsMapper.class.getMethod("queryHisOrgOptions");
         assertProvider(hisOrgOptions, "queryHisOrgOptions");
+
+        Method consultationOrgDistribution = AnalyticsMapper.class.getMethod("queryConsultationOrgDistribution", AnalyticsQueryDTO.class);
+        assertHasQueryParam(consultationOrgDistribution);
+        assertProvider(consultationOrgDistribution, "queryConsultationOrgDistribution");
+
+        Method consultationRegionDistribution = AnalyticsMapper.class.getMethod("queryConsultationRegionDistributionRaw", AnalyticsQueryDTO.class);
+        assertHasQueryParam(consultationRegionDistribution);
+        assertProvider(consultationRegionDistribution, "queryConsultationRegionDistributionRaw");
     }
 
     @Test
@@ -65,6 +73,11 @@ class AnalyticsMapperTest {
         String ranking = provider.queryFunctionUsageRanking();
         assertTrue(ranking.contains("NVL(TRIM(e.id_doctor), e.id_device)"));
         assertFalse(ranking.contains("NULLIF(TRIM(e.id_doctor)"));
+
+        String consultationOrgDistribution = provider.queryConsultationOrgDistribution();
+        assertTrue(consultationOrgDistribution.contains("NVL(MAX(ucl.na_org)"));
+        String consultationRegionDistribution = provider.queryConsultationRegionDistributionRaw();
+        assertTrue(consultationRegionDistribution.contains("SUM(NVL(l.cnt, 0))"));
     }
 
     @Test
@@ -89,6 +102,13 @@ class AnalyticsMapperTest {
         String ranking = provider.queryFunctionUsageRanking();
         assertTrue(ranking.contains("COALESCE(NULLIF(TRIM(e.id_doctor), ''), e.id_device)"));
         assertFalse(ranking.contains("COALESCE(TRIM(e.id_doctor), e.id_device)"));
+
+        String consultationOrgDistribution = provider.queryConsultationOrgDistribution();
+        assertTrue(consultationOrgDistribution.contains("COALESCE(MAX(ucl.na_org)"));
+        assertFalse(consultationOrgDistribution.contains("NVL("));
+        String consultationRegionDistribution = provider.queryConsultationRegionDistributionRaw();
+        assertTrue(consultationRegionDistribution.contains("SUM(COALESCE(l.cnt, 0))"));
+        assertFalse(consultationRegionDistribution.contains("NVL("));
     }
 
     @Test
@@ -110,6 +130,10 @@ class AnalyticsMapperTest {
         assertTrue(provider.countConsultation().contains("ucl.id_his_org = #{query.hisOrgId}"));
         assertTrue(provider.queryFunctionUsageRanking().contains("e.id_his_org = #{query.hisOrgId}"));
         assertTrue(provider.queryOrgDistribution().contains("GROUP BY e.id_his_org"));
+        assertTrue(provider.queryConsultationOrgDistribution().contains("GROUP BY ucl.id_his_org"));
+        assertTrue(provider.queryConsultationOrgDistribution().contains("ucl.id_his_org = #{query.hisOrgId}"));
+        assertTrue(provider.queryConsultationRegionDistributionRaw().contains("c_ai_user_consultation_log"));
+        assertTrue(provider.queryConsultationRegionDistributionRaw().contains("ucl.consultation_time"));
 
         String options = provider.queryHisOrgOptions();
         assertTrue(options.contains("c_ai_feature_event"));

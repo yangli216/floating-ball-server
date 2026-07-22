@@ -146,6 +146,47 @@ public class AnalyticsSqlProvider {
             + "</script>";
     }
 
+    public String queryConsultationOrgDistribution() {
+        DatabaseDialect dialect = dialect();
+        return "<script>"
+            + "SELECT " + dialect.nvl("MAX(ucl.na_org)", dialect.nvl("ucl.id_his_org", "'未上报HIS机构'")) + " AS name, "
+            + "COUNT(1) AS value "
+            + "FROM c_ai_user_consultation_log ucl "
+            + CONSULTATION_SCOPE_JOIN + " "
+            + CONSULTATION_REGION_JOIN + " "
+            + "WHERE ucl.fg_active = '1' "
+            + consultationFilters()
+            + " GROUP BY ucl.id_his_org"
+            + " ORDER BY value DESC"
+            + "</script>";
+    }
+
+    public String queryConsultationRegionDistributionRaw() {
+        DatabaseDialect dialect = dialect();
+        return "<script>"
+            + "SELECT r.na_region AS name, SUM(" + dialect.nvl("l.cnt", "0") + ") AS value "
+            + "FROM c_ai_region r "
+            + "LEFT JOIN c_ai_org o ON o.id_region = r.id_region AND o.fg_active = '1' AND o.sd_status = '1' "
+            + "LEFT JOIN ("
+            + "  SELECT ucl.id_org, COUNT(1) AS cnt FROM c_ai_user_consultation_log ucl "
+            + "  JOIN c_ai_org o2 ON o2.id_org = ucl.id_org AND o2.fg_active = '1' AND o2.sd_status = '1' "
+            + "  JOIN c_ai_region r2 ON r2.id_region = o2.id_region AND r2.fg_active = '1' AND r2.sd_status = '1' "
+            + "  WHERE ucl.fg_active = '1' "
+            + "  <if test='query.dateFromTime != null'> AND ucl.consultation_time &gt;= #{query.dateFromTime}</if>"
+            + "  <if test='query.dateToExclusiveTime != null'> AND ucl.consultation_time &lt; #{query.dateToExclusiveTime}</if>"
+            + "  <if test='query.idRegion != null and query.idRegion != \"\"'> AND o2.id_region = #{query.idRegion}</if>"
+            + "  <if test='query.idOrg != null and query.idOrg != \"\"'> AND o2.id_org = #{query.idOrg}</if>"
+            + "  <if test='query.hisOrgId != null and query.hisOrgId != \"\"'> AND ucl.id_his_org = #{query.hisOrgId}</if>"
+            + "  GROUP BY ucl.id_org"
+            + ") l ON o.id_org = l.id_org "
+            + "WHERE r.fg_active = '1' AND r.sd_status = '1' "
+            + "<if test='query.idRegion != null and query.idRegion != \"\"'> AND r.id_region = #{query.idRegion}</if>"
+            + "<if test='query.idOrg != null and query.idOrg != \"\"'> AND o.id_org = #{query.idOrg}</if>"
+            + " GROUP BY r.id_region, r.na_region"
+            + " ORDER BY value DESC"
+            + "</script>";
+    }
+
     public String queryDistinctModules() {
         DatabaseDialect dialect = dialect();
         if (dialect.isPgCompatible()) {

@@ -21,6 +21,9 @@
           <template slot-scope="{ row }"><code-tag :value="row.cdDevice" /></template>
         </el-table-column>
         <el-table-column prop="naDevice" label="终端名称" min-width="160" />
+        <el-table-column label="用户姓名" min-width="110">
+          <template slot-scope="{ row }">{{ row.naUser || '--' }}</template>
+        </el-table-column>
         <el-table-column prop="naOrg" label="所属机构" min-width="160" />
         <el-table-column prop="naRegion" label="所属区域" min-width="140" />
         <el-table-column label="状态" width="100">
